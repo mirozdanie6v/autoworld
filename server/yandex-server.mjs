@@ -17,6 +17,7 @@ const distDir=path.join(rootDir,'dist');
 const port=Number(process.env.PORT||8080);
 const connectionString=String(process.env.YDB_CONNECTION_STRING||'').trim();
 const apiKey=String(process.env.AUTO_SALE_API_KEY||'').trim();
+const catalogImportKey=String(process.env.AUTO_SALE_CATALOG_IMPORT_KEY||'').trim();
 const publicDemoWrite=/^(1|true|yes)$/i.test(String(process.env.AUTO_SALE_PUBLIC_DEMO_WRITE||''));
 const legacyStateWriteEnabled=/^(1|true|yes)$/i.test(String(process.env.AUTO_SALE_LEGACY_STATE_WRITE||''));
 const mediaBucket=String(process.env.AUTO_SALE_MEDIA_BUCKET||'').trim();
@@ -115,7 +116,7 @@ const apiHeaders={
   'content-type':'application/json; charset=utf-8',
   'cache-control':'no-store',
   'access-control-allow-origin':'*',
-  'access-control-allow-headers':'content-type,x-auto-sale-key,x-telegram-init-data,x-auto-sale-skip-telegram',
+  'access-control-allow-headers':'content-type,x-auto-sale-key,x-auto-sale-catalog-import-key,x-telegram-init-data,x-auto-sale-skip-telegram',
   'access-control-allow-methods':'GET,PUT,POST,DELETE,OPTIONS'
 };
 const json=(res,data,status=200)=>{
@@ -123,12 +124,17 @@ const json=(res,data,status=200)=>{
   res.writeHead(status,{...apiHeaders,'content-length':Buffer.byteLength(body)});
   res.end(body);
 };
-const hasApiKey=req=>{
-  const supplied=String(req.headers['x-auto-sale-key']||'');
-  const expected=Buffer.from(apiKey);
-  const actual=Buffer.from(supplied);
+const safeSecretMatch=(expectedValue,suppliedValue)=>{
+  const expected=Buffer.from(String(expectedValue||''));
+  const actual=Buffer.from(String(suppliedValue||''));
   return expected.length===actual.length&&expected.length>0&&timingSafeEqual(expected,actual);
 };
+const hasApiKey=req=>safeSecretMatch(apiKey,req.headers['x-auto-sale-key']);
+const hasCatalogImportKey=req=>safeSecretMatch(catalogImportKey,req.headers['x-auto-sale-catalog-import-key']);
+const stableJson=value=>JSON.stringify(value,(_,entry)=>{
+  if(!entry||Array.isArray(entry)||typeof entry!=='object')return entry;
+  return Object.fromEntries(Object.keys(entry).sort().map(key=>[key,entry[key]]));
+});
 const telegramAuth=req=>{
   const raw=String(req.headers['x-telegram-init-data']||'').trim();
   return raw?telegram.validateInitData(raw):{ok:false,error:'telegram_init_data_required'};
@@ -215,7 +221,7 @@ const server=http.createServer(async(req,res)=>{
       const liveStore=await getStore();
       await liveStore.ping();
       const pins=(await liveStore.adminAccessList()).filter(item=>adminTelegramUsernames.includes(String(item.username||'').toLowerCase()));
-      json(res,{ok:true,service:'auto-sale-yandex',persistence:'ydb-serverless',schemaVersion:6,writeMode:'telegram-rbac',stateReadMode:'viewer-filtered',publicDemoWrite:Boolean(publicDemoWrite),maxAdminAccounts:MAX_ADMIN_ACCOUNTS,adminInvites:adminTelegramUsernames.length,linkedAdminAccounts:pins.length,legacyStateWrite:legacyStateWriteEnabled?'rollback-only':'retired',normalizedAuthoritative:ydbReadMode==='normalized'&&!legacyStateWriteEnabled,ydbDomainDualWrite:liveStore.domainDualWriteEnabled?'enabled':'disabled',ydbStateReadMode:ydbReadMode,mediaStorage:mediaBucket?'object-storage':'disabled',mediaBucket:mediaBucket||null,telegramNotifications:telegram.enabled?'enabled':'disabled',telegramFallbackManagers:telegram.fallbackManagerCount});
+      json(res,{ok:true,service:'auto-sale-yandex',persistence:'ydb-serverless',schemaVersion:6,writeMode:'telegram-rbac',stateReadMode:'viewer-filtered',publicDemoWrite:Boolean(publicDemoWrite),maxAdminAccounts:MAX_ADMIN_ACCOUNTS,adminInvites:adminTelegramUsernames.length,linkedAdminAccounts:pins.length,legacyStateWrite:legacyStateWriteEnabled?'rollback-only':'retired',normalizedAuthoritative:ydbReadMode==='normalized'&&!legacyStateWriteEnabled,ydbDomainDualWrite:liveStore.domainDualWriteEnabled?'enabled':'disabled',ydbStateReadMode:ydbReadMode,mediaStorage:mediaBucket?'object-storage':'disabled',mediaBucket:mediaBucket||null,telegramNotifications:telegram.enabled?'enabled':'disabled',telegramFallbackManagers:telegram.fallbackManagerCount,catalogImport:catalogImportKey?'enabled':'disabled'});
       return;
     }
     if(url.pathname==='/api/auto-sale/admin/read-parity'&&req.method==='GET'){
@@ -230,6 +236,87 @@ const server=http.createServer(async(req,res)=>{
       json(res,{ok:true,retired:!legacyStateWriteEnabled,revision:Number(legacy.revision)||0,state:legacy});
       return;
     }
+    if(url.pathname==='/api/auto-sale/admin/catalog-import'&&req.method==='POST'){
+      if(!hasCatalogImportKey(req)){json(res,{error:'catalog_import_unauthorized'},401);return}
+      const input=await parseJson(req,8_000_000);
+      const sourceName=String(input?.source||'AutoWorld_Georgia').trim();
+      if(sourceName!=='AutoWorld_Georgia'){json(res,{error:'unsupported_catalog_source'},400);return}
+      const rawItems=Array.isArray(input?.items)?input.items:[];
+      if(!rawItems.length){json(res,{error:'catalog_items_required'},400);return}
+      const byIdentity=new Map();
+      for(const rawItem of rawItems){
+        if(!rawItem||typeof rawItem!=='object')continue;
+        const id=String(rawItem.id||'').trim();
+        if(!id)continue;
+        const item={...structuredClone(rawItem),id,source:sourceName,active:rawItem.active!==false};
+        const vin=String(item.vin||'').trim().toUpperCase();
+        const key=vin?('vin:'+vin):('id:'+id);
+        const previous=byIdentity.get(key);
+        if(!previous||Number(item.sourcePostId||0)>=Number(previous.sourcePostId||0))byIdentity.set(key,item);
+      }
+      const items=[...byIdentity.values()];
+      if(!items.length){json(res,{error:'catalog_items_invalid'},400);return}
+      const entityStores=await getEntityStores();
+      const state=await entityStores.domainStore.loadState();
+      const existingCatalog=Array.isArray(state.catalog)?state.catalog:[];
+      const sourceExisting=existingCatalog.filter(item=>String(item?.source||'')===sourceName);
+      const existingById=new Map(sourceExisting.map(item=>[String(item.id||''),item]));
+      const existingByVin=new Map(sourceExisting.filter(item=>String(item.vin||'').trim()).map(item=>[String(item.vin).trim().toUpperCase(),item]));
+      const operations=[];
+      const retainedIds=new Set();
+      let created=0,patched=0,replaced=0,skipped=0,deleted=0;
+      for(const item of items){
+        const vin=String(item.vin||'').trim().toUpperCase();
+        const exact=existingById.get(item.id);
+        const sameVin=!exact&&vin?existingByVin.get(vin):null;
+        if(exact){
+          retainedIds.add(exact.id);
+          const next={...exact,...item,id:exact.id,source:sourceName};
+          if(stableJson(exact)===stableJson(next)){skipped++;continue}
+          const rowVersion=await entityStores.domainStore.entityRowVersion('catalog',exact.id);
+          if(rowVersion===null){json(res,{error:'catalog_shadow_missing',id:exact.id},409);return}
+          operations.push({resource:'catalog',operation:'patch',id:exact.id,baseRowVersion:rowVersion,input:next});
+          patched++;
+          continue;
+        }
+        if(sameVin){
+          const incomingPost=Number(item.sourcePostId||0);
+          const existingPost=Number(sameVin.sourcePostId||0);
+          if(existingPost>incomingPost){retainedIds.add(sameVin.id);skipped++;continue}
+          const rowVersion=await entityStores.domainStore.entityRowVersion('catalog',sameVin.id);
+          if(rowVersion===null){json(res,{error:'catalog_shadow_missing',id:sameVin.id},409);return}
+          operations.push({resource:'catalog',operation:'delete',id:sameVin.id,baseRowVersion:rowVersion});
+          operations.push({resource:'catalog',operation:'create',id:item.id,input:item});
+          retainedIds.add(item.id);
+          replaced++;
+          continue;
+        }
+        operations.push({resource:'catalog',operation:'create',id:item.id,input:item});
+        retainedIds.add(item.id);
+        created++;
+      }
+      if(Boolean(input?.replaceSourceAll)){
+        const incomingVins=new Set(items.map(item=>String(item.vin||'').trim().toUpperCase()).filter(Boolean));
+        for(const existing of sourceExisting){
+          const id=String(existing.id||'');
+          const vin=String(existing.vin||'').trim().toUpperCase();
+          if(retainedIds.has(id)||items.some(item=>item.id===id)||(vin&&incomingVins.has(vin)))continue;
+          const rowVersion=await entityStores.domainStore.entityRowVersion('catalog',id);
+          if(rowVersion===null)continue;
+          operations.push({resource:'catalog',operation:'delete',id,baseRowVersion:rowVersion});
+          deleted++;
+        }
+      }
+      if(!operations.length){
+        json(res,{ok:true,source:sourceName,received:items.length,created,patched,replaced,deleted,skipped,revision:Number(state.revision)||0,changed:false});
+        return;
+      }
+      const result=await mutateAutoSaleEntityBatch({...entityStores,operations,prepareNotifications:null});
+      if(result.status<200||result.status>=300){json(res,result.data,result.status);return}
+      json(res,{ok:true,source:sourceName,received:items.length,created,patched,replaced,deleted,skipped,revision:Number(result.data?.revision)||0,changed:true,rowVersions:result.data?.rowVersions||{}});
+      return;
+    }
+
     if(url.pathname==='/api/auto-sale/entities/batch'&&req.method==='POST'){
       const input=await parseJson(req);
       const {state:accessState,access}=await requestAccess(req);
@@ -612,7 +699,7 @@ const server=http.createServer(async(req,res)=>{
     }
     if(url.pathname==='/api/auto-sale/media'&&req.method==='POST'){
       const {access}=await requestAccess(req);
-      if(access.role!=='admin'){json(res,{error:'admin_required'},403);return}
+      if(access.role!=='admin'&&!hasCatalogImportKey(req)){json(res,{error:'admin_required'},403);return}
       if(!mediaBucket){json(res,{error:'media_storage_not_configured'},503);return}
       const input=await parseJson(req,3_000_000);
       if(!input||typeof input!=='object'){json(res,{error:'invalid_json'},400);return}
