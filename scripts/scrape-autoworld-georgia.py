@@ -29,6 +29,7 @@ ONLY_POST_IDS = {x.strip() for x in os.environ.get("ONLY_POST_IDS", "").split(",
 REQUEST_DELAY = float(os.environ.get("REQUEST_DELAY", "0.20"))
 MEDIA_INDEX_PATH = os.environ.get("MEDIA_INDEX_PATH", "").strip()
 UPLOAD_MISSING_PHOTOS = os.environ.get("UPLOAD_MISSING_PHOTOS", "true").lower() in {"1","true","yes"}
+CATALOG_IMPORT_KEY = os.environ.get("AUTO_SALE_CATALOG_IMPORT_KEY", "").strip()
 MERGE_EXISTING = os.environ.get("MERGE_EXISTING", "false").lower() in {"1","true","yes"}
 TIMEOUT = 40
 UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/126 Safari/537.36"
@@ -358,7 +359,8 @@ def upload_photo(post_id, index, url):
         "dataUrl": data_url,
         "fileName": f"{category}-{index+1}.{ext}",
     }
-    r = session.post(MEDIA_API, json=payload, timeout=TIMEOUT)
+    headers = {"x-auto-sale-catalog-import-key": CATALOG_IMPORT_KEY} if CATALOG_IMPORT_KEY else {}
+    r = session.post(MEDIA_API, json=payload, headers=headers, timeout=TIMEOUT)
     r.raise_for_status()
     data = r.json()
     return data.get("url", "")
@@ -385,7 +387,10 @@ def enrich_photos(cars):
     limit = int(os.environ.get("MAX_PHOTOS_PER_CAR", "10"))
     for n, car in enumerate(cars, 1):
         old = existing.get(car["sourcePostId"], {})
-        old_photos = [x for x in old.get("photos", []) if str(x).startswith("https://storage.yandexcloud.net/")]
+        old_photo_candidates = old.get("photos", [])
+        if not old_photo_candidates:
+            old_photo_candidates = [old.get("image")] + list(old.get("otherPhotos", []) or [])
+        old_photos = [x for x in old_photo_candidates if str(x).startswith("https://storage.yandexcloud.net/")]
         indexed_photos = recovered.get(car["sourcePostId"], [])[:limit]
         if old_photos:
             car["photos"] = old_photos[:limit]
