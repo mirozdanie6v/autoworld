@@ -26,7 +26,7 @@ Only current or safe operational workflows are enabled in this repository:
 - `clear-auto-sale-demo.yml` — manual CRM/outbox cleanup while preserving catalog/team/admin access;
 - `responsive-audit.yml` — manual live responsive audit.
 
-Production-changing workflows are manual until repository secrets/variables and Yandex OIDC trust are verified for `mirozdanie6v/autoworld`.
+AWG production-changing workflows are manual. The production target is `https://awg.viiversion.com` and must use isolated `AWG_*` Yandex/YDB/Object Storage resources. The legacy `auto-sale-demo.viiversion.com` contour remains controlled by `mirozdanie6v/uniq-smart-rent` and must not be changed from this repository.
 
 ## Intentionally excluded
 
@@ -51,3 +51,14 @@ Before the new repository becomes the deployment authority:
 5. verify the public Mini App/domain still points to the resulting Yandex revision.
 
 The old `mirozdanie6v/uniq-smart-rent` repository remains historical source only for AutoWorld after cutover; it continues to exist for its UNIQ project.
+
+
+## AWG production contour
+
+- Repository: `mirozdanie6v/autoworld`
+- Production domain: `https://awg.viiversion.com`
+- Production workflow: `.github/workflows/deploy-awg-production.yml`
+- Required resource namespace: `AWG_*`
+- Required isolation: separate Yandex Serverless Container, separate YDB connection/database, separate Object Storage bucket.
+- The legacy demo remains on `mirozdanie6v/uniq-smart-rent` / `https://auto-sale-demo.viiversion.com` for temporary three-person testing.
+- No AWG workflow may clear, repoint, or deploy the legacy demo.
