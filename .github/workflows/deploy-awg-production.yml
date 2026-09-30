@@ -26,6 +26,7 @@ env:
   AUTO_SALE_MEDIA_BUCKET: ${{ vars.AWG_MEDIA_BUCKET }}
   AUTO_SALE_TELEGRAM_BOT_TOKEN: ${{ secrets.AWG_TELEGRAM_BOT_TOKEN }}
   AUTOWORLD_RELAY_SECRET: ${{ secrets.AWG_RELAY_SECRET }}
+  AUTO_SALE_CATALOG_IMPORT_KEY: ${{ secrets.AWG_RELAY_SECRET }}
   AUTO_SALE_MANAGER_CHAT_IDS: ${{ vars.AWG_MANAGER_CHAT_IDS }}
   AUTO_SALE_TELEGRAM_APP_URL: https://awg.viiversion.com/
   AUTO_SALE_TELEGRAM_RELAY_URL: https://integration-telegram.viiversion.com/telegram/send
@@ -132,6 +133,10 @@ jobs:
               echo "::add-mask::$AUTOWORLD_RELAY_SECRET"
               EXTRA_ENV+=(--environment "AUTOWORLD_RELAY_SECRET=$AUTOWORLD_RELAY_SECRET")
             fi
+          fi
+          if [ -n "${AUTO_SALE_CATALOG_IMPORT_KEY:-}" ]; then
+            echo "::add-mask::$AUTO_SALE_CATALOG_IMPORT_KEY"
+            EXTRA_ENV+=(--environment "AUTO_SALE_CATALOG_IMPORT_KEY=$AUTO_SALE_CATALOG_IMPORT_KEY")
           fi
           if [ -n "${AUTO_SALE_MANAGER_CHAT_IDS:-}" ]; then
             EXTRA_ENV+=(--environment "AUTO_SALE_MANAGER_CHAT_IDS=$AUTO_SALE_MANAGER_CHAT_IDS")
