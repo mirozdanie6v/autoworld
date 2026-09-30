@@ -48,3 +48,10 @@ test('AWG deployment initializes normalized domain meta idempotently',async()=>{
   assert.ok(init.includes('normalized_domain_has_rows_without_meta'));
   assert.ok(init.includes('domain.replaceSnapshot'));
 });
+
+test('catalog scraper skips media upload for invalid VIN posts',async()=>{
+  const scraper=await root('scripts/scrape-autoworld-georgia.py');
+  assert.ok(scraper.includes('ALLOW_NO_VIN_POST_IDS'));
+  assert.ok(scraper.includes('skip_media_invalid_or_missing_vin'));
+  assert.ok(scraper.includes('if not str(car.get("vin")'));
+});
