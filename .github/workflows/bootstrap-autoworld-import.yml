@@ -292,9 +292,12 @@ jobs:
           set -euo pipefail
           git config user.name "VIIVERSION migration"
           git config user.email "actions@users.noreply.github.com"
+          rm -rf candidate/node_modules candidate/dist candidate/cloudflare/telegram-relay/node_modules
+          rm -rf /tmp/autoworld-candidate
+          mkdir -p /tmp/autoworld-candidate
+          cp -a candidate/. /tmp/autoworld-candidate/
           git switch -C migration/autoworld-canonical
-          rsync -a --delete --exclude='.git/' candidate/ ./
-          rm -rf source candidate
+          rsync -a --delete --exclude='.git/' /tmp/autoworld-candidate/ ./
           git add -A
           git commit -m "Migrate isolated AutoWorld canonical project"
           git push --force-with-lease origin migration/autoworld-canonical
