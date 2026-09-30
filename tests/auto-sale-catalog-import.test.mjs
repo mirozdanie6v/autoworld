@@ -37,3 +37,14 @@ test('catalog sync client never writes the legacy whole state endpoint',async()=
   assert.ok(!sync.includes('/api/auto-sale/state'));
   assert.ok(!sync.includes("method:'PUT'"));
 });
+
+test('AWG deployment initializes normalized domain meta idempotently',async()=>{
+  const deploy=await root('.github/workflows/deploy-awg-production.yml');
+  const init=await root('scripts/initialize-auto-sale-ydb-domain.mjs');
+  const pkg=JSON.parse(await root('package.json'));
+  assert.equal(pkg.scripts['initialize:ydb-domain'],'node scripts/initialize-auto-sale-ydb-domain.mjs');
+  assert.ok(deploy.includes('npm run initialize:ydb-domain'));
+  assert.ok(init.includes('AUTO_SALE_YDB_DOMAIN_ALREADY_INITIALIZED'));
+  assert.ok(init.includes('normalized_domain_has_rows_without_meta'));
+  assert.ok(init.includes('domain.replaceSnapshot'));
+});
