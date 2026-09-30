@@ -1,0 +1,37 @@
+name: AutoWorld responsive audit
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  responsive:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Playwright
+        run: |
+          python -m pip install --quiet playwright
+          python -m playwright install --with-deps ${{ matrix.browser }}
+      - name: Audit live responsive UI
+        env:
+          AUDIT_BROWSER: ${{ matrix.browser }}
+          AUDIT_URL: https://auto-sale-demo.viiversion.com
+        run: python scripts/audit-auto-sale-responsive.py
+      - name: Upload audit artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: auto-sale-responsive-${{ matrix.browser }}
+          path: responsive-audit/
+          if-no-files-found: warn
