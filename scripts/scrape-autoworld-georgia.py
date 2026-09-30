@@ -38,6 +38,7 @@ session = requests.Session()
 session.headers.update({"User-Agent": UA, "Accept-Language": "ru,en;q=0.8"})
 
 VIN_RE = re.compile(r"\b[A-HJ-NPR-Z0-9]{17}\b")
+ALLOW_NO_VIN_POST_IDS = {"3723","3290","3310","3262","3282","3357","3373","3893"}
 MONEY_RE = re.compile(r"([0-9]+(?:[.,][0-9]+)?)")
 
 GEORGIA_MARKER_IDS = [
@@ -386,6 +387,11 @@ def enrich_photos(cars):
     failed = []
     limit = int(os.environ.get("MAX_PHOTOS_PER_CAR", "10"))
     for n, car in enumerate(cars, 1):
+        post_id = str(car.get("sourcePostId") or "")
+        if not str(car.get("vin") or "").strip() and post_id not in ALLOW_NO_VIN_POST_IDS:
+            car["photos"] = []
+            failed.append({"post": post_id, "photo": None, "url": "", "error": "skip_media_invalid_or_missing_vin"})
+            continue
         old = existing.get(car["sourcePostId"], {})
         old_photo_candidates = old.get("photos", [])
         if not old_photo_candidates:
