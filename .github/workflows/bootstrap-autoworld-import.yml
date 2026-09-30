@@ -38,6 +38,7 @@ jobs:
           cp "$SRC/.env.example" "$OUT/.env.example"
           cp "$SRC/Dockerfile.yandex" "$OUT/Dockerfile.yandex"
           cp "$SRC/index.html" "$OUT/index.html"
+          cp "$SRC/wrangler.jsonc" "$OUT/wrangler.jsonc"
           cp "$SRC/YANDEX_MIGRATION.md" "$OUT/YANDEX_MIGRATION.md"
 
           cp "$SRC"/public/auto-sale* "$OUT/public/"
@@ -212,6 +213,7 @@ jobs:
           - Media: Yandex Object Storage
           - Telegram: bot/webhook integration plus optional relay
           - Deployment: Yandex Serverless Containers
+          - Legacy compatibility: `wrangler.jsonc` preserves the former Cloudflare/D1 worker contract for regression tests; it is not the canonical production runtime.
 
           ## Access
           The application supports exactly three Telegram admin accounts by default:
@@ -247,7 +249,8 @@ jobs:
           - lead/application deletion flow;
           - catalog import data and tooling;
           - AutoWorld/YDB regression tests;
-          - Yandex infrastructure and deployment workflows.
+          - Yandex infrastructure and deployment workflows;
+          - legacy Cloudflare/D1 Worker compatibility config required by regression tests.
 
           Intentionally excluded:
           - UNIQ Smart Rent UI/backend/domain code;
