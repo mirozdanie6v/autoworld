@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "engines": {"node": ">=22"},
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "clean": "rm -rf dist",
     "build": "node scripts/build-autoworld.mjs",
@@ -15,7 +17,8 @@
     "test:yandex": "node --test tests/yandex-state-sync.test.mjs",
     "prepare:ydb-domain": "node scripts/prepare-auto-sale-ydb-domain.mjs",
     "backfill:ydb-domain": "node scripts/backfill-auto-sale-ydb-domain.mjs",
-    "prepare:ydb-runtime": "node scripts/prepare-auto-sale-ydb-runtime.mjs"
+    "prepare:ydb-runtime": "node scripts/prepare-auto-sale-ydb-runtime.mjs",
+    "initialize:ydb-domain": "node scripts/initialize-auto-sale-ydb-domain.mjs"
   },
   "dependencies": {
     "@ydbjs/auth": "latest",
