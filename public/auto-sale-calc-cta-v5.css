@@ -1,0 +1,235 @@
+/* AUTO SALE Calculate CTA v5
+   Full-width premium sportsbook CTA with a restrained reflective sweep. */
+
+.auto-card-actions{
+  display:grid!important;
+  grid-template-columns:1fr!important;
+  gap:8px!important;
+}
+
+.auto-card-actions .auto-btn.primary[data-request-car]{
+  position:relative!important;
+  isolation:isolate!important;
+  overflow:hidden!important;
+
+  width:100%!important;
+  min-width:0!important;
+  min-height:54px!important;
+  padding:0 22px!important;
+
+  border:1px solid rgba(154,234,255,.92)!important;
+  border-radius:13px!important;
+  clip-path:none!important;
+
+  background:
+    linear-gradient(180deg,rgba(255,255,255,.20) 0%,rgba(255,255,255,.04) 30%,rgba(255,255,255,0) 48%),
+    linear-gradient(135deg,#0557e7 0%,#0878f5 52%,#00baf6 100%)!important;
+
+  color:#fff!important;
+  font-size:16px!important;
+  font-weight:950!important;
+  letter-spacing:.018em!important;
+  text-align:center!important;
+  text-shadow:0 1px 1px rgba(0,30,82,.38)!important;
+
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.34),
+    inset 0 -2px 0 rgba(0,54,145,.24),
+    0 10px 24px rgba(0,94,222,.30),
+    0 0 0 1px rgba(0,204,255,.10),
+    0 0 24px rgba(0,198,255,.16)!important;
+
+  transform:translateY(0)!important;
+  filter:none!important;
+  transition:
+    transform .16s ease,
+    border-color .16s ease,
+    box-shadow .16s ease,
+    filter .16s ease!important;
+}
+
+.auto-card-actions .auto-btn.primary[data-request-car]::before{
+  content:""!important;
+  position:absolute!important;
+  z-index:1!important;
+  inset:0!important;
+
+  border:0!important;
+  border-radius:inherit!important;
+  background:
+    radial-gradient(90% 110% at 12% -20%,rgba(132,237,255,.20),transparent 54%),
+    linear-gradient(90deg,rgba(255,255,255,.035),transparent 24%,transparent 76%,rgba(255,255,255,.035))!important;
+
+  pointer-events:none!important;
+}
+
+.auto-card-actions .auto-btn.primary[data-request-car]::after{
+  content:""!important;
+  position:absolute!important;
+  z-index:2!important;
+
+  top:-50%!important;
+  bottom:-50%!important;
+  left:-20%!important;
+  width:9%!important;
+
+  transform:translateX(-460%) skewX(-18deg)!important;
+  background:linear-gradient(
+    90deg,
+    transparent,
+    rgba(255,255,255,.12),
+    rgba(255,255,255,.96),
+    rgba(255,255,255,.14),
+    transparent
+  )!important;
+
+  opacity:0!important;
+  pointer-events:none!important;
+  animation:autoCalcSweepV5 9.4s cubic-bezier(.2,.72,.22,1) infinite!important;
+}
+
+.auto-card-actions .auto-btn.primary[data-request-car] .auto-calc-label{
+  position:relative!important;
+  z-index:3!important;
+  display:block!important;
+  width:100%!important;
+  color:#fff!important;
+  text-align:center!important;
+  white-space:nowrap!important;
+}
+
+.auto-card-actions .auto-btn.primary[data-request-car]:hover:not(:disabled){
+  transform:translateY(-1px)!important;
+  border-color:#d7f8ff!important;
+  filter:brightness(1.04) saturate(1.035)!important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.40),
+    inset 0 -2px 0 rgba(0,54,145,.20),
+    0 12px 28px rgba(0,103,238,.36),
+    0 0 0 1px rgba(35,218,255,.14),
+    0 0 30px rgba(0,205,255,.22)!important;
+}
+
+.auto-card-actions .auto-btn.primary[data-request-car]:active:not(:disabled){
+  transform:translateY(1px) scale(.997)!important;
+  filter:brightness(.985)!important;
+  box-shadow:
+    inset 0 2px 8px rgba(0,52,136,.18),
+    0 5px 13px rgba(0,84,190,.22)!important;
+}
+
+/* Make the secondary action intentionally quiet so the CTA hierarchy is obvious. */
+.auto-card-actions .auto-btn.ghost{
+  width:100%!important;
+  min-height:36px!important;
+  padding:0 10px!important;
+  border:0!important;
+  border-radius:9px!important;
+  background:transparent!important;
+  color:#8fa0b5!important;
+  font-size:13px!important;
+  font-weight:780!important;
+  box-shadow:none!important;
+}
+
+.auto-card-actions .auto-btn.ghost:hover{
+  background:rgba(255,255,255,.035)!important;
+  color:#c8d4e2!important;
+}
+
+.auto-card-actions .auto-btn.primary[data-request-car]:disabled,
+.auto-card-actions .auto-btn.primary[data-request-car][aria-disabled="true"]{
+  border-color:rgba(255,255,255,.10)!important;
+  background:#303741!important;
+  color:#929aa6!important;
+  opacity:.58!important;
+  text-shadow:none!important;
+  box-shadow:none!important;
+  transform:none!important;
+  filter:none!important;
+}
+
+.auto-card-actions .auto-btn.primary[data-request-car]:disabled::before,
+.auto-card-actions .auto-btn.primary[data-request-car][aria-disabled="true"]::before,
+.auto-card-actions .auto-btn.primary[data-request-car]:disabled::after,
+.auto-card-actions .auto-btn.primary[data-request-car][aria-disabled="true"]::after{
+  content:none!important;
+  animation:none!important;
+}
+
+/* Detail modal keeps the same visual language, but not the card layout. */
+.auto-actions .auto-btn.primary[data-request-car]{
+  position:relative!important;
+  isolation:isolate!important;
+  overflow:hidden!important;
+  min-width:230px!important;
+  min-height:50px!important;
+  border:1px solid rgba(154,234,255,.86)!important;
+  border-radius:12px!important;
+  background:
+    linear-gradient(180deg,rgba(255,255,255,.18),rgba(255,255,255,0) 42%),
+    linear-gradient(135deg,#0557e7 0%,#0878f5 52%,#00baf6 100%)!important;
+  color:#fff!important;
+  font-weight:950!important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.30),
+    0 8px 20px rgba(0,94,222,.26),
+    0 0 20px rgba(0,198,255,.12)!important;
+}
+
+.auto-actions .auto-btn.primary[data-request-car]::after{
+  content:""!important;
+  position:absolute!important;
+  z-index:2!important;
+  top:-50%!important;
+  bottom:-50%!important;
+  left:-20%!important;
+  width:9%!important;
+  transform:translateX(-460%) skewX(-18deg)!important;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.12),rgba(255,255,255,.94),rgba(255,255,255,.12),transparent)!important;
+  opacity:0!important;
+  pointer-events:none!important;
+  animation:autoCalcSweepV5 9.4s cubic-bezier(.2,.72,.22,1) infinite!important;
+}
+
+@keyframes autoCalcSweepV5{
+  0%,84%{
+    transform:translateX(-460%) skewX(-18deg);
+    opacity:0;
+  }
+  86%{opacity:0}
+  87.5%{opacity:.88}
+  91.5%{
+    transform:translateX(1200%) skewX(-18deg);
+    opacity:.56;
+  }
+  93%,100%{
+    transform:translateX(1200%) skewX(-18deg);
+    opacity:0;
+  }
+}
+
+@media(max-width:720px){
+  .auto-card-actions{
+    grid-template-columns:1fr!important;
+    gap:7px!important;
+  }
+
+  .auto-card-actions .auto-btn.primary[data-request-car]{
+    min-height:54px!important;
+    font-size:16px!important;
+  }
+
+  .auto-card-actions .auto-btn.ghost{
+    min-height:34px!important;
+    font-size:13px!important;
+  }
+}
+
+@media(prefers-reduced-motion:reduce){
+  .auto-card-actions .auto-btn.primary[data-request-car]::after,
+  .auto-actions .auto-btn.primary[data-request-car]::after{
+    animation:none!important;
+    opacity:0!important;
+  }
+}

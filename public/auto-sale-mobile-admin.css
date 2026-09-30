@@ -1,0 +1,67 @@
+@media(max-width:720px){.auto-role-strip{margin-top:0;padding:10px 12px}.auto-role-strip span,.auto-role-strip b,.auto-role-strip small{min-width:0;overflow-wrap:anywhere}.auto-admin-filters,.auto-admin-filters.three,.auto-admin-filters.four{grid-template-columns:1fr}.auto-admin-filters input,.auto-admin-filters select{min-height:46px}.auto-panel-title{align-items:flex-start}.auto-panel-title small{max-width:52%;white-space:normal;overflow-wrap:anywhere}.auto-data-table{max-width:100%;overflow:visible!important;display:grid;gap:8px}.auto-data-head{display:none!important}.auto-data-row,.auto-data-table.orders .auto-data-row,.auto-data-table.finance .auto-data-row{position:relative;min-width:0!important;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px 12px;margin:0;padding:13px 36px 13px 13px;border:1px solid var(--line)!important;border-radius:14px;background:#0a0f15;text-align:left}.auto-data-row:first-of-type{border-top:1px solid var(--line)!important}.auto-data-row>span{min-width:0;white-space:normal;overflow-wrap:anywhere}.auto-data-row>span:first-child{grid-column:1/-1}.auto-data-row>span:first-child b,.auto-data-row>span:first-child small{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}.auto-data-row>span:not(:first-child):not(.auto-row-action){display:grid;gap:3px;align-content:start}.auto-data-row>span:not(:first-child):not(.auto-row-action)::before{display:block;color:#687587;font-size:var(--type-micro);font-weight:800;letter-spacing:.08em;text-transform:uppercase}.auto-data-table:not(.orders):not(.finance):not(.mini):not(.catalog) .auto-data-row>span:nth-child(2)::before{content:'Бюджет'}.auto-data-table:not(.orders):not(.finance):not(.mini):not(.catalog) .auto-data-row>span:nth-child(3)::before{content:'Источник'}.auto-data-table:not(.orders):not(.finance):not(.mini):not(.catalog) .auto-data-row>span:nth-child(4)::before{content:'Менеджер'}.auto-data-table:not(.orders):not(.finance):not(.mini):not(.catalog) .auto-data-row>span:nth-child(5)::before{content:'Статус'}.auto-data-table.catalog .auto-data-row>span:nth-child(2)::before{content:'Локация'}.auto-data-table.catalog .auto-data-row>span:nth-child(3)::before{content:'Год выпуска'}.auto-data-table.catalog .auto-data-row>span:nth-child(4)::before{content:'Цена'}.auto-data-table.catalog .auto-data-row>span:nth-child(5)::before{content:'Аукцион'}.auto-data-table.catalog .auto-data-row>span:nth-child(6)::before{content:'Дата аукциона'}.auto-data-table.catalog .auto-data-row>span:nth-child(7)::before{content:'Публикация'}.auto-data-table.orders .auto-data-row>span:nth-child(2){grid-column:1/-1}.auto-data-table.orders .auto-data-row>span:nth-child(2)::before{content:'Этап'}.auto-data-table.orders .auto-data-row>span:nth-child(3)::before{content:'ETA'}.auto-data-table.orders .auto-data-row>span:nth-child(4)::before{content:'Локация / маржа'}.auto-data-table.orders .auto-data-row>span:nth-child(5)::before{content:'Риск'}.auto-data-table.finance .auto-data-row>span:nth-child(2)::before{content:'Цена'}.auto-data-table.finance .auto-data-row>span:nth-child(3)::before{content:'Себестоимость'}.auto-data-table.finance .auto-data-row>span:nth-child(4)::before{content:'Маржа'}.auto-data-table.finance .auto-data-row>span:nth-child(5)::before{content:'Оплачено'}.auto-data-table.finance .auto-data-row>span:nth-child(6)::before{content:'Остаток'}.auto-row-action{position:absolute;top:12px;right:12px;display:block!important}.auto-data-table.mini{display:grid;gap:7px}.auto-data-table.mini .auto-data-row{grid-template-columns:minmax(0,1.2fr) minmax(70px,.7fr) minmax(70px,.7fr);padding-right:11px}.auto-data-table.mini .auto-data-row>span:first-child{grid-column:auto}.auto-data-table.mini .auto-data-row>span::before{display:none!important}.auto-progress{margin-top:3px}.auto-timeline-full{grid-template-columns:repeat(10,minmax(78px,1fr));margin-inline:-2px;padding:2px 2px 5px;scroll-snap-type:x proximity;overscroll-behavior-x:contain}.auto-timeline-full span{scroll-snap-align:start}.auto-finance-bars>div{grid-template-columns:minmax(78px,.8fr) minmax(72px,.7fr) minmax(80px,1fr);gap:7px}.auto-reason{align-items:flex-start}.auto-inline-fields{grid-template-columns:1fr 1fr}.auto-payment-list>div{grid-template-columns:1fr auto}}
+@media(max-width:480px){.auto-panel-title small{max-width:none}.auto-finance-bars>div{grid-template-columns:1fr auto;gap:5px 10px}.auto-finance-bars i{grid-column:1/-1}.auto-data-table.mini .auto-data-row{grid-template-columns:1fr auto}.auto-data-table.mini .auto-data-row>*:nth-child(4){display:none}}
+@media(max-width:380px){.auto-data-row,.auto-data-table.orders .auto-data-row,.auto-data-table.finance .auto-data-row{grid-template-columns:1fr;padding-right:34px}.auto-data-row>span:first-child,.auto-data-table.orders .auto-data-row>span:nth-child(2){grid-column:1}.auto-inline-fields{grid-template-columns:1fr}}
+.auto-form-error{display:grid;gap:5px;padding:11px 12px;border:1px solid rgba(255,179,71,.35);border-radius:12px;background:rgba(255,179,71,.08);color:var(--warn);font-size:var(--type-meta);line-height:1.4}.auto-conditional-hidden{display:none!important}.auto-inline-fields{display:grid;gap:7px}.auto-rule-hint{display:block;color:var(--muted);font-size:var(--type-micro);line-height:1.4}.auto-rule-hint.good{color:var(--good)}.auto-btn:disabled{opacity:.42;cursor:not-allowed}.auto-form-divider{padding-top:8px;border-top:1px solid var(--line);color:var(--accent2);font-size:var(--type-micro);font-weight:900;text-transform:uppercase;letter-spacing:.08em}.auto-payment-list{display:grid;gap:7px}.auto-payment-list>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 10px;padding:9px;border-radius:10px;background:#080d12}.auto-payment-list span,.auto-payment-list strong,.auto-payment-list small{min-width:0}.auto-payment-list span{color:var(--muted);font-size:var(--type-micro)}.auto-payment-list span b{display:block;margin-bottom:3px;color:var(--text);font-size:var(--type-micro)}.auto-payment-list strong{color:var(--accent2);font-size:var(--type-meta)}.auto-payment-list small{grid-column:1/-1;color:var(--muted);font-size:var(--type-micro);overflow-wrap:anywhere}
+
+/* Manager catalog: mobile card layout.
+   Keep this selector more specific than the desktop catalog grid so 7 columns
+   cannot collapse into unreadable vertical text on narrow screens. */
+@media(max-width:720px){
+  .auto-data-table.catalog{
+    width:100%;
+    max-width:100%;
+    display:grid;
+    gap:10px;
+    overflow:visible!important
+  }
+  .auto-data-table.catalog .auto-data-head{display:none!important}
+  .auto-data-table.catalog .auto-data-row{
+    width:100%;
+    max-width:100%;
+    min-width:0!important;
+    grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;
+    gap:10px 12px;
+    align-items:start;
+    padding:14px 40px 14px 14px
+  }
+  .auto-data-table.catalog .auto-data-row>span{
+    min-width:0;
+    width:auto;
+    max-width:100%;
+    white-space:normal;
+    overflow:visible;
+    text-overflow:clip;
+    overflow-wrap:anywhere;
+    word-break:normal
+  }
+  .auto-data-table.catalog .auto-data-row>span:first-child{grid-column:1/-1}
+  .auto-data-table.catalog .auto-data-row>span:first-child b,
+  .auto-data-table.catalog .auto-data-row>span:first-child small{
+    white-space:normal;
+    overflow:visible;
+    text-overflow:clip;
+    overflow-wrap:anywhere
+  }
+  .auto-data-table.catalog .auto-data-row>span:not(:first-child):not(.auto-row-action){
+    display:grid;
+    gap:3px;
+    align-content:start
+  }
+  .auto-data-table.catalog .auto-status{
+    justify-self:start;
+    max-width:100%;
+    white-space:normal
+  }
+  .auto-data-table.catalog .auto-row-action{
+    position:absolute;
+    top:14px;
+    right:14px
+  }
+}
+@media(max-width:380px){
+  .auto-data-table.catalog .auto-data-row{
+    grid-template-columns:1fr!important;
+    padding-right:36px
+  }
+  .auto-data-table.catalog .auto-data-row>span{grid-column:1}
+}

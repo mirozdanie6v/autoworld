@@ -1,0 +1,932 @@
+/* AUTO SALE Calculate CTA v7
+   Dark automotive × fintech CTA: graphite metal, cold luminous edge, fast controlled light sweep. */
+
+.auto-card-actions{
+  display:grid!important;
+  grid-template-columns:1fr!important;
+  gap:8px!important;
+}
+
+.auto-card-actions .auto-btn.primary[data-request-car],
+.auto-actions .auto-btn.primary[data-request-car]{
+  position:relative!important;
+  isolation:isolate!important;
+  overflow:hidden!important;
+
+  border:1px solid rgba(151,226,255,.72)!important;
+  clip-path:none!important;
+
+  background:
+    linear-gradient(180deg,rgba(255,255,255,.105) 0%,rgba(255,255,255,.025) 31%,rgba(255,255,255,0) 48%),
+    radial-gradient(115% 145% at 15% -34%,rgba(46,177,255,.20) 0%,rgba(46,177,255,0) 56%),
+    linear-gradient(112deg,#0b1119 0%,#111d2b 45%,#0b1622 72%,#081018 100%)!important;
+
+  color:#f5fbff!important;
+  text-align:center!important;
+  text-shadow:
+    0 1px 0 rgba(0,0,0,.75),
+    0 0 10px rgba(117,219,255,.20)!important;
+
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.16),
+    inset 0 -1px 0 rgba(0,0,0,.72),
+    inset 0 -13px 24px rgba(0,0,0,.16),
+    0 9px 22px rgba(0,0,0,.34),
+    0 0 0 1px rgba(0,170,255,.09),
+    0 0 24px rgba(0,174,255,.15)!important;
+
+  transform:translateY(0)!important;
+  filter:none!important;
+
+  transition:
+    transform .16s ease,
+    border-color .16s ease,
+    box-shadow .16s ease,
+    filter .16s ease,
+    background .16s ease!important;
+}
+
+.auto-card-actions .auto-btn.primary[data-request-car]{
+  width:100%!important;
+  min-width:0!important;
+  min-height:56px!important;
+  padding:0 22px!important;
+  border-radius:14px!important;
+
+  font-size:16px!important;
+  font-weight:950!important;
+  letter-spacing:.022em!important;
+}
+
+.auto-actions .auto-btn.primary[data-request-car]{
+  min-width:230px!important;
+  min-height:52px!important;
+  padding:0 22px!important;
+  border-radius:13px!important;
+
+  font-size:15px!important;
+  font-weight:950!important;
+  letter-spacing:.018em!important;
+}
+
+/* Metallic surface and restrained cold edge light. */
+.auto-card-actions .auto-btn.primary[data-request-car]::before,
+.auto-actions .auto-btn.primary[data-request-car]::before{
+  content:""!important;
+  position:absolute!important;
+  z-index:1!important;
+  inset:1px!important;
+
+  border-radius:calc(14px - 2px)!important;
+  border:0!important;
+
+  background:
+    linear-gradient(90deg,rgba(127,221,255,.08),transparent 18%,transparent 78%,rgba(91,205,255,.07)),
+    radial-gradient(92% 72% at 50% 114%,rgba(0,151,255,.11),transparent 70%)!important;
+
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,.018),
+    inset 0 0 18px rgba(47,190,255,.035)!important;
+
+  pointer-events:none!important;
+}
+
+/* Fast premium sweep: short, bright, not continuously flashing. */
+.auto-btn.primary.auto-calc-btn[data-request-car]::after{
+  content:""!important;
+  position:absolute!important;
+  z-index:2!important;
+
+  top:-52%!important;
+  bottom:-52%!important;
+  left:-18%!important;
+  width:8%!important;
+
+  border:0!important;
+  border-radius:0!important;
+
+  background:linear-gradient(
+    90deg,
+    rgba(128,224,255,0) 0%,
+    rgba(128,224,255,.08) 26%,
+    rgba(175,238,255,.34) 43%,
+    rgba(205,247,255,.58) 50%,
+    rgba(151,230,255,.30) 59%,
+    rgba(128,224,255,.08) 74%,
+    rgba(128,224,255,0) 100%
+  )!important;
+
+  filter:blur(.45px)!important;
+  transform:translateX(-520%) skewX(-18deg)!important;
+  opacity:0!important;
+  pointer-events:none!important;
+
+  animation:autoCalcMetalSweepV10 4s cubic-bezier(.18,.74,.20,1) infinite!important;
+}
+
+.auto-card-actions .auto-btn.primary[data-request-car] .auto-calc-label,
+.auto-actions .auto-btn.primary[data-request-car] .auto-calc-label{
+  position:relative!important;
+  z-index:3!important;
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  width:100%!important;
+
+  color:#f5fbff!important;
+  white-space:nowrap!important;
+}
+
+.auto-card-actions .auto-btn.primary[data-request-car] .auto-calc-label::after,
+.auto-actions .auto-btn.primary[data-request-car] .auto-calc-label::after{
+  content:"→"!important;
+  display:inline-block!important;
+  margin-left:9px!important;
+  color:#9fe6ff!important;
+  font-size:18px!important;
+  line-height:1!important;
+  font-weight:700!important;
+  transform:translateX(0)!important;
+  transition:transform .16s ease,color .16s ease!important;
+}
+
+.auto-card-actions .auto-btn.primary[data-request-car]:hover:not(:disabled),
+.auto-actions .auto-btn.primary[data-request-car]:hover:not(:disabled){
+  transform:translateY(-1px)!important;
+  border-color:rgba(214,247,255,.95)!important;
+  filter:brightness(1.06) saturate(1.06)!important;
+
+  background:
+    linear-gradient(180deg,rgba(255,255,255,.13) 0%,rgba(255,255,255,.032) 31%,rgba(255,255,255,0) 48%),
+    radial-gradient(115% 145% at 15% -34%,rgba(53,191,255,.26) 0%,rgba(53,191,255,0) 56%),
+    linear-gradient(112deg,#0d151f 0%,#142337 45%,#0d1a29 72%,#09121b 100%)!important;
+
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.20),
+    inset 0 -1px 0 rgba(0,0,0,.68),
+    inset 0 -13px 24px rgba(0,0,0,.13),
+    0 12px 28px rgba(0,0,0,.37),
+    0 0 0 1px rgba(86,211,255,.16),
+    0 0 30px rgba(0,188,255,.22)!important;
+}
+
+.auto-card-actions .auto-btn.primary[data-request-car]:hover:not(:disabled) .auto-calc-label::after,
+.auto-actions .auto-btn.primary[data-request-car]:hover:not(:disabled) .auto-calc-label::after{
+  color:#d9f7ff!important;
+  transform:translateX(3px)!important;
+}
+
+.auto-card-actions .auto-btn.primary[data-request-car]:active:not(:disabled),
+.auto-actions .auto-btn.primary[data-request-car]:active:not(:disabled){
+  transform:translateY(1px) scale(.997)!important;
+  filter:brightness(.97)!important;
+
+  box-shadow:
+    inset 0 3px 9px rgba(0,0,0,.38),
+    inset 0 0 0 1px rgba(113,218,255,.10),
+    0 4px 11px rgba(0,0,0,.30)!important;
+}
+
+/* Secondary action intentionally recedes. */
+.auto-card-actions .auto-btn.ghost{
+  width:100%!important;
+  min-height:34px!important;
+  padding:0 10px!important;
+
+  border:0!important;
+  border-radius:9px!important;
+  background:transparent!important;
+
+  color:#8899ae!important;
+  font-size:13px!important;
+  font-weight:780!important;
+
+  box-shadow:none!important;
+}
+
+.auto-card-actions .auto-btn.ghost:hover{
+  background:rgba(255,255,255,.032)!important;
+  color:#c8d6e6!important;
+}
+
+/* Ended auctions remain unmistakably unavailable. */
+.auto-card-actions .auto-btn.primary[data-request-car]:disabled,
+.auto-card-actions .auto-btn.primary[data-request-car][aria-disabled="true"],
+.auto-actions .auto-btn.primary[data-request-car]:disabled,
+.auto-actions .auto-btn.primary[data-request-car][aria-disabled="true"]{
+  border-color:rgba(255,255,255,.095)!important;
+  background:linear-gradient(180deg,#303740,#252b33)!important;
+  color:#8b949f!important;
+  opacity:.55!important;
+  text-shadow:none!important;
+  box-shadow:none!important;
+  transform:none!important;
+  filter:none!important;
+}
+
+.auto-card-actions .auto-btn.primary[data-request-car]:disabled::before,
+.auto-card-actions .auto-btn.primary[data-request-car][aria-disabled="true"]::before,
+.auto-card-actions .auto-btn.primary[data-request-car]:disabled::after,
+.auto-card-actions .auto-btn.primary[data-request-car][aria-disabled="true"]::after,
+.auto-actions .auto-btn.primary[data-request-car]:disabled::before,
+.auto-actions .auto-btn.primary[data-request-car][aria-disabled="true"]::before,
+.auto-actions .auto-btn.primary[data-request-car]:disabled::after,
+.auto-actions .auto-btn.primary[data-request-car][aria-disabled="true"]::after{
+  content:none!important;
+  animation:none!important;
+}
+
+.auto-card-actions .auto-btn.primary[data-request-car]:disabled .auto-calc-label::after,
+.auto-card-actions .auto-btn.primary[data-request-car][aria-disabled="true"] .auto-calc-label::after,
+.auto-actions .auto-btn.primary[data-request-car]:disabled .auto-calc-label::after,
+.auto-actions .auto-btn.primary[data-request-car][aria-disabled="true"] .auto-calc-label::after{
+  color:#737d88!important;
+}
+
+.auto-car:nth-child(3n+2) .auto-btn.primary[data-request-car]::after{
+  animation-delay:1.05s!important;
+}
+
+.auto-car:nth-child(3n+3) .auto-btn.primary[data-request-car]::after{
+  animation-delay:2.10s!important;
+}
+
+@keyframes autoCalcMetalSweepV10{
+  0%{
+    transform:translateX(-520%) skewX(-18deg);
+    opacity:0;
+  }
+  3%{ opacity:.16; }
+  6%{ opacity:.72; }
+  18%{
+    transform:translateX(1180%) skewX(-18deg);
+    opacity:.48;
+  }
+  22%,100%{
+    transform:translateX(1180%) skewX(-18deg);
+    opacity:0;
+  }
+}
+
+@media(max-width:720px){
+  .auto-card-actions{
+    grid-template-columns:1fr!important;
+    gap:7px!important;
+  }
+
+  .auto-card-actions .auto-btn.primary[data-request-car]{
+    min-height:56px!important;
+    padding-inline:16px!important;
+    font-size:16px!important;
+    border-radius:13px!important;
+  }
+
+  .auto-card-actions .auto-btn.ghost{
+    min-height:34px!important;
+    font-size:13px!important;
+  }
+
+  .auto-actions .auto-btn.primary[data-request-car]{
+    width:100%!important;
+    min-width:0!important;
+  }
+}
+
+@media(prefers-reduced-motion:reduce){
+  .auto-card-actions .auto-btn.primary[data-request-car] .auto-calc-label::after,
+  .auto-actions .auto-btn.primary[data-request-car] .auto-calc-label::after{
+    transition:none!important;
+  }
+}
+
+
+/* v17: luxury automotive specular glint with robust direct CTA targeting. Button appearance above is unchanged. */
+.auto-card-actions .auto-btn.primary[data-request-car]::after,
+.auto-actions .auto-btn.primary[data-request-car]::after{
+  content:none!important;
+  animation:none!important;
+}
+
+.auto-btn.primary.auto-calc-btn[data-request-car] .auto-calc-glint{
+  position:absolute!important;
+  z-index:2!important;
+  top:-58%!important;
+  bottom:-58%!important;
+  left:-19%!important;
+  width:10%!important;
+  display:block!important;
+  pointer-events:none!important;
+
+  background:linear-gradient(
+    90deg,
+    rgba(105,205,244,0) 0%,
+    rgba(105,205,244,.025) 16%,
+    rgba(127,215,249,.08) 28%,
+    rgba(160,230,255,.20) 39%,
+    rgba(205,245,255,.42) 46%,
+    rgba(248,254,255,.98) 49%,
+    rgba(255,255,255,1) 50%,
+    rgba(239,252,255,.92) 51%,
+    rgba(191,239,255,.38) 55%,
+    rgba(150,225,253,.16) 64%,
+    rgba(118,210,246,.055) 77%,
+    rgba(105,205,244,0) 100%
+  )!important;
+
+  border:0!important;
+  box-shadow:
+    -5px 0 14px rgba(100,210,255,.055),
+    5px 0 14px rgba(160,232,255,.075),
+    0 0 22px rgba(110,216,255,.06)!important;
+  filter:blur(.18px)!important;
+  opacity:0;
+  transform:skewX(-20deg) translate3d(0,0,0);
+  will-change:transform,opacity!important;
+  animation:autoCalcGlintV16 5.6s cubic-bezier(.18,.66,.22,1) infinite!important;
+}
+
+@keyframes autoCalcGlintV16{
+  0%,4%{
+    transform:skewX(-20deg) translate3d(0,0,0);
+    opacity:0;
+  }
+  6%{
+    opacity:.12;
+  }
+  8%{
+    opacity:.76;
+  }
+  18%{
+    transform:skewX(-20deg) translate3d(1500%,0,0);
+    opacity:.70;
+  }
+  21%{
+    transform:skewX(-20deg) translate3d(1500%,0,0);
+    opacity:0;
+  }
+  21.1%,100%{
+    transform:skewX(-20deg) translate3d(1500%,0,0);
+    opacity:0;
+  }
+}
+
+.auto-btn.primary.auto-calc-btn[data-request-car]:disabled .auto-calc-glint,
+.auto-btn.primary.auto-calc-btn[data-request-car][aria-disabled="true"] .auto-calc-glint{
+  display:none!important;
+  animation:none!important;
+}
+
+
+/* v18 polish: narrower, softer premium specular sweep with a longer quiet interval. */
+.auto-btn.primary.auto-calc-btn[data-request-car] .auto-calc-glint{
+  top:-62%!important;
+  bottom:-62%!important;
+  left:-16%!important;
+  width:7.2%!important;
+  background:linear-gradient(90deg,
+    rgba(118,211,246,0) 0%,
+    rgba(118,211,246,.018) 18%,
+    rgba(147,224,251,.07) 31%,
+    rgba(190,240,255,.24) 42%,
+    rgba(236,251,255,.70) 47%,
+    rgba(255,255,255,.94) 50%,
+    rgba(230,248,255,.64) 53%,
+    rgba(178,235,255,.20) 60%,
+    rgba(132,216,248,.05) 73%,
+    rgba(118,211,246,0) 100%
+  )!important;
+  box-shadow:
+    -4px 0 12px rgba(113,215,255,.035),
+    4px 0 12px rgba(170,235,255,.055),
+    0 0 17px rgba(130,220,255,.04)!important;
+  filter:blur(.32px)!important;
+  animation:autoCalcLuxurySweepV18 6.8s cubic-bezier(.20,.72,.22,1) infinite!important;
+}
+@keyframes autoCalcLuxurySweepV18{
+  0%,5%{transform:skewX(-19deg) translate3d(-40%,0,0);opacity:0}
+  6.5%{opacity:.10}
+  8.5%{opacity:.82}
+  16.5%{transform:skewX(-19deg) translate3d(1780%,0,0);opacity:.68}
+  18.5%,100%{transform:skewX(-19deg) translate3d(1780%,0,0);opacity:0}
+}
+
+
+/* v19: layered glass-dust shimmer — specular core + refractive haze + micro-particles. */
+.auto-btn.primary.auto-calc-btn[data-request-car] .auto-calc-glint{
+  top:-72%!important;
+  bottom:-72%!important;
+  left:-20%!important;
+  width:13.5%!important;
+  overflow:visible!important;
+
+  /* Broad refractive veil: almost invisible cyan -> pearl -> faint violet. */
+  background:
+    linear-gradient(90deg,
+      rgba(88,198,238,0) 0%,
+      rgba(104,210,246,.018) 14%,
+      rgba(139,223,252,.055) 28%,
+      rgba(185,240,255,.16) 41%,
+      rgba(244,253,255,.48) 48.5%,
+      rgba(255,255,255,.62) 50%,
+      rgba(226,247,255,.34) 52.5%,
+      rgba(176,230,255,.12) 60%,
+      rgba(174,151,255,.028) 72%,
+      rgba(108,207,245,0) 100%
+    )!important;
+
+  box-shadow:
+    -9px 0 18px rgba(112,220,255,.026),
+    8px 0 20px rgba(186,236,255,.040),
+    0 0 28px rgba(103,210,255,.026)!important;
+  filter:blur(.22px) saturate(112%)!important;
+  mix-blend-mode:screen!important;
+  -webkit-mask-image:linear-gradient(to bottom,transparent 0%,#000 14%,#000 86%,transparent 100%)!important;
+  mask-image:linear-gradient(to bottom,transparent 0%,#000 14%,#000 86%,transparent 100%)!important;
+  transform:skewX(-18deg) translate3d(-65%,0,0);
+  opacity:0;
+  animation:autoCalcGlassDustV19 7.4s cubic-bezier(.18,.70,.24,1) infinite!important;
+}
+
+/* Hairline specular reflection — the crisp "glass" part. */
+.auto-btn.primary.auto-calc-btn[data-request-car] .auto-calc-glint::before{
+  content:"";
+  position:absolute;
+  z-index:1;
+  top:7%;
+  bottom:7%;
+  left:49%;
+  width:1.25px;
+  border-radius:999px;
+  background:linear-gradient(to bottom,
+    rgba(255,255,255,0) 0%,
+    rgba(235,251,255,.24) 17%,
+    rgba(255,255,255,.96) 47%,
+    rgba(255,255,255,1) 52%,
+    rgba(221,247,255,.40) 72%,
+    rgba(255,255,255,0) 100%
+  );
+  box-shadow:
+    -2px 0 5px rgba(132,225,255,.16),
+    2px 0 6px rgba(225,201,255,.07),
+    0 0 9px rgba(232,251,255,.12);
+  opacity:.88;
+  filter:blur(.08px);
+}
+
+/* Sparse microscopic sparkle, closer to illuminated dust than glitter. */
+.auto-btn.primary.auto-calc-btn[data-request-car] .auto-calc-glint::after{
+  content:"";
+  position:absolute;
+  z-index:0;
+  inset:10% -34%;
+  pointer-events:none;
+  background:
+    radial-gradient(circle at 14% 29%,rgba(255,255,255,.58) 0 .45px,transparent .95px),
+    radial-gradient(circle at 33% 68%,rgba(184,239,255,.40) 0 .40px,transparent .90px),
+    radial-gradient(circle at 51% 21%,rgba(255,255,255,.48) 0 .36px,transparent .82px),
+    radial-gradient(circle at 67% 58%,rgba(205,229,255,.36) 0 .42px,transparent .92px),
+    radial-gradient(circle at 82% 37%,rgba(219,207,255,.26) 0 .38px,transparent .88px),
+    radial-gradient(circle at 92% 73%,rgba(255,255,255,.42) 0 .34px,transparent .80px);
+  opacity:.48;
+  filter:blur(.12px);
+  mix-blend-mode:screen;
+}
+
+@keyframes autoCalcGlassDustV19{
+  0%,5.5%{
+    transform:skewX(-18deg) translate3d(-65%,0,0);
+    opacity:0;
+  }
+  7%{opacity:.06}
+  9%{opacity:.72}
+  17.5%{
+    transform:skewX(-18deg) translate3d(1280%,0,0);
+    opacity:.62;
+  }
+  20%{
+    transform:skewX(-18deg) translate3d(1280%,0,0);
+    opacity:0;
+  }
+  20.1%,100%{
+    transform:skewX(-18deg) translate3d(1280%,0,0);
+    opacity:0;
+  }
+}
+
+.auto-btn.primary.auto-calc-btn[data-request-car]:disabled .auto-calc-glint::before,
+.auto-btn.primary.auto-calc-btn[data-request-car]:disabled .auto-calc-glint::after,
+.auto-btn.primary.auto-calc-btn[data-request-car][aria-disabled="true"] .auto-calc-glint::before,
+.auto-btn.primary.auto-calc-btn[data-request-car][aria-disabled="true"] .auto-calc-glint::after{
+  content:none!important;
+}
+
+
+/* v20: pearlescent glass haze — no dominant stripe, only soft refraction + dust. */
+.auto-btn.primary.auto-calc-btn[data-request-car] .auto-calc-glint{
+  top:-86%!important;
+  bottom:-86%!important;
+  left:-30%!important;
+  width:28%!important;
+  overflow:visible!important;
+
+  background:
+    radial-gradient(ellipse at 46% 48%,
+      rgba(255,255,255,.18) 0%,
+      rgba(223,248,255,.13) 14%,
+      rgba(170,229,255,.075) 30%,
+      rgba(164,178,255,.030) 46%,
+      rgba(117,207,245,.018) 58%,
+      rgba(100,200,238,0) 74%
+    ),
+    radial-gradient(ellipse at 58% 52%,
+      rgba(214,199,255,.035) 0%,
+      rgba(178,223,255,.025) 34%,
+      rgba(255,255,255,0) 70%
+    )!important;
+
+  box-shadow:
+    0 0 18px rgba(160,230,255,.028),
+    0 0 34px rgba(132,213,255,.018)!important;
+  filter:blur(.72px) saturate(116%)!important;
+  mix-blend-mode:screen!important;
+  -webkit-mask-image:linear-gradient(to bottom,transparent 0%,#000 18%,#000 82%,transparent 100%)!important;
+  mask-image:linear-gradient(to bottom,transparent 0%,#000 18%,#000 82%,transparent 100%)!important;
+  transform:skewX(-14deg) translate3d(-65%,0,0);
+  opacity:0;
+  animation:autoCalcPearlGlassV20 8.8s cubic-bezier(.17,.68,.23,1) infinite!important;
+}
+
+/* A hairline catch-light, deliberately faint — never a visible white bar. */
+.auto-btn.primary.auto-calc-btn[data-request-car] .auto-calc-glint::before{
+  content:"";
+  position:absolute;
+  z-index:1;
+  top:19%;
+  bottom:19%;
+  left:49.5%;
+  width:.7px;
+  border-radius:999px;
+  background:linear-gradient(to bottom,
+    rgba(255,255,255,0) 0%,
+    rgba(235,251,255,.10) 24%,
+    rgba(255,255,255,.42) 48%,
+    rgba(246,253,255,.46) 52%,
+    rgba(214,242,255,.12) 74%,
+    rgba(255,255,255,0) 100%
+  );
+  box-shadow:
+    -2px 0 6px rgba(136,226,255,.055),
+    2px 0 7px rgba(221,203,255,.040);
+  opacity:.62;
+  filter:blur(.34px);
+}
+
+/* Sparse illuminated dust suspended inside the passing glass haze. */
+.auto-btn.primary.auto-calc-btn[data-request-car] .auto-calc-glint::after{
+  content:"";
+  position:absolute;
+  z-index:0;
+  inset:12% -8%;
+  pointer-events:none;
+  background:
+    radial-gradient(circle at 8% 26%,rgba(255,255,255,.50) 0 .34px,transparent .78px),
+    radial-gradient(circle at 17% 67%,rgba(181,235,255,.34) 0 .30px,transparent .72px),
+    radial-gradient(circle at 29% 39%,rgba(255,255,255,.42) 0 .28px,transparent .70px),
+    radial-gradient(circle at 38% 78%,rgba(204,225,255,.27) 0 .33px,transparent .76px),
+    radial-gradient(circle at 48% 18%,rgba(255,255,255,.46) 0 .26px,transparent .66px),
+    radial-gradient(circle at 58% 57%,rgba(190,239,255,.30) 0 .31px,transparent .73px),
+    radial-gradient(circle at 68% 31%,rgba(229,214,255,.22) 0 .27px,transparent .67px),
+    radial-gradient(circle at 77% 72%,rgba(255,255,255,.40) 0 .29px,transparent .69px),
+    radial-gradient(circle at 88% 44%,rgba(176,232,255,.28) 0 .30px,transparent .72px),
+    radial-gradient(circle at 95% 23%,rgba(255,255,255,.36) 0 .25px,transparent .64px);
+  opacity:.58;
+  filter:blur(.16px);
+  mix-blend-mode:screen;
+  animation:autoCalcDustBreathV20 8.8s ease-in-out infinite;
+}
+
+@keyframes autoCalcPearlGlassV20{
+  0%,6%{
+    transform:skewX(-14deg) translate3d(-65%,0,0);
+    opacity:0;
+  }
+  8%{opacity:.035}
+  10.5%{opacity:.44}
+  22%{
+    transform:skewX(-14deg) translate3d(520%,0,0);
+    opacity:.36;
+  }
+  25%{
+    transform:skewX(-14deg) translate3d(520%,0,0);
+    opacity:0;
+  }
+  25.1%,100%{
+    transform:skewX(-14deg) translate3d(520%,0,0);
+    opacity:0;
+  }
+}
+
+@keyframes autoCalcDustBreathV20{
+  0%,7%{opacity:.15}
+  12%{opacity:.58}
+  18%{opacity:.38}
+  24%,100%{opacity:.10}
+}
+
+
+/* v21: full-surface crystal sheen — pearl refraction + soft filament + suspended dust. */
+.auto-btn.primary.auto-calc-btn[data-request-car] .auto-calc-glint{
+  inset:0!important;
+  width:auto!important;
+  height:auto!important;
+  left:0!important;
+  top:0!important;
+  bottom:0!important;
+  border-radius:inherit!important;
+  overflow:hidden!important;
+
+  background:
+    radial-gradient(ellipse at 22% 28%,
+      rgba(236,252,255,.105) 0%,
+      rgba(170,231,255,.052) 20%,
+      rgba(132,211,246,.012) 42%,
+      transparent 62%
+    ),
+    radial-gradient(ellipse at 78% 72%,
+      rgba(216,203,255,.040) 0%,
+      rgba(168,214,255,.030) 24%,
+      transparent 58%
+    ),
+    linear-gradient(112deg,
+      transparent 0%,
+      rgba(111,210,246,.010) 24%,
+      rgba(155,228,253,.040) 36%,
+      rgba(225,249,255,.115) 46%,
+      rgba(255,255,255,.235) 50%,
+      rgba(211,243,255,.105) 54%,
+      rgba(199,184,255,.032) 64%,
+      rgba(105,202,241,.008) 76%,
+      transparent 100%
+    )!important;
+  background-size:155% 155%,165% 165%,230% 100%!important;
+  background-position:-25% -18%,125% 118%,145% 0%!important;
+  background-repeat:no-repeat!important;
+  box-shadow:none!important;
+  filter:saturate(115%)!important;
+  mix-blend-mode:screen!important;
+  -webkit-mask-image:none!important;
+  mask-image:none!important;
+  transform:none!important;
+  opacity:0;
+  animation:autoCalcCrystalSkinV21 9.6s cubic-bezier(.18,.67,.24,1) infinite!important;
+}
+
+/* Soft specular filament. Wide enough to feel like refraction, faint enough not to read as a stripe. */
+.auto-btn.primary.auto-calc-btn[data-request-car] .auto-calc-glint::before{
+  content:"";
+  position:absolute;
+  z-index:1;
+  top:-48%;
+  bottom:-48%;
+  left:-28%;
+  width:18%;
+  border-radius:50%;
+  background:linear-gradient(90deg,
+    transparent 0%,
+    rgba(126,221,255,.028) 20%,
+    rgba(193,242,255,.095) 38%,
+    rgba(250,254,255,.33) 49%,
+    rgba(255,255,255,.40) 51%,
+    rgba(202,244,255,.10) 62%,
+    rgba(204,190,255,.025) 78%,
+    transparent 100%
+  );
+  box-shadow:
+    0 0 12px rgba(178,236,255,.042),
+    0 0 24px rgba(117,211,249,.024);
+  filter:blur(1.15px);
+  transform:skewX(-17deg) translate3d(0,0,0);
+  opacity:0;
+  animation:autoCalcCrystalFilamentV21 9.6s cubic-bezier(.20,.70,.24,1) infinite;
+}
+
+/* Very sparse particles: illuminated dust, not glitter. */
+.auto-btn.primary.auto-calc-btn[data-request-car] .auto-calc-glint::after{
+  content:"";
+  position:absolute;
+  z-index:2;
+  inset:8% 3%;
+  pointer-events:none;
+  background:
+    radial-gradient(circle at 6% 34%,rgba(255,255,255,.62) 0 .38px,transparent .88px),
+    radial-gradient(circle at 14% 72%,rgba(174,235,255,.43) 0 .32px,transparent .78px),
+    radial-gradient(circle at 24% 21%,rgba(255,255,255,.48) 0 .30px,transparent .74px),
+    radial-gradient(circle at 33% 55%,rgba(207,230,255,.34) 0 .34px,transparent .80px),
+    radial-gradient(circle at 43% 79%,rgba(255,255,255,.46) 0 .29px,transparent .72px),
+    radial-gradient(circle at 52% 31%,rgba(190,239,255,.40) 0 .33px,transparent .79px),
+    radial-gradient(circle at 61% 67%,rgba(228,212,255,.31) 0 .30px,transparent .74px),
+    radial-gradient(circle at 72% 18%,rgba(255,255,255,.55) 0 .34px,transparent .80px),
+    radial-gradient(circle at 81% 52%,rgba(174,232,255,.38) 0 .31px,transparent .76px),
+    radial-gradient(circle at 91% 76%,rgba(255,255,255,.44) 0 .28px,transparent .70px),
+    radial-gradient(circle at 96% 28%,rgba(210,199,255,.28) 0 .29px,transparent .72px);
+  opacity:0;
+  filter:blur(.08px);
+  mix-blend-mode:screen;
+  transform:translate3d(-4px,1px,0);
+  animation:autoCalcCrystalDustV21 9.6s ease-in-out infinite;
+}
+
+@keyframes autoCalcCrystalSkinV21{
+  0%,6%{
+    opacity:0;
+    background-position:-25% -18%,125% 118%,145% 0%;
+  }
+  9%{opacity:.10}
+  13%{opacity:.38}
+  24%{
+    opacity:.31;
+    background-position:12% 8%,92% 86%,-45% 0%;
+  }
+  29%{opacity:.07}
+  31%,100%{
+    opacity:0;
+    background-position:12% 8%,92% 86%,-45% 0%;
+  }
+}
+
+@keyframes autoCalcCrystalFilamentV21{
+  0%,7%{
+    transform:skewX(-17deg) translate3d(0,0,0);
+    opacity:0;
+  }
+  11%{opacity:.08}
+  14%{opacity:.46}
+  24%{
+    transform:skewX(-17deg) translate3d(720%,0,0);
+    opacity:.34;
+  }
+  28%,100%{
+    transform:skewX(-17deg) translate3d(720%,0,0);
+    opacity:0;
+  }
+}
+
+@keyframes autoCalcCrystalDustV21{
+  0%,8%{opacity:0;transform:translate3d(-4px,1px,0)}
+  13%{opacity:.34}
+  17%{opacity:.56;transform:translate3d(0,0,0)}
+  23%{opacity:.28;transform:translate3d(4px,-1px,0)}
+  28%,100%{opacity:0;transform:translate3d(4px,-1px,0)}
+}
+
+
+/* v22: continuous living-glass CTA — always-on refraction + traveling caustic + edge lensing. */
+.auto-btn.primary.auto-calc-btn[data-request-car] .auto-calc-glint{
+  inset:0!important;
+  width:auto!important;
+  height:auto!important;
+  left:0!important;
+  top:0!important;
+  bottom:0!important;
+  border-radius:inherit!important;
+  overflow:hidden!important;
+
+  background:
+    radial-gradient(ellipse at 16% 20%,
+      rgba(238,253,255,.20) 0%,
+      rgba(169,233,255,.10) 18%,
+      rgba(120,209,247,.028) 38%,
+      transparent 60%
+    ),
+    radial-gradient(ellipse at 84% 80%,
+      rgba(222,205,255,.075) 0%,
+      rgba(178,219,255,.050) 20%,
+      transparent 54%
+    ),
+    linear-gradient(108deg,
+      rgba(119,214,249,.020) 0%,
+      rgba(143,226,253,.055) 20%,
+      rgba(210,246,255,.18) 38%,
+      rgba(255,255,255,.34) 47%,
+      rgba(255,255,255,.14) 53%,
+      rgba(201,235,255,.10) 64%,
+      rgba(206,187,255,.045) 76%,
+      rgba(116,207,244,.020) 100%
+    )!important;
+  background-size:180% 180%,190% 190%,240% 100%!important;
+  background-position:-30% -25%,130% 125%,160% 0%!important;
+  background-repeat:no-repeat!important;
+  box-shadow:
+    inset 0 1px 0 rgba(235,252,255,.10),
+    inset 0 -1px 0 rgba(132,214,250,.035)!important;
+  filter:saturate(118%) contrast(103%)!important;
+  mix-blend-mode:screen!important;
+  -webkit-mask-image:none!important;
+  mask-image:none!important;
+  transform:none!important;
+  opacity:.24!important;
+  animation:autoCalcLivingGlassV22 5.8s ease-in-out infinite!important;
+}
+
+/* Traveling glass caustic: broad, soft, never a white bar. */
+.auto-btn.primary.auto-calc-btn[data-request-car] .auto-calc-glint::before{
+  content:"";
+  position:absolute;
+  z-index:1;
+  top:-62%;
+  bottom:-62%;
+  left:-44%;
+  width:36%;
+  border-radius:46%;
+  background:
+    linear-gradient(90deg,
+      transparent 0%,
+      rgba(118,220,255,.035) 14%,
+      rgba(176,237,255,.11) 31%,
+      rgba(237,252,255,.36) 44%,
+      rgba(255,255,255,.58) 50%,
+      rgba(227,247,255,.29) 56%,
+      rgba(205,191,255,.070) 72%,
+      rgba(123,213,248,.025) 86%,
+      transparent 100%
+    );
+  box-shadow:
+    0 0 18px rgba(170,236,255,.055),
+    0 0 34px rgba(113,211,250,.035);
+  filter:blur(2.4px);
+  transform:skewX(-14deg) translate3d(0,0,0);
+  opacity:.16;
+  animation:autoCalcGlassCausticV22 5.8s cubic-bezier(.20,.64,.24,1) infinite;
+}
+
+/* Fine optical dust — always faintly present, brightens as the caustic passes. */
+.auto-btn.primary.auto-calc-btn[data-request-car] .auto-calc-glint::after{
+  content:"";
+  position:absolute;
+  z-index:2;
+  inset:8% 2%;
+  pointer-events:none;
+  background:
+    radial-gradient(circle at 7% 31%,rgba(255,255,255,.72) 0 .42px,transparent .95px),
+    radial-gradient(circle at 15% 74%,rgba(171,235,255,.52) 0 .34px,transparent .82px),
+    radial-gradient(circle at 24% 20%,rgba(255,255,255,.56) 0 .31px,transparent .76px),
+    radial-gradient(circle at 32% 52%,rgba(203,231,255,.41) 0 .36px,transparent .84px),
+    radial-gradient(circle at 40% 80%,rgba(255,255,255,.55) 0 .30px,transparent .74px),
+    radial-gradient(circle at 49% 33%,rgba(187,239,255,.49) 0 .35px,transparent .83px),
+    radial-gradient(circle at 57% 65%,rgba(225,207,255,.36) 0 .31px,transparent .77px),
+    radial-gradient(circle at 66% 18%,rgba(255,255,255,.64) 0 .37px,transparent .86px),
+    radial-gradient(circle at 75% 49%,rgba(173,232,255,.45) 0 .33px,transparent .80px),
+    radial-gradient(circle at 84% 77%,rgba(255,255,255,.50) 0 .29px,transparent .72px),
+    radial-gradient(circle at 93% 27%,rgba(210,197,255,.33) 0 .31px,transparent .76px);
+  opacity:.20;
+  filter:blur(.04px);
+  mix-blend-mode:screen;
+  transform:translate3d(-2px,0,0);
+  animation:autoCalcGlassDustV22 5.8s ease-in-out infinite;
+}
+
+@keyframes autoCalcLivingGlassV22{
+  0%{
+    opacity:.22;
+    background-position:-30% -25%,130% 125%,160% 0%;
+  }
+  25%{
+    opacity:.34;
+    background-position:5% 4%,104% 100%,72% 0%;
+  }
+  52%{
+    opacity:.46;
+    background-position:26% 18%,86% 84%,-6% 0%;
+  }
+  76%{
+    opacity:.32;
+    background-position:48% 30%,64% 65%,-84% 0%;
+  }
+  100%{
+    opacity:.22;
+    background-position:66% 40%,48% 52%,-155% 0%;
+  }
+}
+
+@keyframes autoCalcGlassCausticV22{
+  0%{
+    transform:skewX(-14deg) translate3d(0,0,0);
+    opacity:.08;
+  }
+  12%{opacity:.26}
+  34%{opacity:.64}
+  66%{opacity:.52}
+  88%{opacity:.18}
+  100%{
+    transform:skewX(-14deg) translate3d(470%,0,0);
+    opacity:.08;
+  }
+}
+
+@keyframes autoCalcGlassDustV22{
+  0%{opacity:.16;transform:translate3d(-2px,0,0)}
+  26%{opacity:.29}
+  48%{opacity:.52;transform:translate3d(0,0,0)}
+  72%{opacity:.34}
+  100%{opacity:.16;transform:translate3d(2px,-.4px,0)}
+}

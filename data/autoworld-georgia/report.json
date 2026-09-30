@@ -1,0 +1,615 @@
+{
+  "channel": "AutoWorld_Georgia",
+  "generatedAt": "2026-09-29T03:22:20Z",
+  "pagesScraped": 172,
+  "carsFound": 391,
+  "previousCars": 391,
+  "changedOrNewCars": 188,
+  "mergeExisting": true,
+  "photosUploaded": 0,
+  "photosReused": 1719,
+  "carsWithRecoveredPhotos": 198,
+  "photoFailures": 192,
+  "failures": [
+    {
+      "post": "77",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "85",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "102",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "189",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "199",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "210",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "220",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "230",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "240",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "250",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "323",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "333",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "342",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "352",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "363",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "371",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "379",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "389",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "403",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "413",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "423",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "434",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "445",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "455",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "465",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "472",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "482",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "491",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "501",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "511",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "521",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "538",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "548",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "559",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "571",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "584",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "592",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "602",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "612",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "640",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "650",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "656",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "678",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "688",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "698",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "739",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "748",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "765",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "774",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "783",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "793",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "844",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "874",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "883",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "893",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "894",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "909",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "915",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "922",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "933",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "943",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "962",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "971",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "1103",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "1113",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "1123",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "1149",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "1157",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "1167",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "1176",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "1186",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "1196",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "1205",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "1217",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "1236",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "1246",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "1255",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "1264",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "1274",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "1284",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "1294",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "1313",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "1323",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "1333",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "1343",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "1467",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "1489",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "1499",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "1509",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "1518",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "1528",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "1539",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "1566",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "1585",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "1595",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "1697",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "1717",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "1726",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "1735",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    },
+    {
+      "post": "1745",
+      "photo": null,
+      "url": "",
+      "error": "no_recovered_media"
+    }
+  ]
+}

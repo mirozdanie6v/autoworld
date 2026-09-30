@@ -1,0 +1,29 @@
+{
+  "name": "autoworld-georgia",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {"node": ">=22"},
+  "scripts": {
+    "clean": "rm -rf dist",
+    "build": "node scripts/build-autoworld.mjs",
+    "test": "node --test tests/auto-sale*.test.mjs tests/ydb*.test.mjs tests/yandex-state-sync.test.mjs tests/object-storage.test.mjs",
+    "test:relay": "npm --prefix cloudflare/telegram-relay test",
+    "check": "npm run clean && npm run build && npm test && npm run test:relay",
+    "start:yandex": "node server/yandex-server.mjs",
+    "migrate:yandex": "node scripts/migrate-auto-sale-to-ydb.mjs",
+    "test:yandex": "node --test tests/yandex-state-sync.test.mjs",
+    "prepare:ydb-domain": "node scripts/prepare-auto-sale-ydb-domain.mjs",
+    "backfill:ydb-domain": "node scripts/backfill-auto-sale-ydb-domain.mjs",
+    "prepare:ydb-runtime": "node scripts/prepare-auto-sale-ydb-runtime.mjs"
+  },
+  "dependencies": {
+    "@ydbjs/auth": "latest",
+    "@ydbjs/core": "latest",
+    "@ydbjs/query": "latest",
+    "@ydbjs/value": "latest"
+  },
+  "devDependencies": {
+    "jsdom": "latest"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "generatedAt": "2026-09-25T15:28:54.153Z",
+  "oldCatalogCount": 133,
+  "freshCatalogCount": 3,
+  "restoredAutoWorldCount": 136,
+  "liveCatalogCount": 136,
+  "preservedNonAutoCount": 0,
+  "freshIds": [
+    "3980",
+    "3990",
+    "4000"
+  ],
+  "revision": 858,
+  "status": "restored"
+}

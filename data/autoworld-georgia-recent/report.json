@@ -1,0 +1,28 @@
+{
+  "channel": "AutoWorld_Georgia",
+  "generatedAt": "2026-09-23T13:02:22Z",
+  "pagesScraped": 20,
+  "carsFound": 29,
+  "photosUploaded": 190,
+  "photoFailures": 3,
+  "failures": [
+    {
+      "post": "3597",
+      "photo": 4,
+      "url": "https://cdn4.telesco.pe/file/eb5rPWetwJQgVdFUFJbpW2-0n-S5dG5e4_a4Lsb-1LGrt6nl6mHwcWFhI8pS1CZen3UX8cZryrzfkmh7DMp0c67C3GoaQ-uwpJyx2FAiAXJhu6berVy49m-duUATvli6vVD80SJZkbDxKHh_QBBwxeNuKyys6Jr2oN21xw5o4b4LS8NuvGQh0BCVXfBHg1QOib3XDz5eqw8ycOb9sCTvNyNfmnsAQLWJExIUNGVHlhmXf4tgsl4aHbBuOltfTJoTX0GjrUIXBwlnveUS1va3VeBf7zKPmMh2VwhB1-3C7zc6p9nRP3PqhtgRFehXaicR0ICsDRV352B_rQEojBPXCw.jpg",
+      "error": "500 Server Error: Internal Server Error for url: https://cdn4.telesco.pe/file/eb5rPWetwJQgVdFUFJbpW2-0n-S5dG5e4_a4Lsb-1LGrt6nl6mHwcWFhI8pS1CZen3UX8cZryrzfkmh7DMp0c67C3GoaQ-uwpJyx2FAiAXJhu6berVy49m-duUATvli6vVD80SJZkbDxKHh_QBBwxeNuKyys6Jr2oN21xw5o4b4LS8NuvGQh0BCVXfBHg1QOib3XDz5eqw8ycOb9sCTvNyNfmnsAQLWJExIUNGVHlhmXf4tgsl4aHbBuOltfTJoTX0GjrUIXBwlnveUS1va3VeBf7zKPmMh2VwhB1-3C7zc6p9nRP3PqhtgRFehXaicR0ICsDRV352B_rQEojBPXCw.jpg"
+    },
+    {
+      "post": "3647",
+      "photo": 5,
+      "url": "https://cdn4.telesco.pe/file/lhdLUx01L-jK6FBlPO_fEScm_Dem1gpkYa0Uf9ZRGvivpnbfcUTAQHhQd1cxnF2T9U1X4Fc6W4lL5tNcy6gdqabcOAWRb1Q0qebnPTc-82VUBxvfWk3JJUUVUrZEHKZAU89rLba1BOooro0BbvwPXCppQMdRY-7m0ZkkpPmsBUpS4GU2U02Osf8c6_RXPWY1YrmjolAH_Pwq80bcuCf8_a1OKChtSGne-WCp6kfc2yHgmiVN_mJmSPowxzgDWZ2lOSgH5YH962LYNYV5Z_eJry9T7PISqnqqcudEjZIvIoAIY4xw9xUW2Mas8Duok5VEf4V3SQQAu6nB-xitk2KONQ.jpg",
+      "error": "500 Server Error: Internal Server Error for url: https://cdn4.telesco.pe/file/lhdLUx01L-jK6FBlPO_fEScm_Dem1gpkYa0Uf9ZRGvivpnbfcUTAQHhQd1cxnF2T9U1X4Fc6W4lL5tNcy6gdqabcOAWRb1Q0qebnPTc-82VUBxvfWk3JJUUVUrZEHKZAU89rLba1BOooro0BbvwPXCppQMdRY-7m0ZkkpPmsBUpS4GU2U02Osf8c6_RXPWY1YrmjolAH_Pwq80bcuCf8_a1OKChtSGne-WCp6kfc2yHgmiVN_mJmSPowxzgDWZ2lOSgH5YH962LYNYV5Z_eJry9T7PISqnqqcudEjZIvIoAIY4xw9xUW2Mas8Duok5VEf4V3SQQAu6nB-xitk2KONQ.jpg"
+    },
+    {
+      "post": "3657",
+      "photo": 6,
+      "url": "https://cdn4.telesco.pe/file/RH-b8i2poKDtVpsV07L9pErovHCSe2Czc_9aTbCGfmzXdu_aTHlkj4OCBeFvgebuQBZTib-Fm8yC1giF-aSzPu9PPWZSP5Snjunodpytm-zolrKaELOua_XhtIxZ6DBMRoLFMF7wf5qxl5RikqoZDvLcDIpRYDngEBfm6t4lgZmKxFeqEUrVX4vr4X-lgT6N1Yu1qhmBtP0HPtMo9xYzreXzPdWbwuxYjXAg5860npitncGFjSqurD8mjdaHFwIGP_PEYH-VzrunOe9tbXEBWackSsNhgIQfjMkTWEOAd5inZEPjl4zYwbUkUKS7QEyZ-yogu3ORM-tiDpr3qQR7EA.jpg",
+      "error": "500 Server Error: Internal Server Error for url: https://cdn4.telesco.pe/file/RH-b8i2poKDtVpsV07L9pErovHCSe2Czc_9aTbCGfmzXdu_aTHlkj4OCBeFvgebuQBZTib-Fm8yC1giF-aSzPu9PPWZSP5Snjunodpytm-zolrKaELOua_XhtIxZ6DBMRoLFMF7wf5qxl5RikqoZDvLcDIpRYDngEBfm6t4lgZmKxFeqEUrVX4vr4X-lgT6N1Yu1qhmBtP0HPtMo9xYzreXzPdWbwuxYjXAg5860npitncGFjSqurD8mjdaHFwIGP_PEYH-VzrunOe9tbXEBWackSsNhgIQfjMkTWEOAd5inZEPjl4zYwbUkUKS7QEyZ-yogu3ORM-tiDpr3qQR7EA.jpg"
+    }
+  ]
+}

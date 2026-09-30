@@ -1,0 +1,10 @@
+node_modules
+.build
+dist
+.git
+.github
+*.log
+.wrangler
+.dev.vars
+.env
+.env.*

@@ -1,0 +1,40 @@
+{
+  "generatedAt": "2026-09-25",
+  "batch": "full-restore-plus-fresh",
+  "count": 136,
+  "oldCatalogCount": 133,
+  "freshCount": 3,
+  "freshPosts": [
+    {
+      "sourcePostId": "3980",
+      "sourceUrl": "https://t.me/AutoWorld_Georgia/3980",
+      "brand": "Buick",
+      "model": "Encore",
+      "year": 2022,
+      "vin": "KL4CJASMXNB525640",
+      "priceRub": 1550000,
+      "photos": 7
+    },
+    {
+      "sourcePostId": "3990",
+      "sourceUrl": "https://t.me/AutoWorld_Georgia/3990",
+      "brand": "Nissan",
+      "model": "Kicks",
+      "year": 2023,
+      "vin": "3N1CP5CV9PL499300",
+      "priceRub": 1870000,
+      "photos": 7
+    },
+    {
+      "sourcePostId": "4000",
+      "sourceUrl": "https://t.me/AutoWorld_Georgia/4000",
+      "brand": "Chevrolet",
+      "model": "Trax",
+      "year": 2023,
+      "vin": "KL77LGE22RC035835",
+      "priceRub": 1970000,
+      "photos": 7
+    }
+  ],
+  "liveRevision": 858
+}

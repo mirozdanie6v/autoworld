@@ -1,0 +1,30 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {JSDOM} from 'jsdom';
+
+test('client can see and approve a sent quote from the client card',async()=>{
+  const dom=new JSDOM(`<!doctype html><html><head></head><body><div data-client-detail-bg><div class="auto-tg-modal"><div class="auto-client-order-grid"></div><div class="auto-guide"><b>Что дальше</b><span>old</span></div><div class="auto-actions"><button data-tg-manager="L-109">Написать менеджеру</button></div></div></div></body></html>`,{url:'https://auto-sale.viiversion.com/'});
+  global.window=dom.window;global.document=dom.window.document;global.localStorage=dom.window.localStorage;global.MutationObserver=dom.window.MutationObserver;global.CustomEvent=dom.window.CustomEvent;global.confirm=()=>true;
+  const quote={id:'Q-507',leadId:'L-109',model:'Ford Mustang Mach-E',origin:'Грузия',version:1,status:'Отправлен',lot:1000,auction:200,inland:300,ocean:800,customs:500,repair:0,service:1400,total:4200,validUntil:'2026-09-19'};
+  localStorage.setItem('auto-sale-quotes-v2',JSON.stringify([quote]));
+  localStorage.setItem('auto-sale-notes-v2',JSON.stringify({}));
+  await import(`../public/auto-sale-client-quote.mjs?test=${Date.now()}`);
+  await new Promise(resolve=>setTimeout(resolve,0));
+  const panel=document.querySelector('.auto-client-quote');
+  assert.ok(panel);
+  assert.match(panel.textContent,/Цена лота/);
+  assert.match(panel.textContent,/Итого под ключ/);
+  assert.ok(panel.querySelector('[data-client-quote-agree="Q-507"]'));
+  assert.match(document.querySelector('.auto-guide span').textContent,/Согласовать расчёт/);
+  panel.querySelector('[data-client-quote-agree="Q-507"]').click();
+  await new Promise(resolve=>setTimeout(resolve,0));
+  const saved=JSON.parse(localStorage.getItem('auto-sale-quotes-v2'))[0];
+  assert.equal(saved.status,'Согласован');
+  assert.equal(saved.clientDecision,'agreed');
+  assert.ok(saved.clientDecisionAt);
+  const notes=JSON.parse(localStorage.getItem('auto-sale-notes-v2'))['L-109'];
+  assert.match(notes.at(-1).text,/Клиент согласовал расчёт Q-507/);
+  assert.match(document.querySelector('.auto-client-quote').textContent,/Расчёт согласован/);
+  assert.match(document.querySelector('.auto-guide span').textContent,/депозит/);
+  dom.window.close();
+});
