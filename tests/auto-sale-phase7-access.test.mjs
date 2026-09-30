@@ -30,7 +30,7 @@ const state={
 test('Phase 7 fixes admin access to exactly three invited Telegram usernames',async()=>{
   assert.equal(MAX_ADMIN_ACCOUNTS,3);
   const server=await readFile(new URL('../server/yandex-server.mjs',import.meta.url),'utf8');
-  const workflow=await readFile(new URL('../.github/workflows/deploy-yandex-staging.yml',import.meta.url),'utf8');
+  const workflow=await readFile(new URL('../.github/workflows/deploy-awg-production.yml',import.meta.url),'utf8');
   for(const username of ['Flyer_Flyer','smit44744','Ivan_AWG']){
     assert.ok(server.includes(username),username+' server invite');
     assert.ok(workflow.includes(username),username+' workflow invite');
@@ -123,7 +123,7 @@ test('Phase 7 runtime and browser use Telegram-backed RBAC instead of role-switc
   const server=await readFile(new URL('../server/yandex-server.mjs',import.meta.url),'utf8');
   const bootstrap=await readFile(new URL('../public/auto-sale-bootstrap.mjs',import.meta.url),'utf8');
   const app=await readFile(new URL('../public/auto-sale-app-v3.mjs',import.meta.url),'utf8');
-  const workflow=await readFile(new URL('../.github/workflows/deploy-yandex-staging.yml',import.meta.url),'utf8');
+  const workflow=await readFile(new URL('../.github/workflows/deploy-awg-production.yml',import.meta.url),'utf8');
   assert.match(server,/writeMode:'telegram-rbac'/);
   assert.match(server,/sanitizeClientOperations/);
   assert.match(server,/claimAdminAccess/);

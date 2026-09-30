@@ -1,7 +1,7 @@
-name: Deploy AutoWorld to Yandex
+name: Deploy AWG Production
 
 concurrency:
-  group: auto-sale-yandex-live-writer
+  group: awg-yandex-production-writer
   cancel-in-progress: false
 
 on:
@@ -11,27 +11,23 @@ on:
         description: Send the full test lifecycle to the linked Flyer_Flyer account
         type: boolean
         default: false
-      clear_crm:
-        description: Remove all CRM applications/orders/quotes/notes before customer demo
-        type: boolean
-        default: false
 
 permissions:
   contents: read
   id-token: write
 
 env:
-  YC_FOLDER_ID: ${{ vars.YC_FOLDER_ID }}
-  YC_DEPLOY_SA_ID: ${{ vars.YC_DEPLOY_SA_ID }}
-  YC_RUNTIME_SA_ID: ${{ vars.YC_RUNTIME_SA_ID }}
-  YC_REGISTRY_ID: ${{ vars.YC_REGISTRY_ID }}
-  YC_CONTAINER_NAME: ${{ vars.YC_CONTAINER_NAME }}
-  YDB_CONNECTION_STRING: ${{ vars.YDB_CONNECTION_STRING }}
-  AUTO_SALE_MEDIA_BUCKET: viiversion-auto-sale-media
-  AUTO_SALE_TELEGRAM_BOT_TOKEN: ${{ secrets.AUTO_SALE_TELEGRAM_BOT_TOKEN }}
-  AUTOWORLD_RELAY_SECRET: ${{ secrets.AUTOWORLD_RELAY_SECRET }}
-  AUTO_SALE_MANAGER_CHAT_IDS: ${{ vars.AUTO_SALE_MANAGER_CHAT_IDS }}
-  AUTO_SALE_TELEGRAM_APP_URL: https://bba01u6g86lg2q49p34d.containers.yandexcloud.net/
+  YC_FOLDER_ID: ${{ vars.AWG_YC_FOLDER_ID }}
+  YC_DEPLOY_SA_ID: ${{ vars.AWG_YC_DEPLOY_SA_ID }}
+  YC_RUNTIME_SA_ID: ${{ vars.AWG_YC_RUNTIME_SA_ID }}
+  YC_REGISTRY_ID: ${{ vars.AWG_YC_REGISTRY_ID }}
+  YC_CONTAINER_NAME: ${{ vars.AWG_YC_CONTAINER_NAME }}
+  YDB_CONNECTION_STRING: ${{ vars.AWG_YDB_CONNECTION_STRING }}
+  AUTO_SALE_MEDIA_BUCKET: ${{ vars.AWG_MEDIA_BUCKET }}
+  AUTO_SALE_TELEGRAM_BOT_TOKEN: ${{ secrets.AWG_TELEGRAM_BOT_TOKEN }}
+  AUTOWORLD_RELAY_SECRET: ${{ secrets.AWG_RELAY_SECRET }}
+  AUTO_SALE_MANAGER_CHAT_IDS: ${{ vars.AWG_MANAGER_CHAT_IDS }}
+  AUTO_SALE_TELEGRAM_APP_URL: https://awg.viiversion.com/
   AUTO_SALE_TELEGRAM_RELAY_URL: https://integration-telegram.viiversion.com/telegram/send
   AUTO_SALE_YDB_DUAL_WRITE: "false"
   AUTO_SALE_LEGACY_STATE_WRITE: "false"
@@ -107,13 +103,13 @@ jobs:
       - name: Build and push image
         run: |
           set -euo pipefail
-          IMAGE="cr.yandex/${YC_REGISTRY_ID}/auto-sale:${GITHUB_SHA}"
+          IMAGE="cr.yandex/${YC_REGISTRY_ID}/autoworld-awg:${GITHUB_SHA}"
           echo "$YC_IAM_TOKEN" | docker login --username iam --password-stdin cr.yandex
           docker build -f Dockerfile.yandex -t "$IMAGE" .
           docker push "$IMAGE"
           echo "AUTO_SALE_IMAGE=$IMAGE" >> "$GITHUB_ENV"
 
-      - name: Generate staging API credential
+      - name: Generate AWG production API credential
         run: |
           set -euo pipefail
           AUTO_SALE_API_KEY=$(openssl rand -hex 32)
@@ -121,7 +117,7 @@ jobs:
           echo "AUTO_SALE_API_KEY=$AUTO_SALE_API_KEY" >> "$GITHUB_ENV"
           printf '%s' "$AUTO_SALE_API_KEY" > "$RUNNER_TEMP/auto-sale-api-key"
 
-      - name: Deploy public demo YDB staging container
+      - name: Deploy isolated AWG production container
         run: |
           set -euo pipefail
           yc serverless container get --name "$YC_CONTAINER_NAME" --folder-id "$YC_FOLDER_ID" >/dev/null 2>&1 || \
@@ -171,7 +167,7 @@ jobs:
           set -euo pipefail
           URL=$(yc serverless container get --name "$YC_CONTAINER_NAME" --folder-id "$YC_FOLDER_ID" --format json | jq -r '.url')
           test -n "$URL" && test "$URL" != "null"
-          echo "STAGING_URL=$URL" >> "$GITHUB_ENV"
+          echo "AWG_URL=$URL" >> "$GITHUB_ENV"
           # Re-export the exact generated credential after deployment so every protected
           # live-delivery check uses the same bytes that were injected into the revision.
           AUTO_SALE_API_KEY=$(cat "$RUNNER_TEMP/auto-sale-api-key")
@@ -188,12 +184,12 @@ jobs:
             | jq -e '.initialized == true and (.revision|tonumber) >= 1 and ._access.role == "public" and (.leads|length) == 0 and (.quotes|length) == 0 and (.orders|length) == 0 and (.team|length) == 0 and (.catalog|type) == "array"' >/dev/null
           curl -fsS -H "x-auto-sale-key: $AUTO_SALE_API_KEY" "${URL%/}/api/auto-sale/state" \
             | jq -e '.initialized == true and ._access.role == "admin" and ._access.authenticated == true and (.team|type) == "array"' >/dev/null
-          echo "Yandex Telegram RBAC staging verified: $URL"
+          echo "Yandex Telegram RBAC production verified: $URL"
 
       - name: Verify normalized YDB read source
         run: |
           set -euo pipefail
-          curl -fsS -H "x-auto-sale-key: $AUTO_SALE_API_KEY" "${STAGING_URL%/}/api/auto-sale/admin/read-parity" \
+          curl -fsS -H "x-auto-sale-key: $AUTO_SALE_API_KEY" "${AWG_URL%/}/api/auto-sale/admin/read-parity" \
             | tee /tmp/read-parity.json \
             | jq -e '.ok == true and .configuredMode == "normalized" and .source == "normalized" and .fallback == false and .authoritative == true and .shadowVerified == false and (.revision|tonumber) >= 1' >/dev/null
 
@@ -227,7 +223,7 @@ jobs:
         if: always()
         run: |
           set -euo pipefail
-          URL=${STAGING_URL%/}
+          URL=${AWG_URL%/}
           for mode in public authenticated; do
             headers=(-H 'content-type: application/json')
             if [ "$mode" = authenticated ]; then
@@ -245,7 +241,7 @@ jobs:
         run: |
           set -euo pipefail
           curl -fsS -H "x-auto-sale-key: $AUTO_SALE_API_KEY" \
-            "${STAGING_URL%/}/api/auto-sale/admin/legacy-snapshot" \
+            "${AWG_URL%/}/api/auto-sale/admin/legacy-snapshot" \
             | tee legacy-retirement-snapshot.json \
             | jq -e '.ok == true and .retired == true and (.revision|tonumber) >= 1 and (.state|type) == "object"' >/dev/null
 
@@ -281,7 +277,7 @@ jobs:
         if: always()
         run: |
           set -euo pipefail
-          URL=${STAGING_URL%/}
+          URL=${AWG_URL%/}
           echo "Container URL: $URL"
           curl -fsS "$URL/api/health" | jq '{ok,telegramNotifications,telegramFallbackManagers}'
           echo "Cloudflare relay reachability:"
@@ -303,25 +299,3 @@ jobs:
           path: telegram-lifecycle-report.json
           if-no-files-found: ignore
 
-      - name: Finalize clean CRM for customer demo
-        if: ${{ always() && inputs.clear_crm == true }}
-        run: |
-          set -euo pipefail
-          export YDB_ACCESS_TOKEN_CREDENTIALS="$YC_IAM_TOKEN"
-          node scripts/clear-auto-sale-demo-data.mjs
-
-      - name: Upload customer demo cleanup report
-        if: ${{ always() && inputs.clear_crm == true }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: auto-sale-demo-cleanup-report
-          path: auto-sale-demo-cleanup-report.json
-          if-no-files-found: error
-
-      - name: Verify customer demo CRM is empty
-        if: ${{ always() && inputs.clear_crm == true }}
-        run: |
-          set -euo pipefail
-          URL=${STAGING_URL%/}
-          curl -fsS -H "x-auto-sale-key: $AUTO_SALE_API_KEY" "$URL/api/auto-sale/state"             | tee /tmp/auto-sale-demo-state.json             | jq -e '(.leads|length)==0 and (.quotes|length)==0 and (.orders|length)==0 and (.notes|length)==0 and (.team|length)>0 and (.catalog|type)=="array"' >/dev/null
-          echo "AUTO SALE customer demo CRM is empty"
