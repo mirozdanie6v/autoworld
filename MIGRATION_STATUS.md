@@ -17,16 +17,15 @@ Source snapshot: `f9c87829591ff97d4f5e4223c875a96a7329a51a`
 
 ## Canonical workflows
 
-Only current or safe operational workflows are enabled in this repository:
+Current AutoWorld workflows in this repository:
 
 - `verify-autoworld.yml` — regression suite, critical syntax checks and Docker image build;
-- `deploy-yandex.yml` — manual Yandex deployment with live post-deploy checks;
-- `configure-autoworld-telegram-bot.yml` — manual bot/menu/webhook configuration;
+- `deploy-awg-production.yml` — canonical AWG production deployment contract;
+- `configure-autoworld-telegram-bot.yml` — manual bot/menu/webhook configuration for `https://awg.viiversion.com/`;
 - `deploy-telegram-relay.yml` — manual Cloudflare Telegram relay deployment;
-- `clear-auto-sale-demo.yml` — manual CRM/outbox cleanup while preserving catalog/team/admin access;
 - `responsive-audit.yml` — manual live responsive audit.
 
-AWG production-changing workflows are manual. The production target is `https://awg.viiversion.com` and must use isolated `AWG_*` Yandex/YDB/Object Storage resources. The legacy `auto-sale-demo.viiversion.com` contour remains controlled by `mirozdanie6v/uniq-smart-rent` and must not be changed from this repository.
+The legacy `auto-sale-demo.viiversion.com` contour remains controlled by `mirozdanie6v/uniq-smart-rent` and must not be changed from this repository.
 
 ## Intentionally excluded
 
@@ -40,17 +39,25 @@ AWG production-changing workflows are manual. The production target is `https://
 
 The catalog datasets and import/scrape scripts are retained, but live catalog maintenance must be moved to the normalized entity API before its workflow is re-enabled.
 
-## Production cutover gates
+## Production cutover status
 
-Before the new repository becomes the deployment authority:
+AWG production is live and verified through the isolated contour:
 
-1. configure the required GitHub repository variables/secrets in `mirozdanie6v/autoworld`;
-2. verify Yandex workload-identity/OIDC trust accepts the new repository;
-3. run the manual Yandex deployment from `main`;
-4. verify health, normalized YDB reads, three-admin RBAC, Telegram relay/webhook and lifecycle delivery;
-5. verify the public Mini App/domain still points to the resulting Yandex revision.
+- YDB: `autoworld-awg-prod` / `etn00ojk5iv1u7dgpdar`;
+- YDB endpoint: `grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1ggsmuiq7tb2d27f89q/etn00ojk5iv1u7dgpdar`;
+- Serverless Container: `autoworld-awg-prod` / `bba691o7au7epjqvs77b`;
+- API Gateway: `autoworld-awg-prod` / `d5dbgio6limv03usvipl`;
+- Object Storage: `viiversion-autoworld-awg-media`;
+- public domain: `https://awg.viiversion.com`, served through the Cloudflare worker `autoworld-awg-proxy`;
+- Telegram Mini App menu: `https://awg.viiversion.com/`.
 
-The old `mirozdanie6v/uniq-smart-rent` repository remains historical source only for AutoWorld after cutover; it continues to exist for its UNIQ project.
+Public domain verification passed for both `/` and `/api/health`; the runtime reports YDB Serverless persistence and uses the isolated AWG database and media bucket.
+
+Yandex workload-identity federation currently trusts the bootstrap executor in `mirozdanie6v/uniq-smart-rent` branch `prototype/auto-sale-usa`. Until federation is extended to `mirozdanie6v/autoworld`, that trusted branch is the deployment executor but checks out canonical source from `mirozdanie6v/autoworld`. After this cutover is merged, the executor must track `autoworld/main`.
+
+The API Gateway currently uses deploy service account `aje775bcl6hgp40eu8of` for private-container invocation. A later least-privilege hardening step is to grant runtime service account `aje8o9ric0d20k11521r` the container-invoker role and switch the Gateway integration back to that runtime account.
+
+The legacy `mirozdanie6v/uniq-smart-rent` AutoWorld demo remains separate and unchanged for three-person testing.
 
 
 ## AWG production contour
