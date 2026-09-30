@@ -40,7 +40,7 @@ test('Phase 6 normalized reads are authoritative when legacy writes are retired'
 });
 
 test('Phase 6 deployment disables dual-write and gates legacy retirement',async()=>{
-  const workflow=await root('.github/workflows/deploy-yandex-staging.yml');
+  const workflow=await root('.github/workflows/deploy-awg-production.yml');
   assert.ok(workflow.includes('AUTO_SALE_YDB_DUAL_WRITE: "false"'));
   assert.ok(workflow.includes('AUTO_SALE_LEGACY_STATE_WRITE: "false"'));
   assert.ok(workflow.includes('Verify legacy whole-state write is retired'));
