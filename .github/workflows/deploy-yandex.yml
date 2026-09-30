@@ -1,0 +1,327 @@
+name: Deploy AutoWorld to Yandex
+
+concurrency:
+  group: auto-sale-yandex-live-writer
+  cancel-in-progress: false
+
+on:
+  workflow_dispatch:
+    inputs:
+      telegram_lifecycle:
+        description: Send the full test lifecycle to the linked Flyer_Flyer account
+        type: boolean
+        default: false
+      clear_crm:
+        description: Remove all CRM applications/orders/quotes/notes before customer demo
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  YC_FOLDER_ID: ${{ vars.YC_FOLDER_ID }}
+  YC_DEPLOY_SA_ID: ${{ vars.YC_DEPLOY_SA_ID }}
+  YC_RUNTIME_SA_ID: ${{ vars.YC_RUNTIME_SA_ID }}
+  YC_REGISTRY_ID: ${{ vars.YC_REGISTRY_ID }}
+  YC_CONTAINER_NAME: ${{ vars.YC_CONTAINER_NAME }}
+  YDB_CONNECTION_STRING: ${{ vars.YDB_CONNECTION_STRING }}
+  AUTO_SALE_MEDIA_BUCKET: viiversion-auto-sale-media
+  AUTO_SALE_TELEGRAM_BOT_TOKEN: ${{ secrets.AUTO_SALE_TELEGRAM_BOT_TOKEN }}
+  AUTOWORLD_RELAY_SECRET: ${{ secrets.AUTOWORLD_RELAY_SECRET }}
+  AUTO_SALE_MANAGER_CHAT_IDS: ${{ vars.AUTO_SALE_MANAGER_CHAT_IDS }}
+  AUTO_SALE_TELEGRAM_APP_URL: https://bba01u6g86lg2q49p34d.containers.yandexcloud.net/
+  AUTO_SALE_TELEGRAM_RELAY_URL: https://integration-telegram.viiversion.com/telegram/send
+  AUTO_SALE_YDB_DUAL_WRITE: "false"
+  AUTO_SALE_LEGACY_STATE_WRITE: "false"
+  AUTO_SALE_YDB_READ_MODE: normalized
+  AUTO_SALE_ADMIN_TELEGRAM_USERNAMES: Flyer_Flyer,smit44744,Ivan_AWG
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Validate Yandex configuration
+        run: |
+          set -euo pipefail
+          for name in YC_FOLDER_ID YC_DEPLOY_SA_ID YC_RUNTIME_SA_ID YC_REGISTRY_ID YC_CONTAINER_NAME YDB_CONNECTION_STRING AUTO_SALE_MEDIA_BUCKET; do
+            test -n "${!name:-}" || { echo "Missing GitHub repository variable: $name"; exit 1; }
+          done
+
+      - name: Validate application
+        run: |
+          npm ci
+          npm run check
+
+      - name: Request GitHub OIDC token
+        uses: actions/github-script@v7
+        id: oidc
+        with:
+          script: |
+            const token = await core.getIDToken('https://github.com/mirozdanie6v')
+            core.setSecret(token)
+            core.setOutput('token', token)
+
+      - name: Exchange OIDC token for Yandex IAM token
+        env:
+          GITHUB_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        run: |
+          set -euo pipefail
+          RESPONSE=$(curl -sS -w '\n%{http_code}' -H 'Content-Type: application/x-www-form-urlencoded' \
+            --data-urlencode 'grant_type=urn:ietf:params:oauth:grant-type:token-exchange' \
+            --data-urlencode 'requested_token_type=urn:ietf:params:oauth:token-type:access_token' \
+            --data-urlencode "audience=${YC_DEPLOY_SA_ID}" \
+            --data-urlencode "subject_token=${GITHUB_OIDC_TOKEN}" \
+            --data-urlencode 'subject_token_type=urn:ietf:params:oauth:token-type:id_token' \
+            https://auth.yandex.cloud/oauth/token)
+          HTTP_CODE=$(printf '%s' "$RESPONSE" | tail -n1)
+          BODY=$(printf '%s' "$RESPONSE" | sed '$d')
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "Yandex token exchange failed with HTTP $HTTP_CODE"
+            echo "$BODY" | jq -c . || echo "$BODY"
+            exit 1
+          fi
+          IAM_TOKEN=$(printf '%s' "$BODY" | jq -r '.access_token')
+          test -n "$IAM_TOKEN" && test "$IAM_TOKEN" != "null"
+          echo "::add-mask::$IAM_TOKEN"
+          echo "YC_IAM_TOKEN=$IAM_TOKEN" >> "$GITHUB_ENV"
+
+      - name: Prepare YDB schema before runtime deploy
+        run: |
+          set -euo pipefail
+          export YDB_ACCESS_TOKEN_CREDENTIALS="$YC_IAM_TOKEN"
+          npm run prepare:ydb-runtime
+
+      - name: Install Yandex Cloud CLI
+        run: |
+          curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash -s -- -n
+          echo "$HOME/yandex-cloud/bin" >> "$GITHUB_PATH"
+
+      - name: Build and push image
+        run: |
+          set -euo pipefail
+          IMAGE="cr.yandex/${YC_REGISTRY_ID}/auto-sale:${GITHUB_SHA}"
+          echo "$YC_IAM_TOKEN" | docker login --username iam --password-stdin cr.yandex
+          docker build -f Dockerfile.yandex -t "$IMAGE" .
+          docker push "$IMAGE"
+          echo "AUTO_SALE_IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
+      - name: Generate staging API credential
+        run: |
+          set -euo pipefail
+          AUTO_SALE_API_KEY=$(openssl rand -hex 32)
+          echo "::add-mask::$AUTO_SALE_API_KEY"
+          echo "AUTO_SALE_API_KEY=$AUTO_SALE_API_KEY" >> "$GITHUB_ENV"
+          printf '%s' "$AUTO_SALE_API_KEY" > "$RUNNER_TEMP/auto-sale-api-key"
+
+      - name: Deploy public demo YDB staging container
+        run: |
+          set -euo pipefail
+          yc serverless container get --name "$YC_CONTAINER_NAME" --folder-id "$YC_FOLDER_ID" >/dev/null 2>&1 || \
+            yc serverless container create --name "$YC_CONTAINER_NAME" --folder-id "$YC_FOLDER_ID"
+          EXTRA_ENV=()
+          if [ -n "${AUTO_SALE_TELEGRAM_BOT_TOKEN:-}" ]; then
+            echo "::add-mask::$AUTO_SALE_TELEGRAM_BOT_TOKEN"
+            EXTRA_ENV+=(--environment "AUTO_SALE_TELEGRAM_BOT_TOKEN=$AUTO_SALE_TELEGRAM_BOT_TOKEN")
+            EXTRA_ENV+=(--environment "AUTO_SALE_TELEGRAM_APP_URL=$AUTO_SALE_TELEGRAM_APP_URL")
+            EXTRA_ENV+=(--environment "AUTO_SALE_TELEGRAM_RELAY_URL=$AUTO_SALE_TELEGRAM_RELAY_URL")
+            if [ -n "${AUTOWORLD_RELAY_SECRET:-}" ]; then
+              echo "::add-mask::$AUTOWORLD_RELAY_SECRET"
+              EXTRA_ENV+=(--environment "AUTOWORLD_RELAY_SECRET=$AUTOWORLD_RELAY_SECRET")
+            fi
+          fi
+          if [ -n "${AUTO_SALE_MANAGER_CHAT_IDS:-}" ]; then
+            EXTRA_ENV+=(--environment "AUTO_SALE_MANAGER_CHAT_IDS=$AUTO_SALE_MANAGER_CHAT_IDS")
+          fi
+          yc serverless container revision deploy \
+            --container-name "$YC_CONTAINER_NAME" \
+            --folder-id "$YC_FOLDER_ID" \
+            --image "$AUTO_SALE_IMAGE" \
+            --cores 1 \
+            --memory 512MB \
+            --execution-timeout 60s \
+            --service-account-id "$YC_RUNTIME_SA_ID" \
+            --environment "YDB_CONNECTION_STRING=$YDB_CONNECTION_STRING" \
+            --environment "AUTO_SALE_API_KEY=$AUTO_SALE_API_KEY" \
+            --environment "AUTO_SALE_PUBLIC_DEMO_WRITE=false" \
+            --environment "AUTO_SALE_LEGACY_STATE_WRITE=$AUTO_SALE_LEGACY_STATE_WRITE" \
+            --environment "AUTO_SALE_YDB_DUAL_WRITE=$AUTO_SALE_YDB_DUAL_WRITE" \
+            --environment "AUTO_SALE_YDB_READ_MODE=$AUTO_SALE_YDB_READ_MODE" \
+            --environment "AUTO_SALE_ADMIN_TELEGRAM_USERNAMES=$AUTO_SALE_ADMIN_TELEGRAM_USERNAMES" \
+            --environment "AUTO_SALE_MEDIA_BUCKET=$AUTO_SALE_MEDIA_BUCKET" \
+            "${EXTRA_ENV[@]}"
+
+      - name: Diagnose Yandex runtime logs
+        run: |
+          set +e
+          echo "=== Container ==="
+          yc serverless container get --name "$YC_CONTAINER_NAME" --folder-id "$YC_FOLDER_ID"
+          echo "=== Recent runtime logs ==="
+          timeout 20s yc logging read --folder-id "$YC_FOLDER_ID" --since 20m --limit 200 --format json || true
+
+      - name: Verify Telegram RBAC read/write boundary
+        run: |
+          set -euo pipefail
+          URL=$(yc serverless container get --name "$YC_CONTAINER_NAME" --folder-id "$YC_FOLDER_ID" --format json | jq -r '.url')
+          test -n "$URL" && test "$URL" != "null"
+          echo "STAGING_URL=$URL" >> "$GITHUB_ENV"
+          # Re-export the exact generated credential after deployment so every protected
+          # live-delivery check uses the same bytes that were injected into the revision.
+          AUTO_SALE_API_KEY=$(cat "$RUNNER_TEMP/auto-sale-api-key")
+          echo "::add-mask::$AUTO_SALE_API_KEY"
+          echo "AUTO_SALE_API_KEY=$AUTO_SALE_API_KEY" >> "$GITHUB_ENV"
+          for attempt in $(seq 1 20); do
+            if curl -fsS "${URL%/}/api/health" | jq -e '.ok == true and .persistence == "ydb-serverless" and .writeMode == "telegram-rbac" and .stateReadMode == "viewer-filtered" and .publicDemoWrite == false and .maxAdminAccounts == 3 and .adminInvites == 3 and (.linkedAdminAccounts|tonumber) <= 3 and .legacyStateWrite == "retired" and .normalizedAuthoritative == true and .ydbDomainDualWrite == "disabled" and .ydbStateReadMode == "normalized" and .mediaStorage == "object-storage" and .mediaBucket == env.AUTO_SALE_MEDIA_BUCKET and (.telegramNotifications == "enabled" or .telegramNotifications == "disabled")' >/dev/null; then
+              break
+            fi
+            test "$attempt" -lt 20 || exit 1
+            sleep 5
+          done
+          curl -fsS "${URL%/}/api/auto-sale/state" \
+            | jq -e '.initialized == true and (.revision|tonumber) >= 1 and ._access.role == "public" and (.leads|length) == 0 and (.quotes|length) == 0 and (.orders|length) == 0 and (.team|length) == 0 and (.catalog|type) == "array"' >/dev/null
+          curl -fsS -H "x-auto-sale-key: $AUTO_SALE_API_KEY" "${URL%/}/api/auto-sale/state" \
+            | jq -e '.initialized == true and ._access.role == "admin" and ._access.authenticated == true and (.team|type) == "array"' >/dev/null
+          echo "Yandex Telegram RBAC staging verified: $URL"
+
+      - name: Verify normalized YDB read source
+        run: |
+          set -euo pipefail
+          curl -fsS -H "x-auto-sale-key: $AUTO_SALE_API_KEY" "${STAGING_URL%/}/api/auto-sale/admin/read-parity" \
+            | tee /tmp/read-parity.json \
+            | jq -e '.ok == true and .configuredMode == "normalized" and .source == "normalized" and .fallback == false and .authoritative == true and .shadowVerified == false and (.revision|tonumber) >= 1' >/dev/null
+
+      - name: Verify optimistic entity API live
+        run: |
+          set -euo pipefail
+          node scripts/test-ydb-entity-api-live.mjs
+
+      - name: Upload entity API live report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ydb-entity-api-live-report
+          path: ydb-entity-api-live-report.json
+          if-no-files-found: ignore
+
+      - name: Verify Phase 5 frontend batch persistence
+        run: |
+          set -euo pipefail
+          node scripts/test-ydb-frontend-batch-live.mjs
+
+      - name: Upload Phase 5 frontend batch report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ydb-frontend-batch-live-report
+          path: ydb-frontend-batch-live-report.json
+          if-no-files-found: ignore
+
+      - name: Verify legacy whole-state write is retired
+        if: always()
+        run: |
+          set -euo pipefail
+          URL=${STAGING_URL%/}
+          for mode in public authenticated; do
+            headers=(-H 'content-type: application/json')
+            if [ "$mode" = authenticated ]; then
+              headers+=(-H "x-auto-sale-key: $AUTO_SALE_API_KEY")
+            fi
+            code=$(curl -sS -o /tmp/legacy-write-${mode}.json -w '%{http_code}' -X PUT "${headers[@]}" \
+              --data '{"baseRevision":0,"leads":[],"quotes":[],"orders":[],"notes":{},"team":[],"catalog":[]}' \
+              "$URL/api/auto-sale/state")
+            test "$code" = "410"
+            jq -e '.error == "legacy_state_write_retired"' /tmp/legacy-write-${mode}.json >/dev/null
+          done
+
+      - name: Archive frozen legacy compatibility snapshot
+        if: always()
+        run: |
+          set -euo pipefail
+          curl -fsS -H "x-auto-sale-key: $AUTO_SALE_API_KEY" \
+            "${STAGING_URL%/}/api/auto-sale/admin/legacy-snapshot" \
+            | tee legacy-retirement-snapshot.json \
+            | jq -e '.ok == true and .retired == true and (.revision|tonumber) >= 1 and (.state|type) == "object"' >/dev/null
+
+      - name: Upload legacy retirement snapshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: legacy-retirement-snapshot
+          path: legacy-retirement-snapshot.json
+          if-no-files-found: error
+
+      - name: Verify manager and director scenarios through real UI
+        if: always()
+        run: |
+          set -euo pipefail
+          npm install --no-save --ignore-scripts playwright@1.55.0
+          CHROME=$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)
+          test -n "$CHROME"
+          PLAYWRIGHT_CHROME_PATH="$CHROME" node scripts/test-ui-manager-director-live.mjs
+
+      - name: Upload Phase 6 UI scenario evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase6-manager-director-ui
+          path: |
+            phase6-ui-manager-director-report.json
+            phase6-manager.png
+            phase6-director.png
+          if-no-files-found: ignore
+
+      - name: Diagnose Yandex and Cloudflare Telegram relay
+        if: always()
+        run: |
+          set -euo pipefail
+          URL=${STAGING_URL%/}
+          echo "Container URL: $URL"
+          curl -fsS "$URL/api/health" | jq '{ok,telegramNotifications,telegramFallbackManagers}'
+          echo "Cloudflare relay reachability:"
+          relay_code=$(curl -sS --connect-timeout 10 --max-time 20 -o /tmp/relay-probe -w '%{http_code}' "$AUTO_SALE_TELEGRAM_RELAY_URL" || true)
+          echo "Relay HTTP: $relay_code"
+          test "$relay_code" != "000"
+          echo "Revision network configuration:"
+          yc serverless container revision list --container-name "$YC_CONTAINER_NAME" --folder-id "$YC_FOLDER_ID" --format json | jq '.[0] | {id,status,network_id,subnet_id,created_at}' || true
+
+      - name: Verify full lifecycle delivery to Flyer_Flyer
+        if: ${{ always() && inputs.telegram_lifecycle == true }}
+        run: node scripts/test-telegram-lifecycle.mjs
+
+      - name: Upload Telegram delivery receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: telegram-lifecycle-report
+          path: telegram-lifecycle-report.json
+          if-no-files-found: ignore
+
+      - name: Finalize clean CRM for customer demo
+        if: ${{ always() && inputs.clear_crm == true }}
+        run: |
+          set -euo pipefail
+          export YDB_ACCESS_TOKEN_CREDENTIALS="$YC_IAM_TOKEN"
+          node scripts/clear-auto-sale-demo-data.mjs
+
+      - name: Upload customer demo cleanup report
+        if: ${{ always() && inputs.clear_crm == true }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: auto-sale-demo-cleanup-report
+          path: auto-sale-demo-cleanup-report.json
+          if-no-files-found: error
+
+      - name: Verify customer demo CRM is empty
+        if: ${{ always() && inputs.clear_crm == true }}
+        run: |
+          set -euo pipefail
+          URL=${STAGING_URL%/}
+          curl -fsS -H "x-auto-sale-key: $AUTO_SALE_API_KEY" "$URL/api/auto-sale/state"             | tee /tmp/auto-sale-demo-state.json             | jq -e '(.leads|length)==0 and (.quotes|length)==0 and (.orders|length)==0 and (.notes|length)==0 and (.team|length)>0 and (.catalog|type)=="array"' >/dev/null
+          echo "AUTO SALE customer demo CRM is empty"
