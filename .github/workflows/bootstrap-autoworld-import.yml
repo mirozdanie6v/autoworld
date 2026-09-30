@@ -296,6 +296,11 @@ jobs:
           rm -rf /tmp/autoworld-candidate
           mkdir -p /tmp/autoworld-candidate
           cp -a candidate/. /tmp/autoworld-candidate/
+          # GITHUB_TOKEN cannot create/update workflow files. Publish the verified
+          # application tree first; workflows are added through the GitHub connector
+          # after this branch exists.
+          rm -rf /tmp/autoworld-candidate/.github/workflows
+          rm -rf source candidate
           git switch -C migration/autoworld-canonical
           rsync -a --delete --exclude='.git/' /tmp/autoworld-candidate/ ./
           git add -A
