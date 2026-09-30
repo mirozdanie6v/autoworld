@@ -1,0 +1,297 @@
+name: Bootstrap AutoWorld canonical repository
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/bootstrap-autoworld-import.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  import-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout target repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Fetch verified AutoWorld source snapshot
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch autosale/post-delete-cleanup \
+            https://github.com/mirozdanie6v/uniq-smart-rent.git source
+          test "$(git -C source rev-parse HEAD)" = "f9c87829591ff97d4f5e4223c875a96a7329a51a"
+
+      - name: Assemble clean AutoWorld tree
+        run: |
+          set -euo pipefail
+          SRC="$GITHUB_WORKSPACE/source"
+          OUT="$GITHUB_WORKSPACE/candidate"
+          mkdir -p "$OUT"/{public/assets,server,scripts,tests/fixtures,data,docs,infra,yandex,cloudflare,.github/workflows,src/auto-sale,migrations}
+
+          cp "$SRC/.gitignore" "$OUT/.gitignore"
+          cp "$SRC/.dockerignore" "$OUT/.dockerignore"
+          cp "$SRC/.env.example" "$OUT/.env.example"
+          cp "$SRC/Dockerfile.yandex" "$OUT/Dockerfile.yandex"
+          cp "$SRC/index.html" "$OUT/index.html"
+          cp "$SRC/YANDEX_MIGRATION.md" "$OUT/YANDEX_MIGRATION.md"
+
+          cp "$SRC"/public/auto-sale* "$OUT/public/"
+          cp "$SRC/public/favicon-64.webp" "$OUT/public/"
+          cp "$SRC"/public/assets/auto-mir-* "$OUT/public/assets/"
+
+          cp -R "$SRC/server/." "$OUT/server/"
+
+          for f in \
+            audit-auto-sale-responsive.py \
+            backfill-auto-sale-ydb-domain.mjs \
+            clear-auto-sale-demo-data.mjs \
+            configure-autoworld-telegram-bot.mjs \
+            detect-autoworld-origin.py \
+            e2e-yandex-workflow.mjs \
+            import-autoworld-catalog.mjs \
+            list-autoworld-media.py \
+            migrate-auto-sale-to-postgres.mjs \
+            migrate-auto-sale-to-ydb.mjs \
+            prepare-auto-sale-ydb-domain.mjs \
+            prepare-auto-sale-ydb-runtime.mjs \
+            recover-autoworld-history.py \
+            scrape-autoworld-georgia.py \
+            send-all-telegram-demo.mjs \
+            test-telegram-lifecycle.mjs \
+            test-ui-manager-director-live.mjs \
+            test-ydb-dual-write-live.mjs \
+            test-ydb-entity-api-live.mjs \
+            test-ydb-frontend-batch-live.mjs
+          do
+            cp "$SRC/scripts/$f" "$OUT/scripts/$f"
+          done
+
+          cp "$SRC"/tests/auto-sale*.test.mjs "$OUT/tests/"
+          cp "$SRC"/tests/ydb*.test.mjs "$OUT/tests/"
+          cp "$SRC/tests/yandex-state-sync.test.mjs" "$OUT/tests/"
+          cp "$SRC/tests/object-storage.test.mjs" "$OUT/tests/"
+          cp "$SRC/tests/fixtures/auto-sale-business.mjs" "$OUT/tests/fixtures/"
+
+          cp "$SRC/src/auto-sale-worker.ts" "$OUT/src/"
+          cp -R "$SRC/src/auto-sale/." "$OUT/src/auto-sale/"
+
+          cp "$SRC"/migrations/000{5,6,7,8,9}_auto_sale_*.sql "$OUT/migrations/" || true
+          cp "$SRC/migrations/0010_auto_sale_remove_demo_cards.sql" "$OUT/migrations/"
+
+          cp -R "$SRC/data/autoworld-georgia" "$OUT/data/"
+          cp -R "$SRC/data/autoworld-georgia-recent" "$OUT/data/"
+          cp -R "$SRC/data/autoworld-georgia-fresh-2026-09-25" "$OUT/data/"
+          cp -R "$SRC/data/autoworld-georgia-restored-2026-09-25" "$OUT/data/"
+
+          cp "$SRC"/docs/AUTO_*.md "$OUT/docs/"
+          cp -R "$SRC/infra/yandex" "$OUT/infra/"
+          cp -R "$SRC/yandex/." "$OUT/yandex/"
+          cp -R "$SRC/cloudflare/telegram-relay" "$OUT/cloudflare/"
+
+          for f in \
+            auto-sale-responsive-audit.yml \
+            clear-auto-sale-demo.yml \
+            configure-autoworld-telegram-bot.yml \
+            deploy-telegram-relay.yml \
+            deploy-yandex-staging.yml \
+            diagnose-yandex-demo-domain.yml \
+            finish-yandex-demo-domain.yml \
+            import-autoworld-catalog.yml \
+            import-autoworld-georgia.yml \
+            inspect-auto-sale-glass-v22.yml \
+            inspect-auto-sale-photo-grouping.yml \
+            inspect-autoworld-markers.yml \
+            refresh-autoworld-catalog.yml \
+            setup-yandex-demo-domain.yml \
+            validate-yandex-migration.yml
+          do
+            cp "$SRC/.github/workflows/$f" "$OUT/.github/workflows/$f"
+          done
+
+      - name: Normalize package and build for isolated AutoWorld repo
+        run: |
+          set -euo pipefail
+          cat > candidate/package.json <<'JSON'
+          {
+            "name": "autoworld-georgia",
+            "version": "1.0.0",
+            "private": true,
+            "type": "module",
+            "engines": {"node": ">=22"},
+            "scripts": {
+              "clean": "rm -rf dist",
+              "build": "node scripts/build-autoworld.mjs",
+              "test": "node --test tests/auto-sale*.test.mjs tests/ydb*.test.mjs tests/yandex-state-sync.test.mjs tests/object-storage.test.mjs",
+              "test:relay": "npm --prefix cloudflare/telegram-relay test",
+              "check": "npm run clean && npm run build && npm test && npm run test:relay",
+              "start:yandex": "node server/yandex-server.mjs",
+              "migrate:yandex": "node scripts/migrate-auto-sale-to-ydb.mjs",
+              "test:yandex": "node --test tests/yandex-state-sync.test.mjs",
+              "prepare:ydb-domain": "node scripts/prepare-auto-sale-ydb-domain.mjs",
+              "backfill:ydb-domain": "node scripts/backfill-auto-sale-ydb-domain.mjs",
+              "prepare:ydb-runtime": "node scripts/prepare-auto-sale-ydb-runtime.mjs"
+            },
+            "dependencies": {
+              "@ydbjs/auth": "latest",
+              "@ydbjs/core": "latest",
+              "@ydbjs/query": "latest",
+              "@ydbjs/value": "latest"
+            },
+            "devDependencies": {
+              "jsdom": "latest"
+            }
+          }
+          JSON
+
+          cat > candidate/scripts/build-autoworld.mjs <<'JS'
+          import {cp, mkdir, rm, copyFile} from 'node:fs/promises';
+          import path from 'node:path';
+          import {fileURLToPath} from 'node:url';
+
+          const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+          const dist = path.join(root, 'dist');
+          await rm(dist, {recursive:true, force:true});
+          await mkdir(dist, {recursive:true});
+          await copyFile(path.join(root, 'index.html'), path.join(dist, 'index.html'));
+          await cp(path.join(root, 'public'), dist, {recursive:true});
+          console.log('Built isolated AutoWorld static application');
+          JS
+
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('candidate/.github/workflows/deploy-yandex-staging.yml')
+          s=p.read_text()
+          s=s.replace("""  push:
+              branches: [prototype/auto-sale-usa]
+              paths:
+                - .deploy-auto-sale
+          ""","")
+          s=s.replace("if: github.ref == 'refs/heads/prototype/auto-sale-usa'","if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'")
+          p.write_text(s)
+          PY
+
+          cat > candidate/.github/workflows/verify-autoworld.yml <<'YAML'
+          name: Verify AutoWorld
+
+          on:
+            push:
+              branches: [main, migration/autoworld-canonical]
+            pull_request:
+            workflow_dispatch:
+
+          permissions:
+            contents: read
+
+          jobs:
+            verify:
+              runs-on: ubuntu-latest
+              steps:
+                - uses: actions/checkout@v5
+                - uses: actions/setup-node@v5
+                  with:
+                    node-version: 22
+                    cache: npm
+                - run: npm ci
+                - run: npm run check
+          YAML
+
+          cat > candidate/README.md <<'MD'
+          # AutoWorld Georgia
+
+          Canonical source repository for the AutoWorld Georgia Telegram Mini App and Yandex Cloud backend.
+
+          ## Runtime
+          - Frontend: static Mini App in `public/`
+          - Backend: Node.js service in `server/`
+          - Persistence: YDB Serverless
+          - Media: Yandex Object Storage
+          - Telegram: bot/webhook integration plus optional relay
+          - Deployment: Yandex Serverless Containers
+
+          ## Access
+          The application supports exactly three Telegram admin accounts by default:
+          `@Flyer_Flyer`, `@smit44744`, `@Ivan_AWG`.
+
+          ## Verification
+          Run:
+          ```bash
+          npm ci
+          npm run check
+          ```
+
+          ## Migration provenance
+          Initial isolated snapshot was migrated from
+          `mirozdanie6v/uniq-smart-rent`,
+          branch `autosale/post-delete-cleanup`,
+          commit `f9c87829591ff97d4f5e4223c875a96a7329a51a`.
+
+          The old mixed repository is a historical source only for AutoWorld after cutover.
+          MD
+
+          cat > candidate/MIGRATION_STATUS.md <<'MD'
+          # Migration status
+
+          Source snapshot: `f9c87829591ff97d4f5e4223c875a96a7329a51a`
+
+          Included:
+          - current AutoWorld UI and branding assets;
+          - Yandex/YDB backend and normalization code;
+          - Telegram bot, outbox, relay and lifecycle tooling;
+          - fixed three-admin access control;
+          - manager Telegram autofill;
+          - lead/application deletion flow;
+          - catalog import data and tooling;
+          - AutoWorld/YDB regression tests;
+          - Yandex infrastructure and deployment workflows.
+
+          Intentionally excluded:
+          - UNIQ Smart Rent UI/backend/domain code;
+          - UNIQ motorcycle fleet media;
+          - PET NIKA / True Surf / unrelated workflows;
+          - historical preview screenshots;
+          - one-off hidden trigger marker files.
+
+          Production deployment remains manual until this repository has its own GitHub secrets/variables and the Yandex OIDC trust is verified for the new repository.
+          MD
+
+      - name: Install and verify isolated candidate
+        working-directory: candidate
+        run: |
+          set -euo pipefail
+          npm install
+          npm run check
+
+      - name: Sanity-check repository boundaries
+        working-directory: candidate
+        run: |
+          set -euo pipefail
+          test ! -e preview
+          test ! -e assets/fleet
+          test ! -e src/domain
+          test ! -e telegram-bot
+          test -f server/yandex-server.mjs
+          test -f public/auto-sale-bootstrap.mjs
+          test -f public/auto-sale-manager-directory.mjs
+          test -f tests/auto-sale-phase7-access.test.mjs
+          test -f tests/auto-sale-telegram-server.test.mjs
+          test -f tests/ydb-entity-commands.test.mjs
+          grep -q '@Flyer_Flyer' README.md
+          grep -q '@smit44744' README.md
+          grep -q '@Ivan_AWG' README.md
+
+      - name: Publish verified migration branch
+        run: |
+          set -euo pipefail
+          git config user.name "VIIVERSION migration"
+          git config user.email "actions@users.noreply.github.com"
+          git switch -C migration/autoworld-canonical
+          rsync -a --delete --exclude='.git/' candidate/ ./
+          rm -rf source candidate
+          git add -A
+          git commit -m "Migrate isolated AutoWorld canonical project"
+          git push --force-with-lease origin migration/autoworld-canonical
