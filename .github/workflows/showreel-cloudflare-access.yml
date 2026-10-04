@@ -1,0 +1,44 @@
+name: Showreel Cloudflare access preflight
+on:
+  push:
+    branches: [codex/showreel-cloudflare-access]
+    paths: [.github/workflows/showreel-cloudflare-access.yml]
+permissions:
+  contents: read
+jobs:
+  access:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Check existing Cloudflare connection (read only)
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        shell: python
+        run: |
+          import json, os, urllib.request, urllib.error
+          token, account = os.environ.get("CF_TOKEN", ""), os.environ.get("CF_ACCOUNT", "")
+          print("Existing token configured:", bool(token))
+          print("Existing account configured:", bool(account))
+          if not token or not account:
+              raise SystemExit(1)
+          checks = [
+              ("Workers", "/accounts/" + account + "/workers/scripts"),
+              ("Containers", "/accounts/" + account + "/containers/applications"),
+              ("Workers AI catalog", "/accounts/" + account + "/ai/models/search"),
+          ]
+          failed = False
+          for label, path in checks:
+              request = urllib.request.Request("https://api.cloudflare.com/client/v4" + path, headers={"Authorization": "Bearer " + token})
+              try:
+                  with urllib.request.urlopen(request, timeout=25) as response:
+                      payload = json.load(response)
+                      print(label + ": HTTP " + str(response.status) + ", success=" + str(payload.get("success")))
+              except urllib.error.HTTPError as error:
+                  print(label + ": HTTP " + str(error.code))
+                  failed = True
+              except Exception:
+                  print(label + ": connection failed")
+                  failed = True
+          if failed:
+              raise SystemExit(1)
