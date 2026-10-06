@@ -11,7 +11,7 @@ import {createObjectStorage} from './object-storage.mjs';
 import {createTelegramService} from './telegram-bot.mjs';
 import {addAutoSaleNote,addAutoSalePayment,deleteAutoSaleLeadCascade,mutateAutoSaleEntity,mutateAutoSaleEntityBatch,readAutoSaleEntity} from './ydb-entity-commands.mjs';
 import {MAX_ADMIN_ACCOUNTS,stateForAccess,rowVersionsForAccess,sanitizeClientOperations,sanitizeAdminOperations} from './auto-sale-access.mjs';
-import {managerTelegramUsername} from '../public/auto-sale-manager-directory.mjs';
+import {managerTelegramUsername} from '../shared/auto-sale-manager-directory.mjs';
 
 const rootDir=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const distDir=path.join(rootDir,'dist');
