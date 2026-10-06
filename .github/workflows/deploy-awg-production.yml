@@ -244,7 +244,7 @@ jobs:
           echo "::add-mask::$AUTO_SALE_API_KEY"
           echo "AUTO_SALE_API_KEY=$AUTO_SALE_API_KEY" >> "$GITHUB_ENV"
           for attempt in $(seq 1 20); do
-            if curl -fsS "${URL%/}/api/health" | jq -e '.ok == true and .persistence == "ydb-serverless" and .writeMode == "telegram-rbac" and .stateReadMode == "viewer-filtered" and .publicDemoWrite == false and .maxAdminAccounts == 3 and .adminInvites == 3 and (.linkedAdminAccounts|tonumber) <= 3 and .legacyStateWrite == "retired" and .normalizedAuthoritative == true and .ydbDomainDualWrite == "disabled" and .ydbStateReadMode == "normalized" and .mediaStorage == "object-storage" and .mediaBucket == env.AUTO_SALE_MEDIA_BUCKET and .telegramNotifications == "enabled" and (.telegramFallbackManagers|tonumber) >= 1' >/dev/null; then
+            if curl -fsS "${URL%/}/api/health" | jq -e '.ok == true and .persistence == "ydb-serverless" and .writeMode == "telegram-rbac" and .stateReadMode == "viewer-filtered" and .publicDemoWrite == false and .maxAdminAccounts == 3 and .adminInvites == 3 and (.linkedAdminAccounts|tonumber) <= 3 and .legacyStateWrite == "retired" and .normalizedAuthoritative == true and .ydbDomainDualWrite == "disabled" and .ydbStateReadMode == "normalized" and .mediaStorage == "object-storage" and .mediaBucket == env.AUTO_SALE_MEDIA_BUCKET and .telegramNotifications == "enabled" and .telegramRoutingReady == true and (.telegramRoutableManagers|tonumber) >= 1' >/dev/null; then
               break
             fi
             test "$attempt" -lt 20 || exit 1
