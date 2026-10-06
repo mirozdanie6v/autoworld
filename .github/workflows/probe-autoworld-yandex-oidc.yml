@@ -11,7 +11,7 @@ permissions:
   id-token: write
 
 env:
-  YC_DEPLOY_SA_ID: ${{ vars.AWG_YC_DEPLOY_SA_ID }}
+  YC_DEPLOY_SA_ID: ${{ vars.AWG_YC_DEPLOY_SA_ID || 'aje775bcl6hgp40eu8of' }}
 
 jobs:
   probe:
