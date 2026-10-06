@@ -221,7 +221,11 @@ const server=http.createServer(async(req,res)=>{
       const liveStore=await getStore();
       await liveStore.ping();
       const pins=(await liveStore.adminAccessList()).filter(item=>adminTelegramUsernames.includes(String(item.username||'').toLowerCase()));
-      json(res,{ok:true,service:'auto-sale-yandex',persistence:'ydb-serverless',schemaVersion:6,writeMode:'telegram-rbac',stateReadMode:'viewer-filtered',publicDemoWrite:Boolean(publicDemoWrite),maxAdminAccounts:MAX_ADMIN_ACCOUNTS,adminInvites:adminTelegramUsernames.length,linkedAdminAccounts:pins.length,legacyStateWrite:legacyStateWriteEnabled?'rollback-only':'retired',normalizedAuthoritative:ydbReadMode==='normalized'&&!legacyStateWriteEnabled,ydbDomainDualWrite:liveStore.domainDualWriteEnabled?'enabled':'disabled',ydbStateReadMode:ydbReadMode,mediaStorage:mediaBucket?'object-storage':'disabled',mediaBucket:mediaBucket||null,telegramNotifications:telegram.enabled?'enabled':'disabled',telegramFallbackManagers:telegram.fallbackManagerCount,catalogImport:catalogImportKey?'enabled':'disabled'});
+      const healthState=await (await getDomainStore()).loadState();
+      const activeManagers=(Array.isArray(healthState?.team)?healthState.team:[]).filter(item=>item?.active!==false&&String(item?.role||'').trim()==='Менеджер');
+      const defaultManagerName=String(activeManagers[0]?.name||'').trim();
+      const routableManagers=telegram.managerIds({manager:defaultManagerName},healthState).length;
+      json(res,{ok:true,service:'auto-sale-yandex',persistence:'ydb-serverless',schemaVersion:6,writeMode:'telegram-rbac',stateReadMode:'viewer-filtered',publicDemoWrite:Boolean(publicDemoWrite),maxAdminAccounts:MAX_ADMIN_ACCOUNTS,adminInvites:adminTelegramUsernames.length,linkedAdminAccounts:pins.length,legacyStateWrite:legacyStateWriteEnabled?'rollback-only':'retired',normalizedAuthoritative:ydbReadMode==='normalized'&&!legacyStateWriteEnabled,ydbDomainDualWrite:liveStore.domainDualWriteEnabled?'enabled':'disabled',ydbStateReadMode:ydbReadMode,mediaStorage:mediaBucket?'object-storage':'disabled',mediaBucket:mediaBucket||null,telegramNotifications:telegram.enabled?'enabled':'disabled',telegramFallbackManagers:telegram.fallbackManagerCount,telegramRoutableManagers:routableManagers,telegramRoutingReady:Boolean(telegram.enabled&&routableManagers>0),catalogImport:catalogImportKey?'enabled':'disabled'});
       return;
     }
     if(url.pathname==='/api/auto-sale/admin/read-parity'&&req.method==='GET'){
