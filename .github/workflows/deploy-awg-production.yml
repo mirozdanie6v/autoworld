@@ -28,7 +28,7 @@ env:
   AUTOWORLD_RELAY_SECRET: ${{ secrets.AWG_RELAY_SECRET }}
   AUTO_SALE_CATALOG_IMPORT_KEY: ${{ secrets.AWG_RELAY_SECRET }}
   AUTO_SALE_MANAGER_CHAT_IDS: ${{ vars.AWG_MANAGER_CHAT_IDS }}
-  AUTO_SALE_TELEGRAM_APP_URL: ${{ vars.AWG_PRIMARY_APP_URL || 'https://awg.viiversion.com/' }}
+  AUTO_SALE_TELEGRAM_APP_URL: ${{ vars.AWG_PRIMARY_APP_URL || 'https://autoworld.viiversion.com/' }}
   AUTO_SALE_TELEGRAM_RELAY_URL: https://integration-telegram.viiversion.com/telegram/send
   AUTO_SALE_YDB_DUAL_WRITE: "false"
   AUTO_SALE_LEGACY_STATE_WRITE: "false"
