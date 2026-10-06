@@ -115,8 +115,10 @@ jobs:
       - name: Configure Yandex Cloud CLI from OIDC token
         run: |
           set -euo pipefail
+          yc config set endpoint api.cloud.yandex.net:443
           yc config set token "$YC_IAM_TOKEN"
           yc config set folder-id "$YC_FOLDER_ID"
+          yc config get endpoint | grep -Fx 'api.cloud.yandex.net:443'
           yc config get folder-id | grep -Fx "$YC_FOLDER_ID"
 
       - name: Build and push image
