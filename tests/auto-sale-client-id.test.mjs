@@ -37,3 +37,14 @@ test('two isolated Telegram clients create distinct owned leads',async()=>{
   assert.deepEqual(stateForAccess(finalState,{role:'client',user:{id:'501'}}).leads.map(x=>x.id),[firstLead.id]);
   assert.deepEqual(stateForAccess(finalState,{role:'client',user:{id:'502'}}).leads.map(x=>x.id),[secondLead.id]);
 });
+
+
+test('production smoke exercises two isolated clients and cleans up test leads',async()=>{
+  const server=await readFile(new URL('../server/yandex-server.mjs',import.meta.url),'utf8');
+  assert.match(server,/\/api\/auto-sale\/smoke\/two-client/);
+  assert.match(server,/firstClientOwnsOnlyFirst/);
+  assert.match(server,/secondClientOwnsOnlySecond/);
+  assert.match(server,/managerNotificationPlannedForBoth/);
+  assert.match(server,/clientConfirmationPlannedForBoth/);
+  assert.match(server,/deleteAutoSaleLeadCascade/);
+});
