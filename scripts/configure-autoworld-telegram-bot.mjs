@@ -3,8 +3,11 @@ import {createHmac} from 'node:crypto';
 const token=String(process.env.AUTO_SALE_TELEGRAM_BOT_TOKEN||'').trim();
 const appUrl=String(process.env.AUTO_SALE_TELEGRAM_APP_URL||'https://bba01u6g86lg2q49p34d.containers.yandexcloud.net/').trim();
 const webhookBaseUrl=String(process.env.AUTO_SALE_TELEGRAM_WEBHOOK_BASE_URL||appUrl).trim();
+const explicitWebhookUrl=String(process.env.AUTO_SALE_TELEGRAM_WEBHOOK_URL||'').trim();
 if(!token)throw new Error('AUTO_SALE_TELEGRAM_BOT_TOKEN is required');
 if(!/^https:\/\//i.test(appUrl))throw new Error('AUTO_SALE_TELEGRAM_APP_URL must be HTTPS');
+if(!/^https:\/\//i.test(webhookBaseUrl))throw new Error('AUTO_SALE_TELEGRAM_WEBHOOK_BASE_URL must be HTTPS');
+if(explicitWebhookUrl&&!/^https:\/\//i.test(explicitWebhookUrl))throw new Error('AUTO_SALE_TELEGRAM_WEBHOOK_URL must be HTTPS');
 
 const sleep=(ms)=>new Promise(resolve=>setTimeout(resolve,ms));
 const api=async(method,payload={},options={})=>{
@@ -53,7 +56,9 @@ await api('setChatMenuButton',{menu_button:{
 
 const webhookKey=createHmac('sha256',token).update('auto-sale-telegram-webhook-v2').digest('hex').slice(0,32);
 const webhookPath=`/api/auto-sale/telegram/webhook/${webhookKey}`;
-const webhookUrl=webhookBaseUrl===appUrl?new URL(webhookPath,appUrl).toString():new URL(webhookBaseUrl).toString();
+const webhookUrl=explicitWebhookUrl
+  ?new URL(explicitWebhookUrl).toString()
+  :new URL(webhookPath,webhookBaseUrl.endsWith('/')?webhookBaseUrl:`${webhookBaseUrl}/`).toString();
 await api('deleteWebhook',{drop_pending_updates:false});
 const webhookConfiguredAt=Math.floor(Date.now()/1000);
 await api('setWebhook',{
