@@ -26,16 +26,20 @@ function orderLead(state,order){
 }
 function clientId(lead){return /^\d+$/.test(clean(lead?.telegramUserId))?clean(lead.telegramUserId):''}
 function managerIds(lead,fallback=[],state=null){
+  const team=arr(state?.team);
   const managerName=clean(lead?.manager);
-  const member=managerName?arr(state?.team).find(item=>clean(item?.name)===managerName&&item?.active!==false):null;
+  const member=managerName?team.find(item=>clean(item?.name)===managerName&&item?.active!==false):null;
   const username=clean(member?.telegramUsername||member?.telegram||lead?.managerTelegramUsername).replace(/^@/,'').toLowerCase();
-  const linked=username?arr(state?.team).find(item=>item.active!==false&&clean(item.telegramUsername).replace(/^@/,'').toLowerCase()===username&&/^\d+$/.test(clean(item.telegramUserId))):null;
-  return unique([
+  const linked=username?team.find(item=>item.active!==false&&clean(item.telegramUsername||item.telegram).replace(/^@/,'').toLowerCase()===username&&/^\d+$/.test(clean(item.telegramUserId))):null;
+  const preferred=unique([
     /^\d+$/.test(clean(lead?.managerTelegramUserId))?clean(lead.managerTelegramUserId):'',
     /^\d+$/.test(clean(member?.telegramUserId))?clean(member.telegramUserId):'',
-    clean(linked?.telegramUserId),
-    ...fallback
+    clean(linked?.telegramUserId)
   ]);
+  const availableTeamManagers=preferred.length?[]:team
+    .filter(item=>item?.active!==false&&clean(item?.role)==='Менеджер'&&/^\d+$/.test(clean(item?.telegramUserId)))
+    .map(item=>clean(item.telegramUserId));
+  return unique([...preferred,...availableTeamManagers,...fallback]);
 }
 function paymentStageTitle(order,payment){
   return arr(order?.paymentPlan).find(x=>clean(x.id)===clean(payment?.paymentStage))?.title||'Платёж';

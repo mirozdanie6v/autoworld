@@ -13,6 +13,17 @@ test('same manager Telegram username resolves only through an already linked tea
   assert.deepEqual(service.managerIds({manager:'Иван'},{team:[state.team[0]]}),[]);
 });
 
+test('unlinked assigned manager falls back to other active linked managers',()=>{
+  const service=createTelegramService({token:TOKEN,managerChatIds:''});
+  const state={team:[
+    {name:'Иван',role:'Менеджер',active:true,telegramUsername:'Ivan_AWG'},
+    {name:'Дмитрий',role:'Менеджер',active:true,telegramUsername:'Flyer_Flyer',telegramUserId:'700'},
+    {name:'Алексей',role:'Менеджер',active:true,telegramUsername:'smit44744',telegramUserId:'701'},
+    {name:'Архив',role:'Менеджер',active:false,telegramUserId:'702'}
+  ]};
+  assert.deepEqual(service.managerIds({manager:'Иван'},state),['700','701']);
+});
+
 test('outbox planning preserves both roles in one chat and unique IDs for every transition',async()=>{
   let calls=0;
   const service=createTelegramService({token:TOKEN,managerChatIds:'',relayUrl:'',fetchImpl:async()=>{calls++;throw new Error('offline')}});
