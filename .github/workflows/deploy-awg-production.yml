@@ -181,8 +181,9 @@ jobs:
       - name: Resolve production container URL
         run: |
           set -euo pipefail
-          URL=${AWG_URL%/}
-          test -n "$URL"
+          URL=$(yc serverless container get --name "$YC_CONTAINER_NAME" --folder-id "$YC_FOLDER_ID" --format json | jq -r '.url')
+          test -n "$URL" && test "$URL" != "null"
+          echo "AWG_URL=$URL" >> "$GITHUB_ENV"
 
       - name: Synchronize Telegram relay credentials
         working-directory: cloudflare/telegram-relay
