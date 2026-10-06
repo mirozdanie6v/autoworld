@@ -18,5 +18,6 @@ test('production Telegram workflows share one bot secret and configurable primar
   assert.match(relay,/wrangler secret put AUTOWORLD_RELAY_SECRET/);
   assert.match(configure,/integration-telegram\.viiversion\.com\/telegram\/webhook/);
   assert.match(deploy,/telegramNotifications == "enabled"/);
-  assert.match(deploy,/telegramFallbackManagers/);
+  assert.match(deploy,/telegramRoutingReady/);
+  assert.match(deploy,/telegramRoutableManagers/);
 });
