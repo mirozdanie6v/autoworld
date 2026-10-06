@@ -8,7 +8,7 @@ permissions:
 
 env:
   AUTO_SALE_TELEGRAM_APP_URL: ${{ vars.AWG_PRIMARY_APP_URL || 'https://awgcars.ru/' }}
-  AUTO_SALE_TELEGRAM_WEBHOOK_BASE_URL: https://integration-telegram.viiversion.com/telegram/webhook
+  AUTO_SALE_TELEGRAM_WEBHOOK_BASE_URL: https://awgcars.ru/
 
 jobs:
   configure:
