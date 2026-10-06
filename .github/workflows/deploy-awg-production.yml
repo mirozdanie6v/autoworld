@@ -28,7 +28,7 @@ env:
   AUTOWORLD_RELAY_SECRET: ${{ secrets.AWG_RELAY_SECRET }}
   AUTO_SALE_CATALOG_IMPORT_KEY: ${{ secrets.AWG_RELAY_SECRET }}
   AUTO_SALE_MANAGER_CHAT_IDS: ${{ vars.AWG_MANAGER_CHAT_IDS }}
-  AUTO_SALE_TELEGRAM_APP_URL: https://awg.viiversion.com/
+  AUTO_SALE_TELEGRAM_APP_URL: ${{ vars.AWG_PRIMARY_APP_URL || 'https://awg.viiversion.com/' }}
   AUTO_SALE_TELEGRAM_RELAY_URL: https://integration-telegram.viiversion.com/telegram/send
   AUTO_SALE_YDB_DUAL_WRITE: "false"
   AUTO_SALE_LEGACY_STATE_WRITE: "false"
@@ -48,9 +48,14 @@ jobs:
       - name: Validate Yandex configuration
         run: |
           set -euo pipefail
-          for name in YC_FOLDER_ID YC_DEPLOY_SA_ID YC_RUNTIME_SA_ID YC_REGISTRY_ID YC_CONTAINER_NAME YDB_CONNECTION_STRING AUTO_SALE_MEDIA_BUCKET; do
-            test -n "${!name:-}" || { echo "Missing GitHub repository variable: $name"; exit 1; }
+          for name in YC_FOLDER_ID YC_DEPLOY_SA_ID YC_RUNTIME_SA_ID YC_REGISTRY_ID YC_CONTAINER_NAME YDB_CONNECTION_STRING AUTO_SALE_MEDIA_BUCKET AUTO_SALE_MANAGER_CHAT_IDS AUTO_SALE_TELEGRAM_APP_URL; do
+            test -n "${!name:-}" || { echo "Missing production configuration: $name"; exit 1; }
           done
+          for name in AUTO_SALE_TELEGRAM_BOT_TOKEN AUTOWORLD_RELAY_SECRET; do
+            test -n "${!name:-}" || { echo "Missing required production secret: $name"; exit 1; }
+          done
+          BOT_USERNAME=$(curl -fsS "https://api.telegram.org/bot${AUTO_SALE_TELEGRAM_BOT_TOKEN}/getMe" | jq -r '.result.username // empty')
+          test "$BOT_USERNAME" = "AutoWorld_Georgia_bot" || { echo "Unexpected Telegram bot: @$BOT_USERNAME"; exit 1; }
 
       - name: Validate application
         run: |
@@ -180,7 +185,7 @@ jobs:
           echo "::add-mask::$AUTO_SALE_API_KEY"
           echo "AUTO_SALE_API_KEY=$AUTO_SALE_API_KEY" >> "$GITHUB_ENV"
           for attempt in $(seq 1 20); do
-            if curl -fsS "${URL%/}/api/health" | jq -e '.ok == true and .persistence == "ydb-serverless" and .writeMode == "telegram-rbac" and .stateReadMode == "viewer-filtered" and .publicDemoWrite == false and .maxAdminAccounts == 3 and .adminInvites == 3 and (.linkedAdminAccounts|tonumber) <= 3 and .legacyStateWrite == "retired" and .normalizedAuthoritative == true and .ydbDomainDualWrite == "disabled" and .ydbStateReadMode == "normalized" and .mediaStorage == "object-storage" and .mediaBucket == env.AUTO_SALE_MEDIA_BUCKET and (.telegramNotifications == "enabled" or .telegramNotifications == "disabled")' >/dev/null; then
+            if curl -fsS "${URL%/}/api/health" | jq -e '.ok == true and .persistence == "ydb-serverless" and .writeMode == "telegram-rbac" and .stateReadMode == "viewer-filtered" and .publicDemoWrite == false and .maxAdminAccounts == 3 and .adminInvites == 3 and (.linkedAdminAccounts|tonumber) <= 3 and .legacyStateWrite == "retired" and .normalizedAuthoritative == true and .ydbDomainDualWrite == "disabled" and .ydbStateReadMode == "normalized" and .mediaStorage == "object-storage" and .mediaBucket == env.AUTO_SALE_MEDIA_BUCKET and .telegramNotifications == "enabled" and (.telegramFallbackManagers|tonumber) >= 1' >/dev/null; then
               break
             fi
             test "$attempt" -lt 20 || exit 1
