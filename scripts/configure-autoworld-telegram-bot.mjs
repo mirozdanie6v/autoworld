@@ -64,14 +64,27 @@ await api('setWebhook',{
 const webhookAfterSet=await api('getWebhookInfo');
 if(webhookAfterSet?.url!==webhookUrl)throw new Error(`Webhook URL mismatch: expected ${webhookUrl}, got ${webhookAfterSet?.url||'empty'}`);
 
-const webhookProbe=await fetch(webhookUrl,{
-  method:'POST',
-  headers:{'content-type':'application/json'},
-  body:JSON.stringify({update_id:-1})
-});
-if(!webhookProbe.ok)throw new Error(`Webhook endpoint probe failed: HTTP ${webhookProbe.status}`);
-const webhookProbeBody=await webhookProbe.json().catch(()=>({}));
-if(webhookProbeBody?.ok!==true)throw new Error('Webhook endpoint probe did not return ok=true');
+let webhookProbe=null;
+let webhookProbeBody={};
+for(let attempt=1;attempt<=18;attempt++){
+  try{
+    webhookProbe=await fetch(webhookUrl,{
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({update_id:-1}),
+      signal:AbortSignal.timeout(10_000)
+    });
+    webhookProbeBody=await webhookProbe.json().catch(()=>({}));
+    if(webhookProbe.ok&&webhookProbeBody?.ok===true)break;
+    console.log('Webhook endpoint not ready yet:',JSON.stringify({attempt,status:webhookProbe.status,body:webhookProbeBody}));
+  }catch(error){
+    console.log('Webhook endpoint probe retry:',JSON.stringify({attempt,error:String(error?.message||error)}));
+  }
+  if(attempt<18)await sleep(5000);
+}
+if(!webhookProbe?.ok||webhookProbeBody?.ok!==true){
+  throw new Error(`Webhook endpoint probe failed after retries: HTTP ${webhookProbe?.status||0} ${JSON.stringify(webhookProbeBody)}`);
+}
 
 const outboundProbe=await fetch(webhookUrl,{
   method:'POST',
