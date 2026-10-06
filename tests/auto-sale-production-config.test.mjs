@@ -23,3 +23,14 @@ test('production Telegram workflows share one bot secret and configurable primar
   assert.match(deploy,/telegramRoutingReady/);
   assert.match(deploy,/telegramRoutableManagers/);
 });
+
+
+test('Yandex runtime image contains shared manager directory used by server',async()=>{
+  const docker=await readFile(new URL('../Dockerfile.yandex',import.meta.url),'utf8');
+  const server=await readFile(new URL('../server/yandex-server.mjs',import.meta.url),'utf8');
+  const build=await readFile(new URL('../scripts/build-autoworld.mjs',import.meta.url),'utf8');
+  assert.match(docker,/COPY shared \.\/shared/);
+  assert.match(server,/\.\.\/shared\/auto-sale-manager-directory\.mjs/);
+  assert.doesNotMatch(server,/\.\.\/public\/auto-sale-manager-directory\.mjs/);
+  assert.match(build,/shared[^\n]+auto-sale-manager-directory\.mjs/);
+});
