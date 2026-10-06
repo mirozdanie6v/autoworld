@@ -55,6 +55,7 @@ const webhookKey=createHmac('sha256',token).update('auto-sale-telegram-webhook-v
 const webhookPath=`/api/auto-sale/telegram/webhook/${webhookKey}`;
 const webhookUrl=webhookBaseUrl===appUrl?new URL(webhookPath,appUrl).toString():new URL(webhookBaseUrl).toString();
 await api('deleteWebhook',{drop_pending_updates:false});
+const webhookConfiguredAt=Math.floor(Date.now()/1000);
 await api('setWebhook',{
   url:webhookUrl,
   allowed_updates:['message'],
@@ -62,7 +63,6 @@ await api('setWebhook',{
 });
 const webhookAfterSet=await api('getWebhookInfo');
 if(webhookAfterSet?.url!==webhookUrl)throw new Error(`Webhook URL mismatch: expected ${webhookUrl}, got ${webhookAfterSet?.url||'empty'}`);
-if(webhookAfterSet?.last_error_message)throw new Error(`Telegram webhook error: ${webhookAfterSet.last_error_message}`);
 
 const webhookProbe=await fetch(webhookUrl,{
   method:'POST',
@@ -82,20 +82,34 @@ const outboundProbeBody=await outboundProbe.json().catch(()=>({}));
 console.log('Webhook outbound diagnostic:',JSON.stringify({status:outboundProbe.status,body:outboundProbeBody}));
 if(outboundProbe.status===500)throw new Error(`Webhook outbound transport failed: ${JSON.stringify(outboundProbeBody)}`);
 
-await sleep(15000);
+let webhook=webhookAfterSet;
+for(let attempt=1;attempt<=18;attempt++){
+  webhook=await api('getWebhookInfo');
+  if(webhook.url!==webhookUrl)throw new Error(`Final webhook URL mismatch: expected ${webhookUrl}, got ${webhook.url||'empty'}`);
+  if(Number(webhook.pending_update_count||0)===0)break;
+  if(attempt<18)await sleep(5000);
+}
+if(Number(webhook.pending_update_count||0)>0){
+  throw new Error(`Telegram webhook has ${webhook.pending_update_count} pending updates after 90s; delivery is not draining${webhook.last_error_message?': '+webhook.last_error_message:''}`);
+}
+if(webhook.last_error_message){
+  const errorDate=Number(webhook.last_error_date||0);
+  console.log('Webhook historical delivery diagnostic:',JSON.stringify({
+    message:webhook.last_error_message,
+    last_error_date:errorDate||null,
+    after_configuration:Boolean(errorDate&&errorDate>=webhookConfiguredAt),
+    pending_update_count:Number(webhook.pending_update_count||0)
+  }));
+}
 
-const [actualBot,name,description,shortDescription,commands,button,webhook]=await Promise.all([
+const [actualBot,name,description,shortDescription,commands,button]=await Promise.all([
   api('getMe'),
   api('getMyName'),
   api('getMyDescription'),
   api('getMyShortDescription'),
   api('getMyCommands'),
-  api('getChatMenuButton'),
-  api('getWebhookInfo')
+  api('getChatMenuButton')
 ]);
-if(webhook.url!==webhookUrl)throw new Error(`Final webhook URL mismatch: expected ${webhookUrl}, got ${webhook.url||'empty'}`);
-if(webhook.last_error_message)throw new Error(`Final Telegram webhook error: ${webhook.last_error_message}`);
-if(Number(webhook.pending_update_count||0)>0)throw new Error(`Telegram webhook has ${webhook.pending_update_count} pending updates after 15s; delivery is not draining`);
 
 console.log(JSON.stringify({
   ok:true,
