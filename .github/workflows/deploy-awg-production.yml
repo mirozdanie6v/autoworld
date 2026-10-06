@@ -43,6 +43,7 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
 
@@ -109,7 +110,7 @@ jobs:
 
       - name: Install Yandex Cloud CLI
         run: |
-          curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash -s -- -n
+          curl --connect-timeout 10 --max-time 120 --retry 5 --retry-all-errors --retry-delay 2 -fsSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash -s -- -n
           echo "$HOME/yandex-cloud/bin" >> "$GITHUB_PATH"
 
       - name: Configure Yandex Cloud CLI from OIDC token
