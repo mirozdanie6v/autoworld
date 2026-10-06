@@ -203,13 +203,13 @@ jobs:
           echo "AWG_GATEWAY_URL=https://$GW_DOMAIN/" >> "$GITHUB_ENV"
           echo "AUTO_SALE_TELEGRAM_WEBHOOK_BASE_URL=https://$GW_DOMAIN/" >> "$GITHUB_ENV"
           for attempt in $(seq 1 30); do
-            if curl -fsS "https://$GW_DOMAIN/api/health" | jq -e '.ok == true and .persistence == "ydb-serverless"' >/dev/null; then
+            if curl --connect-timeout 10 --max-time 20 -fsS "https://$GW_DOMAIN/api/health" | jq -e '.ok == true and .persistence == "ydb-serverless"' >/dev/null; then
               break
             fi
             test "$attempt" -lt 30 || exit 1
             sleep 5
           done
-          curl -fsS "https://$GW_DOMAIN/api/health" | jq '{ok,persistence,telegramNotifications,telegramRoutingReady,telegramRoutableManagers}'
+          curl --connect-timeout 10 --max-time 20 -fsS "https://$GW_DOMAIN/api/health" | jq '{ok,persistence,telegramNotifications,telegramRoutingReady,telegramRoutableManagers}'
 
       - name: Synchronize Telegram relay credentials
         working-directory: cloudflare/telegram-relay
