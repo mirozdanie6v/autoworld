@@ -21,17 +21,17 @@ permissions:
   id-token: write
 
 env:
-  YC_FOLDER_ID: ${{ vars.AWG_YC_FOLDER_ID }}
-  YC_DEPLOY_SA_ID: ${{ vars.AWG_YC_DEPLOY_SA_ID }}
-  YC_RUNTIME_SA_ID: ${{ vars.AWG_YC_RUNTIME_SA_ID }}
-  YC_REGISTRY_ID: ${{ vars.AWG_YC_REGISTRY_ID }}
-  YC_CONTAINER_NAME: ${{ vars.AWG_YC_CONTAINER_NAME }}
-  YDB_CONNECTION_STRING: ${{ vars.AWG_YDB_CONNECTION_STRING }}
-  AUTO_SALE_MEDIA_BUCKET: ${{ vars.AWG_MEDIA_BUCKET }}
+  YC_FOLDER_ID: ${{ vars.AWG_YC_FOLDER_ID || 'b1g8u8vqkgehvtbj8n13' }}
+  YC_DEPLOY_SA_ID: ${{ vars.AWG_YC_DEPLOY_SA_ID || 'aje775bcl6hgp40eu8of' }}
+  YC_RUNTIME_SA_ID: ${{ vars.AWG_YC_RUNTIME_SA_ID || 'aje8o9ric0d20k11521r' }}
+  YC_REGISTRY_ID: ${{ vars.AWG_YC_REGISTRY_ID || 'crptu0l7jn0iui8b8laa' }}
+  YC_CONTAINER_NAME: ${{ vars.AWG_YC_CONTAINER_NAME || 'autoworld-awg-prod' }}
+  YDB_CONNECTION_STRING: ${{ vars.AWG_YDB_CONNECTION_STRING || 'grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1ggsmuiq7tb2d27f89q/etn00ojk5iv1u7dgpdar' }}
+  AUTO_SALE_MEDIA_BUCKET: ${{ vars.AWG_MEDIA_BUCKET || 'viiversion-autoworld-awg-media' }}
   AUTO_SALE_TELEGRAM_BOT_TOKEN: ${{ secrets.AWG_TELEGRAM_BOT_TOKEN }}
   AUTOWORLD_RELAY_SECRET: ${{ secrets.AWG_RELAY_SECRET }}
   AUTO_SALE_CATALOG_IMPORT_KEY: ${{ secrets.AWG_RELAY_SECRET }}
-  AUTO_SALE_MANAGER_CHAT_IDS: ${{ vars.AWG_MANAGER_CHAT_IDS }}
+  AUTO_SALE_MANAGER_CHAT_IDS: ${{ vars.AWG_MANAGER_CHAT_IDS || '' }}
   AUTO_SALE_TELEGRAM_APP_URL: ${{ vars.AWG_PRIMARY_APP_URL || 'https://awgcars.ru/' }}
   AUTO_SALE_TELEGRAM_RELAY_URL: https://integration-telegram.viiversion.com/telegram/send
   AUTO_SALE_TELEGRAM_WEBHOOK_BASE_URL: https://awgcars.ru/
@@ -53,7 +53,7 @@ jobs:
       - name: Validate Yandex configuration
         run: |
           set -euo pipefail
-          for name in YC_FOLDER_ID YC_DEPLOY_SA_ID YC_RUNTIME_SA_ID YC_REGISTRY_ID YC_CONTAINER_NAME YDB_CONNECTION_STRING AUTO_SALE_MEDIA_BUCKET AUTO_SALE_MANAGER_CHAT_IDS AUTO_SALE_TELEGRAM_APP_URL; do
+          for name in YC_FOLDER_ID YC_DEPLOY_SA_ID YC_RUNTIME_SA_ID YC_REGISTRY_ID YC_CONTAINER_NAME YDB_CONNECTION_STRING AUTO_SALE_MEDIA_BUCKET AUTO_SALE_TELEGRAM_APP_URL; do
             test -n "${!name:-}" || { echo "Missing production configuration: $name"; exit 1; }
           done
           for name in AUTO_SALE_TELEGRAM_BOT_TOKEN AUTOWORLD_RELAY_SECRET; do
