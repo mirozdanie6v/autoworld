@@ -186,3 +186,28 @@ test('full Telegram notification lifecycle keeps client and manager event sequen
   assert.ok(client.some(x=>x.event==='payment'));
   assert.ok(manager.some(x=>x.event==='order_stage'));
 });
+
+test('Telegram manager fan-out continues after one recipient fails',async()=>{
+  const attempted=[];
+  const fetchImpl=async(url,options)=>{
+    const body=JSON.parse(options.body);
+    attempted.push(String(body.chat_id));
+    if(String(body.chat_id)==='900'){
+      return{ok:false,status:403,async json(){return{ok:false,description:'Forbidden: bot was blocked by the user'}}};
+    }
+    return{ok:true,status:200,async json(){return{ok:true,result:{message_id:attempted.length}}}};
+  };
+  const service=createTelegramService({token:TOKEN,fetchImpl,managerChatIds:'900,901',relayUrl:''});
+  const previous={initialized:true,revision:1,leads:[],quotes:[],orders:[]};
+  const next={initialized:true,revision:2,leads:[{
+    id:'L-FANOUT',name:'Client',model:'BMW X5',contact:'@client',
+    clientCreated:true,telegramUserId:'700',status:'Новый'
+  }],quotes:[],orders:[]};
+  const deliveries=await service.notifyStateChanges(previous,next);
+  const managers=deliveries.filter(x=>x.target==='manager');
+  assert.equal(managers.length,2);
+  assert.equal(managers.find(x=>x.chatId==='900').ok,false);
+  assert.equal(managers.find(x=>x.chatId==='901').ok,true);
+  assert.equal(deliveries.find(x=>x.target==='client').ok,true);
+  assert.deepEqual(attempted,['900','901','700']);
+});
