@@ -9,6 +9,8 @@ test('production Telegram workflows share one bot secret and configurable primar
 
   assert.match(deploy,/vars\.AWG_PRIMARY_APP_URL/);
   assert.match(configure,/vars\.AWG_PRIMARY_APP_URL/);
+  assert.match(deploy,/https:\/\/awgcars\.ru\//);
+  assert.match(configure,/https:\/\/awgcars\.ru\//);
   assert.match(deploy,/secrets\.AWG_TELEGRAM_BOT_TOKEN/);
   assert.match(configure,/secrets\.AWG_TELEGRAM_BOT_TOKEN/);
   assert.match(relay,/secrets\.AWG_TELEGRAM_BOT_TOKEN/);
