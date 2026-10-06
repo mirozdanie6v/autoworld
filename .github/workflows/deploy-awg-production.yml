@@ -193,7 +193,6 @@ jobs:
           URL=$(yc serverless container get --name "$YC_CONTAINER_NAME" --folder-id "$YC_FOLDER_ID" --format json | jq -r '.url')
           test -n "$URL" && test "$URL" != "null"
           echo "AWG_URL=$URL" >> "$GITHUB_ENV"
-          echo "AUTO_SALE_TELEGRAM_WEBHOOK_BASE_URL=$URL" >> "$GITHUB_ENV"
 
       - name: Resolve and verify AWG API Gateway before Telegram webhook
         run: |
