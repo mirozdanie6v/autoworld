@@ -222,3 +222,20 @@ test('Telegram manager fan-out continues after one recipient fails',async()=>{
   assert.equal(deliveries.find(x=>x.target==='client').ok,true);
   assert.deepEqual(attempted,['900','901','700']);
 });
+
+
+test('invited Telegram admins are captured from webhook updates for manager routing',async()=>{
+  const server=await readFile(new URL('../server/yandex-server.mjs',import.meta.url),'utf8');
+  assert.match(server,/claimAdminFromWebhook/);
+  assert.match(server,/claimAdminAccess\(username,userId\)/);
+  assert.match(server,/enrichStateWithAdminPins/);
+  assert.match(server,/managerTelegramUsername/);
+  assert.match(server,/routingReady:Boolean\(member&&\/\^\\d\+\$\/\.test/);
+});
+
+test('Telegram notification planning uses pinned admin identities as manager routes',async()=>{
+  const server=await readFile(new URL('../server/yandex-server.mjs',import.meta.url),'utf8');
+  assert.match(server,/async function collectTelegramStateChanges/);
+  assert.match(server,/prepareNotifications:notifyTelegram\?collectTelegramStateChanges:null/);
+  assert.match(server,/const healthState=enrichStateWithAdminPins/);
+});
