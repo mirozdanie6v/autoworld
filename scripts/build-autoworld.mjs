@@ -8,4 +8,5 @@ await rm(dist, {recursive:true, force:true});
 await mkdir(dist, {recursive:true});
 await copyFile(path.join(root, 'index.html'), path.join(dist, 'index.html'));
 await cp(path.join(root, 'public'), dist, {recursive:true});
+await copyFile(path.join(root, 'shared', 'auto-sale-manager-directory.mjs'), path.join(dist, 'auto-sale-manager-directory.mjs'));
 console.log('Built isolated AutoWorld static application');
