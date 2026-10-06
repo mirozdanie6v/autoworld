@@ -12,6 +12,7 @@ COPY package.json ./
 RUN npm install --omit=dev
 COPY --from=build /app/dist ./dist
 COPY server ./server
+COPY shared ./shared
 COPY yandex ./yandex
 EXPOSE 8080
 CMD ["node","server/yandex-server.mjs"]
