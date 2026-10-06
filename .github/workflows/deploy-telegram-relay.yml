@@ -23,10 +23,14 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.AUTO_SALE_TELEGRAM_BOT_TOKEN }}
-          YANDEX_WEBHOOK_BASE: https://bba01u6g86lg2q49p34d.containers.yandexcloud.net
+          TELEGRAM_BOT_TOKEN: ${{ secrets.AWG_TELEGRAM_BOT_TOKEN }}
+          AUTOWORLD_RELAY_SECRET: ${{ secrets.AWG_RELAY_SECRET }}
+          YANDEX_WEBHOOK_BASE: ${{ vars.AWG_YANDEX_WEBHOOK_BASE_URL || 'https://bba01u6g86lg2q49p34d.containers.yandexcloud.net' }}
         run: |
+          test -n "$TELEGRAM_BOT_TOKEN" || { echo "Missing AWG_TELEGRAM_BOT_TOKEN"; exit 1; }
+          test -n "$AUTOWORLD_RELAY_SECRET" || { echo "Missing AWG_RELAY_SECRET"; exit 1; }
           printf '%s' "$TELEGRAM_BOT_TOKEN" | npx wrangler secret put TELEGRAM_BOT_TOKEN --config wrangler.toml
+          printf '%s' "$AUTOWORLD_RELAY_SECRET" | npx wrangler secret put AUTOWORLD_RELAY_SECRET --config wrangler.toml
           WEBHOOK_KEY=$(node -e "const {createHmac}=require('crypto');process.stdout.write(createHmac('sha256',process.env.TELEGRAM_BOT_TOKEN).update('auto-sale-telegram-webhook-v2').digest('hex').slice(0,32))")
           printf '%s' "$YANDEX_WEBHOOK_BASE/api/auto-sale/telegram/webhook/$WEBHOOK_KEY" | npx wrangler secret put AUTOWORLD_YANDEX_WEBHOOK_URL --config wrangler.toml
       - name: Verify relay

@@ -5,6 +5,10 @@ concurrency:
   cancel-in-progress: false
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - .production/autoworld-release
   workflow_dispatch:
     inputs:
       telegram_lifecycle:
@@ -28,8 +32,9 @@ env:
   AUTOWORLD_RELAY_SECRET: ${{ secrets.AWG_RELAY_SECRET }}
   AUTO_SALE_CATALOG_IMPORT_KEY: ${{ secrets.AWG_RELAY_SECRET }}
   AUTO_SALE_MANAGER_CHAT_IDS: ${{ vars.AWG_MANAGER_CHAT_IDS }}
-  AUTO_SALE_TELEGRAM_APP_URL: https://awg.viiversion.com/
+  AUTO_SALE_TELEGRAM_APP_URL: ${{ vars.AWG_PRIMARY_APP_URL || 'https://autoworld.viiversion.com/' }}
   AUTO_SALE_TELEGRAM_RELAY_URL: https://integration-telegram.viiversion.com/telegram/send
+  AUTO_SALE_TELEGRAM_WEBHOOK_BASE_URL: https://integration-telegram.viiversion.com/telegram/webhook
   AUTO_SALE_YDB_DUAL_WRITE: "false"
   AUTO_SALE_LEGACY_STATE_WRITE: "false"
   AUTO_SALE_YDB_READ_MODE: normalized
@@ -48,9 +53,14 @@ jobs:
       - name: Validate Yandex configuration
         run: |
           set -euo pipefail
-          for name in YC_FOLDER_ID YC_DEPLOY_SA_ID YC_RUNTIME_SA_ID YC_REGISTRY_ID YC_CONTAINER_NAME YDB_CONNECTION_STRING AUTO_SALE_MEDIA_BUCKET; do
-            test -n "${!name:-}" || { echo "Missing GitHub repository variable: $name"; exit 1; }
+          for name in YC_FOLDER_ID YC_DEPLOY_SA_ID YC_RUNTIME_SA_ID YC_REGISTRY_ID YC_CONTAINER_NAME YDB_CONNECTION_STRING AUTO_SALE_MEDIA_BUCKET AUTO_SALE_MANAGER_CHAT_IDS AUTO_SALE_TELEGRAM_APP_URL; do
+            test -n "${!name:-}" || { echo "Missing production configuration: $name"; exit 1; }
           done
+          for name in AUTO_SALE_TELEGRAM_BOT_TOKEN AUTOWORLD_RELAY_SECRET; do
+            test -n "${!name:-}" || { echo "Missing required production secret: $name"; exit 1; }
+          done
+          BOT_USERNAME=$(curl -fsS "https://api.telegram.org/bot${AUTO_SALE_TELEGRAM_BOT_TOKEN}/getMe" | jq -r '.result.username // empty')
+          test "$BOT_USERNAME" = "AutoWorld_Georgia_bot" || { echo "Unexpected Telegram bot: @$BOT_USERNAME"; exit 1; }
 
       - name: Validate application
         run: |
@@ -168,6 +178,53 @@ jobs:
           echo "=== Recent runtime logs ==="
           timeout 20s yc logging read --folder-id "$YC_FOLDER_ID" --since 20m --limit 200 --format json || true
 
+      - name: Resolve production container URL
+        run: |
+          set -euo pipefail
+          URL=$(yc serverless container get --name "$YC_CONTAINER_NAME" --folder-id "$YC_FOLDER_ID" --format json | jq -r '.url')
+          test -n "$URL" && test "$URL" != "null"
+          echo "AWG_URL=$URL" >> "$GITHUB_ENV"
+
+      - name: Synchronize Telegram relay credentials
+        working-directory: cloudflare/telegram-relay
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.AWG_TELEGRAM_BOT_TOKEN }}
+          RELAY_SECRET: ${{ secrets.AWG_RELAY_SECRET }}
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$TELEGRAM_BOT_TOKEN"
+          test -n "$RELAY_SECRET"
+          npm install
+          printf '%s' "$TELEGRAM_BOT_TOKEN" | npx wrangler secret put TELEGRAM_BOT_TOKEN --config wrangler.toml
+          printf '%s' "$RELAY_SECRET" | npx wrangler secret put AUTOWORLD_RELAY_SECRET --config wrangler.toml
+          WEBHOOK_KEY=$(node -e "const {createHmac}=require('crypto');process.stdout.write(createHmac('sha256',process.env.TELEGRAM_BOT_TOKEN).update('auto-sale-telegram-webhook-v2').digest('hex').slice(0,32))")
+          printf '%s' "${AWG_URL%/}/api/auto-sale/telegram/webhook/$WEBHOOK_KEY" | npx wrangler secret put AUTOWORLD_YANDEX_WEBHOOK_URL --config wrangler.toml
+
+      - name: Verify authenticated Telegram relay path
+        env:
+          RELAY_SECRET: ${{ secrets.AWG_RELAY_SECRET }}
+        run: |
+          set -euo pipefail
+          PAYLOAD='{"chatId":"0","text":"autoworld production relay probe"}'
+          TS=$(date +%s%3N)
+          SIG=$(printf '%s' "$TS.$PAYLOAD" | openssl dgst -sha256 -hmac "$RELAY_SECRET" -hex | awk '{print $2}')
+          CODE=$(curl -sS -o /tmp/relay-auth-probe.json -w '%{http_code}' -X POST \
+            -H 'content-type: application/json' \
+            -H "x-relay-timestamp: $TS" \
+            -H "x-relay-signature: $SIG" \
+            --data "$PAYLOAD" "$AUTO_SALE_TELEGRAM_RELAY_URL")
+          test "$CODE" = "502"
+          jq -e '.error == "telegram_api_error"' /tmp/relay-auth-probe.json >/dev/null
+
+      - name: Configure Telegram Mini App and webhook
+        env:
+          AUTO_SALE_TELEGRAM_BOT_TOKEN: ${{ secrets.AWG_TELEGRAM_BOT_TOKEN }}
+        run: node scripts/configure-autoworld-telegram-bot.mjs
+
       - name: Verify Telegram RBAC read/write boundary
         run: |
           set -euo pipefail
@@ -180,7 +237,7 @@ jobs:
           echo "::add-mask::$AUTO_SALE_API_KEY"
           echo "AUTO_SALE_API_KEY=$AUTO_SALE_API_KEY" >> "$GITHUB_ENV"
           for attempt in $(seq 1 20); do
-            if curl -fsS "${URL%/}/api/health" | jq -e '.ok == true and .persistence == "ydb-serverless" and .writeMode == "telegram-rbac" and .stateReadMode == "viewer-filtered" and .publicDemoWrite == false and .maxAdminAccounts == 3 and .adminInvites == 3 and (.linkedAdminAccounts|tonumber) <= 3 and .legacyStateWrite == "retired" and .normalizedAuthoritative == true and .ydbDomainDualWrite == "disabled" and .ydbStateReadMode == "normalized" and .mediaStorage == "object-storage" and .mediaBucket == env.AUTO_SALE_MEDIA_BUCKET and (.telegramNotifications == "enabled" or .telegramNotifications == "disabled")' >/dev/null; then
+            if curl -fsS "${URL%/}/api/health" | jq -e '.ok == true and .persistence == "ydb-serverless" and .writeMode == "telegram-rbac" and .stateReadMode == "viewer-filtered" and .publicDemoWrite == false and .maxAdminAccounts == 3 and .adminInvites == 3 and (.linkedAdminAccounts|tonumber) <= 3 and .legacyStateWrite == "retired" and .normalizedAuthoritative == true and .ydbDomainDualWrite == "disabled" and .ydbStateReadMode == "normalized" and .mediaStorage == "object-storage" and .mediaBucket == env.AUTO_SALE_MEDIA_BUCKET and .telegramNotifications == "enabled" and (.telegramFallbackManagers|tonumber) >= 1' >/dev/null; then
               break
             fi
             test "$attempt" -lt 20 || exit 1

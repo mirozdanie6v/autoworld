@@ -7,8 +7,8 @@ permissions:
   contents: read
 
 env:
-  AUTO_SALE_TELEGRAM_APP_URL: https://awg.viiversion.com/
-  AUTO_SALE_TELEGRAM_WEBHOOK_BASE_URL: https://viiversion-telegram-relay.mirozdanie6v.workers.dev/telegram/webhook
+  AUTO_SALE_TELEGRAM_APP_URL: ${{ vars.AWG_PRIMARY_APP_URL || 'https://autoworld.viiversion.com/' }}
+  AUTO_SALE_TELEGRAM_WEBHOOK_BASE_URL: https://integration-telegram.viiversion.com/telegram/webhook
 
 jobs:
   configure:
@@ -20,10 +20,10 @@ jobs:
           node-version: 22
       - name: Validate Telegram bot secret
         env:
-          AUTO_SALE_TELEGRAM_BOT_TOKEN: ${{ secrets.AUTO_SALE_TELEGRAM_BOT_TOKEN }}
+          AUTO_SALE_TELEGRAM_BOT_TOKEN: ${{ secrets.AWG_TELEGRAM_BOT_TOKEN }}
         run: |
-          test -n "$AUTO_SALE_TELEGRAM_BOT_TOKEN" || { echo "Missing secret AUTO_SALE_TELEGRAM_BOT_TOKEN"; exit 1; }
+          test -n "$AUTO_SALE_TELEGRAM_BOT_TOKEN" || { echo "Missing secret AWG_TELEGRAM_BOT_TOKEN"; exit 1; }
       - name: Configure bot and Mini App menu
         env:
-          AUTO_SALE_TELEGRAM_BOT_TOKEN: ${{ secrets.AUTO_SALE_TELEGRAM_BOT_TOKEN }}
+          AUTO_SALE_TELEGRAM_BOT_TOKEN: ${{ secrets.AWG_TELEGRAM_BOT_TOKEN }}
         run: node scripts/configure-autoworld-telegram-bot.mjs
