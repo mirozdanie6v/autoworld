@@ -1,0 +1,10 @@
+AutoWorld production release marker
+date: 2026-10-06
+source: mirozdanie6v/autoworld main
+current-primary: https://autoworld.viiversion.com/
+ru-primary: pending selection and DNS/certificate connection
+release-scope:
+- multi-user Telegram request collision fix
+- Telegram outbox/fan-out production hardening
+- relay secret synchronization
+- production Mini App/webhook configuration
