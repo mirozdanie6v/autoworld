@@ -11,6 +11,7 @@ import {createObjectStorage} from './object-storage.mjs';
 import {createTelegramService} from './telegram-bot.mjs';
 import {addAutoSaleNote,addAutoSalePayment,deleteAutoSaleLeadCascade,mutateAutoSaleEntity,mutateAutoSaleEntityBatch,readAutoSaleEntity} from './ydb-entity-commands.mjs';
 import {MAX_ADMIN_ACCOUNTS,stateForAccess,rowVersionsForAccess,sanitizeClientOperations,sanitizeAdminOperations} from './auto-sale-access.mjs';
+import {managerTelegramUsername} from '../public/auto-sale-manager-directory.mjs';
 
 const rootDir=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const distDir=path.join(rootDir,'dist');
@@ -23,6 +24,42 @@ const legacyStateWriteEnabled=/^(1|true|yes)$/i.test(String(process.env.AUTO_SAL
 const mediaBucket=String(process.env.AUTO_SALE_MEDIA_BUCKET||'').trim();
 const ydbReadMode=['legacy','shadow','normalized'].includes(String(process.env.AUTO_SALE_YDB_READ_MODE||''))?String(process.env.AUTO_SALE_YDB_READ_MODE):'legacy';
 const adminTelegramUsernames=[...new Set(String(process.env.AUTO_SALE_ADMIN_TELEGRAM_USERNAMES||'Flyer_Flyer,smit44744,Ivan_AWG').split(',').map(x=>x.trim().replace(/^@/,'').toLowerCase()).filter(Boolean))].slice(0,MAX_ADMIN_ACCOUNTS);
+
+const normalizeTelegramUsername=value=>String(value||'').trim().replace(/^@/,'').toLowerCase();
+const memberTelegramUsername=member=>normalizeTelegramUsername(member?.telegramUsername||member?.telegram||managerTelegramUsername(member?.name));
+function enrichStateWithAdminPins(state,pins=[]){
+  const pinByUsername=new Map((Array.isArray(pins)?pins:[])
+    .filter(item=>/^\d+$/.test(String(item?.telegramUserId||'')))
+    .map(item=>[normalizeTelegramUsername(item.username),item]));
+  const team=(Array.isArray(state?.team)?state.team:[]).map(member=>{
+    if(/^\d+$/.test(String(member?.telegramUserId||'')))return member;
+    const username=memberTelegramUsername(member);
+    const pin=username?pinByUsername.get(username):null;
+    if(!pin)return member;
+    return{
+      ...member,
+      telegramUserId:String(pin.telegramUserId),
+      telegramUsername:username,
+      telegramLinkedAt:String(pin.linkedAt||member?.telegramLinkedAt||'')
+    };
+  });
+  return{...(state||{}),team};
+}
+async function invitedAdminPins(){
+  const list=await (await getStore()).adminAccessList();
+  return list.filter(item=>adminTelegramUsernames.includes(normalizeTelegramUsername(item.username)));
+}
+async function collectTelegramStateChanges(previous,next){
+  const pins=await invitedAdminPins();
+  return telegram.collectStateChanges(enrichStateWithAdminPins(previous,pins),enrichStateWithAdminPins(next,pins));
+}
+async function claimAdminFromWebhook(update){
+  const user=update?.message?.from;
+  const username=normalizeTelegramUsername(user?.username);
+  const userId=String(user?.id||'').trim();
+  if(!username||!/^\d+$/.test(userId)||!adminTelegramUsernames.includes(username))return null;
+  return(await getStore()).claimAdminAccess(username,userId);
+}
 if(!connectionString)throw new Error('YDB_CONNECTION_STRING is required');
 if(!publicDemoWrite&&!apiKey)throw new Error('AUTO_SALE_API_KEY is required when public demo write is disabled');
 let store=null;
@@ -220,8 +257,8 @@ const server=http.createServer(async(req,res)=>{
     if(url.pathname==='/api/health'){
       const liveStore=await getStore();
       await liveStore.ping();
-      const pins=(await liveStore.adminAccessList()).filter(item=>adminTelegramUsernames.includes(String(item.username||'').toLowerCase()));
-      const healthState=await (await getDomainStore()).loadState();
+      const pins=(await liveStore.adminAccessList()).filter(item=>adminTelegramUsernames.includes(normalizeTelegramUsername(item.username)));
+      const healthState=enrichStateWithAdminPins(await (await getDomainStore()).loadState(),pins);
       const activeManagers=(Array.isArray(healthState?.team)?healthState.team:[]).filter(item=>item?.active!==false&&String(item?.role||'').trim()==='Менеджер');
       const defaultManagerName=String(activeManagers[0]?.name||'').trim();
       const routableManagers=telegram.managerIds({manager:defaultManagerName},healthState).length;
@@ -359,7 +396,7 @@ const server=http.createServer(async(req,res)=>{
         const after=await entityStores.domainStore.loadState();
         const visibleA=stateForAccess(after,{role:'client',user:users[0]}).leads||[];
         const visibleB=stateForAccess(after,{role:'client',user:users[1]}).leads||[];
-        const planned=await telegram.collectStateChanges({...before,initialized:true},after);
+        const planned=await collectTelegramStateChanges({...before,initialized:true},after);
         const managerPlanned=leadIds.filter(leadId=>planned.some(item=>item.event==='lead_created'&&item.leadId===leadId&&item.target==='manager'));
         const clientPlanned=leadIds.filter(leadId=>planned.some(item=>item.event==='lead_created_confirmation'&&item.leadId===leadId&&item.target==='client'));
         smoke={
@@ -413,7 +450,7 @@ const server=http.createServer(async(req,res)=>{
       const result=await mutateAutoSaleEntityBatch({
         ...entityStores,
         operations,
-        prepareNotifications:notifyTelegram?telegram.collectStateChanges:null
+        prepareNotifications:notifyTelegram?collectTelegramStateChanges:null
       });
       if(result.status>=200&&result.status<300&&notifyTelegram){
         const notificationItems=takeCommittedNotificationItems(result.data);
@@ -447,7 +484,7 @@ const server=http.createServer(async(req,res)=>{
         const result=await addAutoSaleNote({
           ...entityStores,leadId:id,input,
           expectedRowVersion:input?.baseRowVersion,
-          prepareNotifications:notifyTelegram?telegram.collectStateChanges:null
+          prepareNotifications:notifyTelegram?collectTelegramStateChanges:null
         });
         if(result.status>=200&&result.status<300&&notifyTelegram){
           const notificationItems=takeCommittedNotificationItems(result.data);
@@ -466,7 +503,7 @@ const server=http.createServer(async(req,res)=>{
         const result=await addAutoSalePayment({
           ...entityStores,orderId:id,input,
           expectedRowVersion:input?.baseRowVersion,
-          prepareNotifications:notifyTelegram?telegram.collectStateChanges:null
+          prepareNotifications:notifyTelegram?collectTelegramStateChanges:null
         });
         if(result.status>=200&&result.status<300&&notifyTelegram){
           const notificationItems=takeCommittedNotificationItems(result.data);
@@ -486,7 +523,7 @@ const server=http.createServer(async(req,res)=>{
         const entityStores=await getEntityStores();
         const result=await mutateAutoSaleEntity({
           ...entityStores,resource,operation:'create',
-          id:entityId,input,prepareNotifications:notifyTelegram?telegram.collectStateChanges:null
+          id:entityId,input,prepareNotifications:notifyTelegram?collectTelegramStateChanges:null
         });
         if(result.status>=200&&result.status<300&&notifyTelegram){
           const notificationItems=takeCommittedNotificationItems(result.data);
@@ -505,7 +542,7 @@ const server=http.createServer(async(req,res)=>{
         const result=await mutateAutoSaleEntity({
           ...entityStores,resource,operation:'patch',
           id,input,expectedRowVersion:input?.baseRowVersion,
-          prepareNotifications:notifyTelegram?telegram.collectStateChanges:null
+          prepareNotifications:notifyTelegram?collectTelegramStateChanges:null
         });
         if(result.status>=200&&result.status<300&&notifyTelegram){
           const notificationItems=takeCommittedNotificationItems(result.data);
@@ -547,7 +584,7 @@ const server=http.createServer(async(req,res)=>{
       if(!input||typeof input!=='object'){json(res,{error:'invalid_json'},400);return}
       const skipTelegram=req.headers['x-auto-sale-skip-telegram']==='1'&&hasApiKey(req);
       const notifyTelegram=telegram.enabled&&!skipTelegram;
-      const result=await syncYdbState(await getStore(),input,{prepareNotifications:notifyTelegram?telegram.collectStateChanges:null});
+      const result=await syncYdbState(await getStore(),input,{prepareNotifications:notifyTelegram?collectTelegramStateChanges:null});
       if(result.status>=200&&result.status<300&&notifyTelegram){
         // State persistence is the request's critical path. Telegram delivery is durable
         // through the outbox and must not hold the state response open for tens of seconds.
@@ -737,7 +774,11 @@ const server=http.createServer(async(req,res)=>{
       if(!telegram.enabled){json(res,{error:'telegram_not_configured'},503);return}
       const {access}=await requestAccess(req);
       if(access.role!=='admin'){json(res,{error:'admin_invite_required'},403);return}
-      json(res,{ok:true,unchanged:true,telegramUserId:String(access.user?.id||''),username:String(access.user?.username||access.admin?.username||''),access:'admin',member:null});
+      const pins=await invitedAdminPins();
+      const routedState=enrichStateWithAdminPins(await (await getDomainStore()).loadState(),pins);
+      const username=normalizeTelegramUsername(access.user?.username||access.admin?.username);
+      const member=(Array.isArray(routedState.team)?routedState.team:[]).find(item=>memberTelegramUsername(item)===username)||null;
+      json(res,{ok:true,unchanged:true,telegramUserId:String(access.user?.id||''),username,access:'admin',member:member?{id:member.id,name:member.name,role:member.role}:null,routingReady:Boolean(member&&/^\d+$/.test(String(member.telegramUserId||'')))});
       return;
     }
 
@@ -745,7 +786,9 @@ const server=http.createServer(async(req,res)=>{
       const input=await parseJson(req,100_000);
       if(!input||typeof input!=='object'){json(res,{error:'invalid_json'},400);return}
       try{
-        const result=await telegram.handleWebhookUpdate(input,{appUrl:process.env.AUTO_SALE_TELEGRAM_APP_URL||'https://bba01u6g86lg2q49p34d.containers.yandexcloud.net/',webhookReply:true});
+        const claim=await claimAdminFromWebhook(input);
+        if(claim&&!claim.ok)console.error('AUTO SALE Telegram admin webhook claim failed',claim.error);
+        const result=await telegram.handleWebhookUpdate(input,{appUrl:process.env.AUTO_SALE_TELEGRAM_APP_URL||'https://awgcars.ru/',webhookReply:true});
         if(result?.webhookMethod&&result?.webhookPayload){json(res,{method:result.webhookMethod,...result.webhookPayload},200);return}
         json(res,result,200);
       }catch(error){
