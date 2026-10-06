@@ -31,6 +31,21 @@ export function nextId(prefix, items = []) {
   return `${prefix}-${max + 1}`;
 }
 
+let distributedIdSequence = 0;
+
+export function distributedId(prefix = 'ID') {
+  const safePrefix = String(prefix || 'ID').replace(/[^A-Za-z0-9_-]/g, '') || 'ID';
+  const cryptoApi = globalThis.crypto;
+  if (cryptoApi && typeof cryptoApi.randomUUID === 'function') {
+    return `${safePrefix}-${cryptoApi.randomUUID()}`;
+  }
+  distributedIdSequence = (distributedIdSequence + 1) % 0xFFFFFF;
+  const stamp = Date.now().toString(36);
+  const seq = distributedIdSequence.toString(36);
+  const random = Math.random().toString(36).slice(2, 12);
+  return `${safePrefix}-${stamp}-${seq}-${random}`;
+}
+
 export function orderStageIndex(stage) {
   const idx = ORDER_STAGES.indexOf(normalizeOrderStage(stage));
   return idx < 0 ? 0 : idx;
