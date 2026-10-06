@@ -1,0 +1,5 @@
+AutoWorld canonical OIDC probe
+date: 2026-10-06
+repository: mirozdanie6v/autoworld
+branch: main
+purpose: verify Yandex workload identity trust before production release
