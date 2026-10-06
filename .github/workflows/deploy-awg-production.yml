@@ -258,6 +258,23 @@ jobs:
             | jq -e '.initialized == true and ._access.role == "admin" and ._access.authenticated == true and (.team|type) == "array"' >/dev/null
           echo "Yandex Telegram RBAC production verified: $URL"
 
+      - name: Verify two-client production smoke
+        run: |
+          set -euo pipefail
+          SMOKE=$(curl -fsS -X POST \
+            -H "x-auto-sale-key: $AUTO_SALE_API_KEY" \
+            https://awgcars.ru/api/auto-sale/smoke/two-client)
+          printf '%s' "$SMOKE" | jq -e '
+            .ok == true
+            and .checks.distinctLeadIds == true
+            and .checks.firstClientOwnsOnlyFirst == true
+            and .checks.secondClientOwnsOnlySecond == true
+            and .checks.managerNotificationPlannedForBoth == true
+            and .checks.clientConfirmationPlannedForBoth == true
+            and .cleanup.ok == true
+          ' >/dev/null
+          printf '%s' "$SMOKE" | jq '{ok,checks,planned,cleanup}'
+
       - name: Verify normalized YDB read source
         run: |
           set -euo pipefail
