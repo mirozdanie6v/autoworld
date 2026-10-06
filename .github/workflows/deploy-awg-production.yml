@@ -26,6 +26,7 @@ env:
   YC_RUNTIME_SA_ID: ${{ vars.AWG_YC_RUNTIME_SA_ID || 'aje8o9ric0d20k11521r' }}
   YC_REGISTRY_ID: ${{ vars.AWG_YC_REGISTRY_ID || 'crptu0l7jn0iui8b8laa' }}
   YC_CONTAINER_NAME: ${{ vars.AWG_YC_CONTAINER_NAME || 'autoworld-awg-prod' }}
+  AWG_GATEWAY_NAME: ${{ vars.AWG_GATEWAY_NAME || 'autoworld-awg-prod' }}
   YDB_CONNECTION_STRING: ${{ vars.AWG_YDB_CONNECTION_STRING || 'grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1ggsmuiq7tb2d27f89q/etn00ojk5iv1u7dgpdar' }}
   AUTO_SALE_MEDIA_BUCKET: ${{ vars.AWG_MEDIA_BUCKET || 'viiversion-autoworld-awg-media' }}
   AUTO_SALE_TELEGRAM_BOT_TOKEN: ${{ secrets.AWG_TELEGRAM_BOT_TOKEN }}
@@ -194,6 +195,23 @@ jobs:
           echo "AWG_URL=$URL" >> "$GITHUB_ENV"
           echo "AUTO_SALE_TELEGRAM_WEBHOOK_BASE_URL=$URL" >> "$GITHUB_ENV"
 
+      - name: Resolve and verify AWG API Gateway before Telegram webhook
+        run: |
+          set -euo pipefail
+          GW_JSON=$(yc serverless api-gateway get --name "$AWG_GATEWAY_NAME" --folder-id "$YC_FOLDER_ID" --format json)
+          GW_DOMAIN=$(printf '%s' "$GW_JSON" | jq -r '.domain')
+          test -n "$GW_DOMAIN" && test "$GW_DOMAIN" != "null"
+          echo "AWG_GATEWAY_URL=https://$GW_DOMAIN/" >> "$GITHUB_ENV"
+          echo "AUTO_SALE_TELEGRAM_WEBHOOK_BASE_URL=https://$GW_DOMAIN/" >> "$GITHUB_ENV"
+          for attempt in $(seq 1 30); do
+            if curl -fsS "https://$GW_DOMAIN/api/health" | jq -e '.ok == true and .persistence == "ydb-serverless"' >/dev/null; then
+              break
+            fi
+            test "$attempt" -lt 30 || exit 1
+            sleep 5
+          done
+          curl -fsS "https://$GW_DOMAIN/api/health" | jq '{ok,persistence,telegramNotifications,telegramRoutingReady,telegramRoutableManagers}'
+
       - name: Synchronize Telegram relay credentials
         working-directory: cloudflare/telegram-relay
         env:
@@ -211,7 +229,7 @@ jobs:
           printf '%s' "$TELEGRAM_BOT_TOKEN" | npx wrangler secret put TELEGRAM_BOT_TOKEN --config wrangler.toml
           printf '%s' "$RELAY_SECRET" | npx wrangler secret put AUTOWORLD_RELAY_SECRET --config wrangler.toml
           WEBHOOK_KEY=$(node -e "const {createHmac}=require('crypto');process.stdout.write(createHmac('sha256',process.env.TELEGRAM_BOT_TOKEN).update('auto-sale-telegram-webhook-v2').digest('hex').slice(0,32))")
-          printf '%s' "${AWG_URL%/}/api/auto-sale/telegram/webhook/$WEBHOOK_KEY" | npx wrangler secret put AUTOWORLD_YANDEX_WEBHOOK_URL --config wrangler.toml
+          printf '%s' "${AWG_GATEWAY_URL%/}/api/auto-sale/telegram/webhook/$WEBHOOK_KEY" | npx wrangler secret put AUTOWORLD_YANDEX_WEBHOOK_URL --config wrangler.toml
 
       - name: Verify authenticated Telegram relay path
         env:
