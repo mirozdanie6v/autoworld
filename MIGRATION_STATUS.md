@@ -21,7 +21,7 @@ Current AutoWorld workflows in this repository:
 
 - `verify-autoworld.yml` — regression suite, critical syntax checks and Docker image build;
 - `deploy-awg-production.yml` — canonical AWG production deployment contract;
-- `configure-autoworld-telegram-bot.yml` — manual bot/menu/webhook configuration for `https://awg.viiversion.com/`;
+- `configure-autoworld-telegram-bot.yml` — manual bot/menu/webhook configuration for `https://awgcars.ru/`;
 - `deploy-telegram-relay.yml` — manual Cloudflare Telegram relay deployment;
 - `responsive-audit.yml` — manual live responsive audit.
 
@@ -48,8 +48,9 @@ AWG production is live and verified through the isolated contour:
 - Serverless Container: `autoworld-awg-prod` / `bba691o7au7epjqvs77b`;
 - API Gateway: `autoworld-awg-prod` / `d5dbgio6limv03usvipl`;
 - Object Storage: `viiversion-autoworld-awg-media`;
-- public domain: `https://awg.viiversion.com`, served through the Cloudflare worker `autoworld-awg-proxy`;
-- Telegram Mini App menu: `https://awg.viiversion.com/`.
+- canonical public domain: `https://awgcars.ru` (Yandex API Gateway custom domain);
+- aliases retained: `https://www.awgcars.ru`, `https://awg.viiversion.com` and existing `.com` aliases;
+- Telegram Mini App menu: `https://awgcars.ru/`.
 
 Public domain verification passed for both `/` and `/api/health`; the runtime reports YDB Serverless persistence and uses the isolated AWG database and media bucket.
 
@@ -63,7 +64,7 @@ The legacy `mirozdanie6v/uniq-smart-rent` AutoWorld demo remains separate and un
 ## AWG production contour
 
 - Repository: `mirozdanie6v/autoworld`
-- Production domain: `https://awg.viiversion.com`
+- Production domain: `https://awgcars.ru`
 - Production workflow: `.github/workflows/deploy-awg-production.yml`
 - Required resource namespace: `AWG_*`
 - Required isolation: separate Yandex Serverless Container, separate YDB connection/database, separate Object Storage bucket.
