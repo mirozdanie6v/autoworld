@@ -1,6 +1,6 @@
 import http from 'node:http';
 import path from 'node:path';
-import {timingSafeEqual} from 'node:crypto';
+import {randomUUID,timingSafeEqual} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {readFile,stat} from 'node:fs/promises';
 import {createYdbStateStore} from './ydb-state.mjs';
@@ -318,6 +318,80 @@ const server=http.createServer(async(req,res)=>{
       const result=await mutateAutoSaleEntityBatch({...entityStores,operations,prepareNotifications:null});
       if(result.status<200||result.status>=300){json(res,result.data,result.status);return}
       json(res,{ok:true,source:sourceName,received:items.length,created,patched,replaced,deleted,skipped,revision:Number(result.data?.revision)||0,changed:true,rowVersions:result.data?.rowVersions||{}});
+      return;
+    }
+
+    if(url.pathname==='/api/auto-sale/smoke/two-client'&&req.method==='POST'){
+      if(!hasApiKey(req)){json(res,{error:'unauthorized'},401);return}
+      if(!telegram.enabled){json(res,{error:'telegram_not_configured'},503);return}
+      const entityStores=await getEntityStores();
+      const before=await entityStores.domainStore.loadState();
+      const suffix=randomUUID().replace(/-/g,'').slice(0,12);
+      const leadIds=[`L-SMOKE-${suffix}-A`,`L-SMOKE-${suffix}-B`];
+      const users=[
+        {id:'999999999999991',username:'autoworld_smoke_a',first_name:'Smoke A'},
+        {id:'999999999999992',username:'autoworld_smoke_b',first_name:'Smoke B'}
+      ];
+      const makeOps=(leadId,user,index)=>[
+        {resource:'lead',operation:'create',id:leadId,input:{
+          id:leadId,name:`Production Smoke ${index+1}`,contact:`@autoworld_smoke_${index+1}`,
+          model:index===0?'Smoke BMW':'Smoke Audi',budget:40000+index*1000
+        }},
+        {resource:'note',operation:'create',leadId,input:{id:`N-${leadId}`,text:'Automatic production smoke test'}}
+      ];
+      const sanitized=users.map((user,index)=>sanitizeClientOperations(before,makeOps(leadIds[index],user,index),user));
+      const invalid=sanitized.find(item=>!item.ok);
+      if(invalid){json(res,{error:'smoke_client_sanitize_failed',detail:invalid},500);return}
+      let created=false;
+      let smoke={ok:false,checks:{},planned:{manager:0,client:0}};
+      const cleanupErrors=[];
+      try{
+        const createdResult=await mutateAutoSaleEntityBatch({
+          ...entityStores,
+          operations:sanitized.flatMap(item=>item.operations),
+          prepareNotifications:null
+        });
+        if(createdResult.status<200||createdResult.status>=300){
+          json(res,{error:'smoke_create_failed',detail:createdResult.data},createdResult.status||500);
+          return;
+        }
+        created=true;
+        const after=await entityStores.domainStore.loadState();
+        const visibleA=stateForAccess(after,{role:'client',user:users[0]}).leads||[];
+        const visibleB=stateForAccess(after,{role:'client',user:users[1]}).leads||[];
+        const planned=await telegram.collectStateChanges({...before,initialized:true},after);
+        const managerPlanned=leadIds.filter(leadId=>planned.some(item=>item.event==='lead_created'&&item.leadId===leadId&&item.target==='manager'));
+        const clientPlanned=leadIds.filter(leadId=>planned.some(item=>item.event==='lead_created_confirmation'&&item.leadId===leadId&&item.target==='client'));
+        smoke={
+          ok:true,
+          checks:{
+            distinctLeadIds:leadIds[0]!==leadIds[1],
+            firstClientOwnsOnlyFirst:visibleA.some(item=>item.id===leadIds[0])&&!visibleA.some(item=>item.id===leadIds[1]),
+            secondClientOwnsOnlySecond:visibleB.some(item=>item.id===leadIds[1])&&!visibleB.some(item=>item.id===leadIds[0]),
+            managerNotificationPlannedForBoth:managerPlanned.length===2,
+            clientConfirmationPlannedForBoth:clientPlanned.length===2
+          },
+          planned:{manager:managerPlanned.length,client:clientPlanned.length}
+        };
+        smoke.ok=Object.values(smoke.checks).every(Boolean);
+      }catch(error){
+        smoke={ok:false,error:String(error?.message||error),checks:smoke.checks||{},planned:smoke.planned||{}};
+      }finally{
+        if(created){
+          for(const leadId of leadIds){
+            try{
+              const rowVersion=await entityStores.domainStore.entityRowVersion('lead',leadId);
+              if(rowVersion===null)continue;
+              const deleted=await deleteAutoSaleLeadCascade({...entityStores,id:leadId,expectedRowVersion:rowVersion});
+              if(deleted.status<200||deleted.status>=300)cleanupErrors.push({leadId,status:deleted.status,error:deleted.data?.error||'cleanup_failed'});
+            }catch(error){
+              cleanupErrors.push({leadId,error:String(error?.message||error)});
+            }
+          }
+        }
+      }
+      const ok=Boolean(smoke.ok)&&cleanupErrors.length===0;
+      json(res,{ok,leadIds,checks:smoke.checks,planned:smoke.planned,cleanup:{ok:cleanupErrors.length===0,errors:cleanupErrors},error:smoke.error||null},ok?200:500);
       return;
     }
 
