@@ -10,7 +10,7 @@ import {syncYdbState} from './ydb-sync.mjs';
 import {createObjectStorage} from './object-storage.mjs';
 import {createTelegramService} from './telegram-bot.mjs';
 import {addAutoSaleNote,addAutoSalePayment,deleteAutoSaleLeadCascade,mutateAutoSaleEntity,mutateAutoSaleEntityBatch,readAutoSaleEntity} from './ydb-entity-commands.mjs';
-import {MAX_ADMIN_ACCOUNTS,stateForAccess,rowVersionsForAccess,sanitizeClientOperations,sanitizeAdminOperations} from './auto-sale-access.mjs';
+import {MAX_ADMIN_ACCOUNTS,stateForAccess,rowVersionsForAccess,sanitizeClientOperations,sanitizeAdminOperations,applyManagerLeadClaims} from './auto-sale-access.mjs';
 import {managerTelegramUsername} from '../shared/auto-sale-manager-directory.mjs';
 import {verifyGitHubCatalogOidcToken} from './github-oidc-auth.mjs';
 
@@ -457,6 +457,9 @@ const server=http.createServer(async(req,res)=>{
         operations=sanitized.operations;
       }else{
         operations=sanitizeAdminOperations(operations,{apiKey:access.apiKey});
+        const claimPolicy=applyManagerLeadClaims(accessState,operations,access);
+        if(!claimPolicy.ok){json(res,{error:claimPolicy.error,id:claimPolicy.id,assignedManager:claimPolicy.assignedManager||null},claimPolicy.status||409);return}
+        operations=claimPolicy.operations;
       }
       const skipTelegram=req.headers['x-auto-sale-skip-telegram']==='1'&&hasApiKey(req);
       const notifyTelegram=telegram.enabled&&!skipTelegram;
@@ -550,12 +553,18 @@ const server=http.createServer(async(req,res)=>{
       }
       if(req.method==='PATCH'&&id){
         const input=await parseJson(req);
+        let mutationInput=input;
+        if(resource==='lead'&&!access.apiKey){
+          const claimPolicy=applyManagerLeadClaims(accessState,[{resource:'lead',operation:'patch',id,input}],access);
+          if(!claimPolicy.ok){json(res,{error:claimPolicy.error,id:claimPolicy.id,assignedManager:claimPolicy.assignedManager||null},claimPolicy.status||409);return}
+          mutationInput=claimPolicy.operations[0]?.input||input;
+        }
         const skipTelegram=req.headers['x-auto-sale-skip-telegram']==='1';
         const notifyTelegram=telegram.enabled&&!skipTelegram;
         const entityStores=await getEntityStores();
         const result=await mutateAutoSaleEntity({
           ...entityStores,resource,operation:'patch',
-          id,input,expectedRowVersion:input?.baseRowVersion,
+          id,input:mutationInput,expectedRowVersion:input?.baseRowVersion,
           prepareNotifications:notifyTelegram?collectTelegramStateChanges:null
         });
         if(result.status>=200&&result.status<300&&notifyTelegram){
