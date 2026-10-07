@@ -134,7 +134,7 @@ async function waitDeliveries(ids){
 }
 
 const identity=await resolvePhysicalUser();
-report.identity={...identity,id:identity.id};
+report.identity={username:'@'+username,matchedCommandAt:identity.matchedCommandAt,matchedCommandMessageId:identity.matchedCommandMessageId};
 const telegramUser={
   id:identity.id,
   username:identity.username,
@@ -147,7 +147,7 @@ const initialClient=await client('/api/auto-sale/state',initData);
 assert.equal(initialClient.response.status,200,'client state read before test');
 assert.equal(initialClient.data?._access?.role,'client','real Telegram identity must resolve to client role');
 assert.equal(initialClient.data?._access?.authenticated,true,'real Telegram client must be authenticated');
-assert.equal(String(initialClient.data?._access?.user?.id||''),identity.id,'client access user ID');
+assert.ok(String(initialClient.data?._access?.user?.id||'')===identity.id,'client access must use the resolved physical Telegram identity');
 assert.equal((initialClient.data.team||[]).length,0,'client must not receive staff directory');
 report.access=initialClient.data._access;
 
@@ -200,7 +200,7 @@ try{
   assert.equal(adminState.response.status,200,'admin state verification');
   const persisted=(adminState.data.leads||[]).find(item=>String(item.id)===leadId);
   assert.ok(persisted,'test lead missing from authoritative state');
-  assert.equal(String(persisted.telegramUserId||''),identity.id,'lead ownership must use real Telegram user ID');
+  assert.ok(String(persisted.telegramUserId||'')===identity.id,'lead ownership must use the resolved physical Telegram identity');
   assert.equal(String(persisted.telegramUsername||'').toLowerCase(),username.toLowerCase(),'lead ownership username');
   assert.equal(persisted.clientCreated,true,'lead must be marked as client-created');
   assert.equal(persisted.source,'Mini App','client cannot override source');
@@ -227,12 +227,10 @@ try{
     source:persisted.source,
     status:persisted.status,
     manager:persisted.manager,
-    telegramUserId:String(persisted.telegramUserId||''),
     telegramUsername:String(persisted.telegramUsername||'')
   };
   console.log('AUTOWORLD_REAL_CLIENT_E2E_OK',JSON.stringify({
     username:'@'+username,
-    telegramUserId:identity.id,
     leadId,
     manager:persisted.manager,
     notifications:report.notifications
