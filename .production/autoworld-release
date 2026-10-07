@@ -1,5 +1,7 @@
 AWG production release
-requested_at=2026-10-07T20:53:00+07:00
-source_sha=0cfe0629ea091f3e81b5da28942a3280ee9bca75
-reason=telegram-relay-webhook-audit
+requested_at=2026-10-07T22:54:00+07:00
+source_sha=072ddc1ea0ef89de2db7b2c7cfbb52f5dd9f80e0
+reason=real-client-telegram-e2e
 physical_client=@Flyer_kg
+run_real_client_e2e=true
+real_client_username=Flyer_kg
