@@ -42,8 +42,7 @@ env:
   AUTO_SALE_CATALOG_IMPORT_KEY: ${{ secrets.AWG_RELAY_SECRET }}
   AUTO_SALE_MANAGER_CHAT_IDS: ${{ vars.AWG_MANAGER_CHAT_IDS || '' }}
   AUTO_SALE_TELEGRAM_APP_URL: ${{ vars.AWG_PRIMARY_APP_URL || 'https://awgcars.ru/' }}
-  AUTO_SALE_TELEGRAM_RELAY_URL: https://viiversion-telegram-relay.mirozdanie6v.workers.dev/telegram/send
-  AUTO_SALE_TELEGRAM_WEBHOOK_URL: https://viiversion-telegram-relay.mirozdanie6v.workers.dev/telegram/webhook
+  AUTO_SALE_TELEGRAM_RELAY_URL: https://integration-telegram.viiversion.com/telegram/send
   AUTO_SALE_YDB_DUAL_WRITE: "false"
   AUTO_SALE_LEGACY_STATE_WRITE: "false"
   AUTO_SALE_YDB_READ_MODE: normalized
@@ -223,35 +222,11 @@ jobs:
           done
           curl --connect-timeout 10 --max-time 20 -fsS "https://$GW_DOMAIN/api/health" | jq '{ok,persistence,buildSha,telegramNotifications,telegramRoutingReady,telegramRoutableManagers}'
 
-      - name: Deploy and synchronize Telegram relay
-        working-directory: cloudflare/telegram-relay
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.AWG_TELEGRAM_BOT_TOKEN }}
-          RELAY_SECRET: ${{ secrets.AWG_RELAY_SECRET }}
+      - name: Verify existing Telegram relay health
         run: |
           set -euo pipefail
-          test -n "$CLOUDFLARE_API_TOKEN"
-          test -n "$CLOUDFLARE_ACCOUNT_ID"
-          test -n "$TELEGRAM_BOT_TOKEN"
-          test -n "$RELAY_SECRET"
-          npm install
-          npx wrangler deploy --config wrangler.toml
-          printf '%s' "$TELEGRAM_BOT_TOKEN" | npx wrangler secret put TELEGRAM_BOT_TOKEN --config wrangler.toml
-          printf '%s' "$RELAY_SECRET" | npx wrangler secret put AUTOWORLD_RELAY_SECRET --config wrangler.toml
-          WEBHOOK_KEY=$(node -e "const {createHmac}=require('crypto');process.stdout.write(createHmac('sha256',process.env.TELEGRAM_BOT_TOKEN).update('auto-sale-telegram-webhook-v2').digest('hex').slice(0,32))")
-          printf '%s' "${AWG_GATEWAY_URL%/}/api/auto-sale/telegram/webhook/$WEBHOOK_KEY" | npx wrangler secret put AUTOWORLD_YANDEX_WEBHOOK_URL --config wrangler.toml
-          for endpoint in \
-            https://viiversion-telegram-relay.mirozdanie6v.workers.dev/telegram/health; do
-            for attempt in $(seq 1 18); do
-              if curl --connect-timeout 10 --max-time 20 -fsS "$endpoint" | jq -e '.ok == true and .service == "viiversion-telegram-relay"' >/dev/null; then
-                break
-              fi
-              test "$attempt" -lt 18 || { echo "Telegram relay health failed: $endpoint"; exit 1; }
-              sleep 5
-            done
-          done
+          curl --connect-timeout 10 --max-time 20 -fsS https://integration-telegram.viiversion.com/telegram/health \
+            | jq -e '.ok == true' >/dev/null
 
       - name: Verify authenticated Telegram relay path
         env:
