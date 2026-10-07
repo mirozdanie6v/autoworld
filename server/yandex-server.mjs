@@ -149,6 +149,10 @@ function deferCommittedNotifications(items,label='AUTO SALE committed Telegram d
   if(!items.length)return;
   queueMicrotask(()=>deliverNotificationBatch(items).catch(error=>console.error(label,error)));
 }
+function deferNotificationIds(ids,label='AUTO SALE queued Telegram delivery deferred'){
+  if(!ids.length)return;
+  queueMicrotask(()=>processNotificationIds(ids).catch(error=>console.error(label,error)));
+}
 
 const apiHeaders={
   'content-type':'application/json; charset=utf-8',
@@ -803,8 +807,24 @@ const server=http.createServer(async(req,res)=>{
       try{
         const claim=await claimAdminFromWebhook(input);
         if(claim&&!claim.ok)console.error('AUTO SALE Telegram admin webhook claim failed',claim.error);
-        const result=await telegram.handleWebhookUpdate(input,{appUrl:process.env.AUTO_SALE_TELEGRAM_APP_URL||'https://awgcars.ru/',webhookReply:false});
-        json(res,{ok:true,handled:result?.handled||null,ignored:Boolean(result?.ignored),messageId:result?.messageId||null},200);
+        const result=await telegram.handleWebhookUpdate(input,{appUrl:process.env.AUTO_SALE_TELEGRAM_APP_URL||'https://awgcars.ru/',webhookReply:true});
+        if(result?.webhookMethod==='sendMessage'&&result?.webhookPayload){
+          const updateId=String(input.update_id??randomUUID());
+          const payload=result.webhookPayload;
+          const notification={
+            id:`webhook:${updateId}:${result.handled||'reply'}`,
+            event:'bot_command_reply',
+            target:'telegram_user',
+            chatId:String(payload.chat_id||''),
+            message:String(payload.text||''),
+            replyMarkup:payload.reply_markup||null
+          };
+          const ids=await (await getStore()).enqueueNotifications([notification]);
+          json(res,{ok:true,handled:result.handled||null,queued:true},200);
+          deferNotificationIds(ids,'AUTO SALE webhook command reply deferred');
+          return;
+        }
+        json(res,{ok:true,handled:result?.handled||null,ignored:Boolean(result?.ignored)},200);
       }catch(error){
         const status=Number(error?.statusCode)||500;
         json(res,{error:String(error?.message||'telegram_webhook_failed'),telegramDescription:String(error?.telegramDescription||''),detail:String(error?.cause?.message||error?.cause||'')},status);
