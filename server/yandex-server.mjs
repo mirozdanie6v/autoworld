@@ -260,8 +260,8 @@ const server=http.createServer(async(req,res)=>{
       const pins=(await liveStore.adminAccessList()).filter(item=>adminTelegramUsernames.includes(normalizeTelegramUsername(item.username)));
       const healthState=enrichStateWithAdminPins(await (await getDomainStore()).loadState(),pins);
       const activeManagers=(Array.isArray(healthState?.team)?healthState.team:[]).filter(item=>item?.active!==false&&String(item?.role||'').trim()==='Менеджер');
-      const defaultManagerName=String(activeManagers[0]?.name||'').trim();
-      const routableManagers=telegram.managerIds({manager:defaultManagerName},healthState).length;
+      const routableManagerIds=new Set(activeManagers.flatMap(member=>telegram.managerIds({manager:String(member?.name||'').trim()},healthState)));
+      const routableManagers=routableManagerIds.size;
       json(res,{ok:true,service:'auto-sale-yandex',persistence:'ydb-serverless',schemaVersion:6,writeMode:'telegram-rbac',stateReadMode:'viewer-filtered',publicDemoWrite:Boolean(publicDemoWrite),maxAdminAccounts:MAX_ADMIN_ACCOUNTS,adminInvites:adminTelegramUsernames.length,linkedAdminAccounts:pins.length,legacyStateWrite:legacyStateWriteEnabled?'rollback-only':'retired',normalizedAuthoritative:ydbReadMode==='normalized'&&!legacyStateWriteEnabled,ydbDomainDualWrite:liveStore.domainDualWriteEnabled?'enabled':'disabled',ydbStateReadMode:ydbReadMode,mediaStorage:mediaBucket?'object-storage':'disabled',mediaBucket:mediaBucket||null,telegramNotifications:telegram.enabled?'enabled':'disabled',telegramFallbackManagers:telegram.fallbackManagerCount,telegramRoutableManagers:routableManagers,telegramRoutingReady:Boolean(telegram.enabled&&routableManagers>0),catalogImport:catalogImportKey?'enabled':'disabled'});
       return;
     }
@@ -692,7 +692,8 @@ const server=http.createServer(async(req,res)=>{
     if(req.method==='POST'&&url.pathname==='/api/auto-sale/telegram/test-conversation-delivery'){
       if(!hasApiKey(req)){json(res,{error:'unauthorized'},401);return}
       if(!telegram.enabled){json(res,{error:'telegram_not_configured'},503);return}
-      const state=await (await getDomainStore()).loadState();
+      const pins=await invitedAdminPins();
+      const state=enrichStateWithAdminPins(await (await getDomainStore()).loadState(),pins);
       const team=Array.isArray(state.team)?state.team:[];
       const leads=Array.isArray(state.leads)?state.leads:[];
       let lead=leads.find(item=>/^\d+$/.test(String(item?.telegramUserId||''))&&team.some(member=>member?.active!==false&&String(member?.name||'').trim()===String(item?.manager||'').trim()&&/^\d+$/.test(String(member?.telegramUserId||''))));
@@ -730,8 +731,9 @@ const server=http.createServer(async(req,res)=>{
     if(req.method==='POST'&&url.pathname==='/api/auto-sale/telegram/test-manager-delivery'){
       if(!hasApiKey(req)){json(res,{error:'unauthorized'},401);return}
       if(!telegram.enabled){json(res,{error:'telegram_not_configured'},503);return}
-      const state=await (await getStore()).loadState();
-      const member=(Array.isArray(state.team)?state.team:[]).find(item=>item?.active!==false&&/^\d+$/.test(String(item?.telegramUserId||'')));
+      const pins=await invitedAdminPins();
+      const state=enrichStateWithAdminPins(await (await getDomainStore()).loadState(),pins);
+      const member=(Array.isArray(state.team)?state.team:[]).find(item=>item?.active!==false&&String(item?.role||'').trim()==='Менеджер'&&/^\d+$/.test(String(item?.telegramUserId||'')));
       if(!member){json(res,{error:'manager_telegram_not_linked'},409);return}
       try{
         const result=await telegram.send(String(member.telegramUserId),`AUTO МИР · проверка уведомлений\n\nСвязь с системой настроена. Уведомления менеджеру доставляются через защищённый канал AutoWorld.`);
