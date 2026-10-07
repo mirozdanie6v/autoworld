@@ -6,6 +6,7 @@ const base=String(process.env.STAGING_URL||process.env.PRODUCTION_URL||'https://
 const apiKey=String(process.env.AUTO_SALE_API_KEY||'').trim();
 const botToken=String(process.env.AUTO_SALE_TELEGRAM_BOT_TOKEN||'').trim();
 const username=String(process.env.AUDIT_CLIENT_TELEGRAM_USERNAME||'Flyer_kg').trim().replace(/^@/,'');
+const explicitTelegramId=String(process.env.AUDIT_CLIENT_TELEGRAM_ID||'').trim();
 const recentMinutes=Math.max(5,Number(process.env.AUDIT_RECENT_COMMAND_MAX_AGE_MINUTES||120));
 if(!apiKey)throw new Error('AUTO_SALE_API_KEY required');
 if(!botToken)throw new Error('AUTO_SALE_TELEGRAM_BOT_TOKEN required');
@@ -63,6 +64,21 @@ function signInitData(user){
 }
 
 async function resolvePhysicalUser(){
+  if(explicitTelegramId){
+    assert.match(explicitTelegramId,/^\\d+$/,'AUDIT_CLIENT_TELEGRAM_ID must be numeric');
+    const chat=await getTelegramChat(explicitTelegramId);
+    assert.ok(chat,'explicit physical Telegram identity must be reachable through bot getChat');
+    assert.equal(String(chat.username||'').replace(/^@/,'').toLowerCase(),username.toLowerCase(),'explicit Telegram ID must belong to requested username');
+    assert.equal(String(chat.type||''),'private','physical E2E requires a private Telegram chat');
+    return{
+      id:String(chat.id),
+      username:String(chat.username||''),
+      first_name:String(chat.first_name||''),
+      last_name:String(chat.last_name||''),
+      matchedCommandAt:'resolved-by-trusted-audit-bridge',
+      matchedCommandMessageId:''
+    };
+  }
   const {response,data}=await admin('/api/auto-sale/telegram/recent-command-recipients?limit=100');
   assert.equal(response.status,200,'recent Telegram recipients endpoint');
   assert.equal(data.ok,true,'recent Telegram recipients response');
