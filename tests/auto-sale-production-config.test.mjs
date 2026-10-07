@@ -46,3 +46,12 @@ test('production deploy seeds canonical managers before runtime deployment',asyn
   assert.match(script,/current\.length/);
   assert.match(script,/mutateAutoSaleEntityBatch/);
 });
+
+
+test('production Telegram cutover waits for the exact deployed source SHA',async()=>{
+  const server=await readFile(new URL('../server/yandex-server.mjs',import.meta.url),'utf8');
+  const deploy=await readFile(new URL('../.github/workflows/deploy-awg-production.yml',import.meta.url),'utf8');
+  assert.match(server,/buildSha:String\(process\.env\.AUTO_SALE_BUILD_SHA\|\|''\)/);
+  assert.match(deploy,/AUTO_SALE_BUILD_SHA=\$GITHUB_SHA/);
+  assert.match(deploy,/\.buildSha == env\.GITHUB_SHA/);
+});
