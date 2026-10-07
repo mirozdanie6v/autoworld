@@ -222,10 +222,21 @@ async function batch(label,expected,operations){
 
 const initial=await state();
 const auditManagerTelegramId=String(process.env.AUDIT_MANAGER_TELEGRAM_ID||'').trim();
+const auditClientUsername=String(process.env.AUDIT_CLIENT_TELEGRAM_USERNAME||'Flyer_kg').trim().replace(/^@/,'');
+const auditClientTelegramId=String(process.env.AUDIT_CLIENT_TELEGRAM_ID||'').trim();
 const manager=(initial.team||[]).find(x=>x.active!==false&&String(x.telegramUsername||x.telegram||'').replace(/^@/,'').toLowerCase()==='flyer_flyer');
 assert.ok(manager,'Flyer_Flyer manager must exist in production team');
-const telegramUserId=/^\d+$/.test(String(manager.telegramUserId||''))?String(manager.telegramUserId):auditManagerTelegramId;
-assert.match(telegramUserId,/^\d+$/,'Flyer_Flyer manager Telegram must be linked');
+const managerTelegramUserId=/^\d+$/.test(String(manager.telegramUserId||''))?String(manager.telegramUserId):auditManagerTelegramId;
+assert.match(managerTelegramUserId,/^\d+$/,'Flyer_Flyer manager Telegram must be linked');
+const linkedClientLead=(initial.leads||[]).find(x=>
+  String(x.telegramUsername||'').replace(/^@/,'').toLowerCase()===auditClientUsername.toLowerCase()
+  && /^\d+$/.test(String(x.telegramUserId||''))
+);
+const clientTelegramUserId=/^\d+$/.test(auditClientTelegramId)
+  ?auditClientTelegramId
+  :String(linkedClientLead?.telegramUserId||'');
+assert.match(clientTelegramUserId,/^\d+$/,`@${auditClientUsername} client Telegram must be linked through Mini App or provided as AUDIT_CLIENT_TELEGRAM_ID`);
+assert.notEqual(clientTelegramUserId,managerTelegramUserId,'Physical Telegram E2E requires distinct client and manager accounts');
 const suffix=Date.now().toString(36).toUpperCase();
 const leadId='L-QA-'+suffix,quoteId='Q-QA-'+suffix,orderId='O-QA-'+suffix;
 const today=new Date().toISOString().slice(0,10),future=new Date(Date.now()+30*86400000).toISOString().slice(0,10);
@@ -255,15 +266,15 @@ const payment=i=>({
   paymentStage:plan[i].id,
   note:'ТЕСТ, деньги не переводились'
 });
-const report={leadId,quoteId,orderId,telegram:'@Flyer_Flyer',writePath:'entity-batch',logicalRoles:['client','manager'],physicalRecipients:1,receipts,cleanup:null};
+const report={leadId,quoteId,orderId,telegram:{client:'@'+auditClientUsername,manager:'@Flyer_Flyer'},writePath:'entity-batch',logicalRoles:['client','manager'],physicalRecipients:2,receipts,cleanup:null};
 let scenarioStarted=false;
 let cleanupFailure=null;
 
 try{
   const lead={
     id:leadId,
-    name:'ТЕСТ @Flyer_Flyer',
-    contact:'@Flyer_Flyer',
+    name:'ТЕСТ @'+auditClientUsername,
+    contact:'@'+auditClientUsername,
     model,
     origin:'США',
     budget:45000,
@@ -275,9 +286,9 @@ try{
     createdAt:new Date().toISOString(),
     clientCreated:true,
     isTest:true,
-    telegramUserId,
-    telegramUsername:'Flyer_Flyer',
-    managerTelegramUserId:telegramUserId,
+    telegramUserId:clientTelegramUserId,
+    telegramUsername:auditClientUsername,
+    managerTelegramUserId:managerTelegramUserId,
     managerTelegramUsername:'Flyer_Flyer',
     managerTelegramName:manager.name,
     deposit:0,
@@ -321,7 +332,7 @@ try{
   }}]);
 
   const order={
-    id:orderId,leadId,customer:'ТЕСТ @Flyer_Flyer',model,origin:'США',transportMode:'Море',
+    id:orderId,leadId,customer:'ТЕСТ @'+auditClientUsername,model,origin:'США',transportMode:'Море',
     manager:manager.name,source:'Mini App',total:39000,cost:37500,paid:10000,
     stage:'Выкуп',lot:verification.lotNumber,vin:verification.vin,eta:future,location:'ТЕСТ',
     riskType:'Нет',riskNote:'',risk:'Нет',paymentPlan:plan,payments:[payment(0)],updatedAt:new Date().toISOString()
