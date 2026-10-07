@@ -3,7 +3,7 @@ import {readFile,writeFile} from 'node:fs/promises';
 const SOURCE_PATH=process.env.SOURCE_PATH||'data/autoworld-georgia-recent/cars.json';
 const OUTPUT_PATH=process.env.OUTPUT_PATH||'data/autoworld-georgia-recent/catalog-import.json';
 const AUDIT_PATH=process.env.AUDIT_PATH||OUTPUT_PATH.replace(/\.json$/,'-audit.json');
-const STATE_URL=process.env.AUTO_SALE_STATE_URL||'https://auto-sale-demo.viiversion.com/api/auto-sale/state';
+const STATE_URL=process.env.AUTO_SALE_STATE_URL||'https://awgcars.ru/api/auto-sale/state';
 const DRY_RUN=/^(1|true|yes)$/i.test(String(process.env.DRY_RUN||''));
 const REPLACE_SOURCE_ALL=/^(1|true|yes)$/i.test(String(process.env.REPLACE_SOURCE_ALL||''));
 const ONLY_POST_IDS=new Set(String(process.env.ONLY_POST_IDS||'').split(',').map(x=>x.trim()).filter(Boolean));
