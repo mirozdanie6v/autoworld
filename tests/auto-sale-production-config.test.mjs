@@ -55,3 +55,15 @@ test('production Telegram cutover waits for the exact deployed source SHA',async
   assert.match(deploy,/AUTO_SALE_BUILD_SHA=\$GITHUB_SHA/);
   assert.match(deploy,/\.buildSha == env\.GITHUB_SHA/);
 });
+
+
+test('Telegram webhook ingress uses authenticated relay endpoint',async()=>{
+  const deploy=await readFile(new URL('../.github/workflows/deploy-awg-production.yml',import.meta.url),'utf8');
+  const configure=await readFile(new URL('../scripts/configure-autoworld-telegram-bot.mjs',import.meta.url),'utf8');
+  const relay=await readFile(new URL('../cloudflare/telegram-relay/src/index.js',import.meta.url),'utf8');
+  assert.match(deploy,/AUTO_SALE_TELEGRAM_WEBHOOK_URL: https:\/\/integration-telegram\.viiversion\.com\/telegram\/webhook/);
+  assert.match(configure,/secret_token:webhookSecretToken/);
+  assert.match(configure,/x-telegram-bot-api-secret-token/);
+  assert.match(relay,/invalid_telegram_webhook_secret/);
+  assert.match(relay,/AUTOWORLD_YANDEX_WEBHOOK_URL/);
+});
