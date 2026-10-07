@@ -277,7 +277,7 @@ test('production webhook persists command replies before ACK and delivers them a
   const webhookBlock=server.slice(server.indexOf("if(req.method==='POST'&&telegram.isWebhookPath"),server.indexOf("if(url.pathname==='/api/auto-sale/telegram/message'"));
   assert.match(webhookBlock,/handleWebhookUpdate\(input,\{appUrl:[\s\S]*webhookReply:true\}\)/);
   assert.match(webhookBlock,/enqueueNotifications\(\[notification\]\)/);
-  assert.match(webhookBlock,/id:\`webhook:\\${updateId}:\\${result\.handled\|\|'reply'}\`/);
+  assert.ok(webhookBlock.includes("id:`webhook:${updateId}:${result.handled||'reply'}`"));
   assert.match(webhookBlock,/json\(res,\{ok:true,handled:result\.handled\|\|null,queued:true\},200\)/);
   assert.match(webhookBlock,/deferNotificationIds\(ids,'AUTO SALE webhook command reply deferred'\)/);
   assert.doesNotMatch(webhookBlock,/await telegram\.send/);
