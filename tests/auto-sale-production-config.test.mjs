@@ -71,8 +71,9 @@ test('Telegram webhook ingress uses authenticated relay endpoint',async()=>{
 });
 
 
-test('Telegram relay is bound to integration-telegram custom hostname',async()=>{
+test('Telegram relay uses workers.dev without a zone-owned route dependency',async()=>{
   const wrangler=await readFile(new URL('../cloudflare/telegram-relay/wrangler.toml',import.meta.url),'utf8');
-  assert.match(wrangler,/pattern = "integration-telegram\.viiversion\.com\/\*"/);
-  assert.match(wrangler,/zone_name = "viiversion\.com"/);
+  assert.match(wrangler,/workers_dev = true/);
+  assert.doesNotMatch(wrangler,/\[\[routes\]\]/);
+  assert.doesNotMatch(wrangler,/integration-telegram\.viiversion\.com/);
 });
