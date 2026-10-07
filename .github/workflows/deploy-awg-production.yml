@@ -299,6 +299,27 @@ jobs:
           printf '%s' "$DELIVERY" | jq -e '.ok == true and (.messageId != null)' >/dev/null
           printf '%s' "$DELIVERY" | jq '{ok,member,messageId}'
 
+      - name: Verify real non-admin Telegram client E2E
+        run: |
+          set -euo pipefail
+          RUN_REAL_CLIENT_E2E=$(awk -F= '$1=="run_real_client_e2e"{print $2}' .production/autoworld-release | tail -n1)
+          if [ "$RUN_REAL_CLIENT_E2E" != "true" ]; then
+            echo "Real physical client E2E not requested by release marker."
+            exit 0
+          fi
+          CLIENT_USERNAME=$(awk -F= '$1=="real_client_username"{print $2}' .production/autoworld-release | tail -n1)
+          export AUDIT_CLIENT_TELEGRAM_USERNAME="${CLIENT_USERNAME:-Flyer_kg}"
+          export STAGING_URL="https://awgcars.ru"
+          node scripts/test-real-telegram-client-e2e.mjs
+
+      - name: Upload real Telegram client E2E evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-telegram-client-e2e
+          path: real-client-e2e-report.json
+          if-no-files-found: ignore
+
       - name: Verify normalized YDB read source
         run: |
           set -euo pipefail
