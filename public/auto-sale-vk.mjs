@@ -5,6 +5,7 @@ const hasVkLaunch=()=>{
 
 let bridgePromise=null;
 let configPromise=null;
+let initPromise=null;
 
 async function vkConfig(){
   if(!configPromise)configPromise=fetch('/api/auto-sale/vk/config',{cache:'no-store'})
@@ -29,14 +30,35 @@ async function loadBridge(){
   return bridgePromise;
 }
 
+export async function initVkMiniAppShell(){
+  if(!hasVkLaunch())return{ok:true,skipped:'not-vk'};
+  if(initPromise)return initPromise;
+  initPromise=(async()=>{
+    try{
+      const bridge=await loadBridge();
+      await bridge.send('VKWebAppInit');
+      const result={ok:true};
+      window.__AUTO_SALE_VK_SHELL__=result;
+      return result;
+    }catch(error){
+      console.warn('AUTO SALE VK shell initialization failed',String(error?.message||error));
+      const result={ok:false,error:'vk_shell_init_failed'};
+      window.__AUTO_SALE_VK_SHELL__=result;
+      return result;
+    }
+  })();
+  return initPromise;
+}
+
 export async function ensureVkMessagesAllowed(){
   if(!hasVkLaunch())return{ok:true,skipped:'not-vk'};
+  const shell=await initVkMiniAppShell();
+  if(!shell.ok)return shell;
   if(sessionStorage.getItem('auto-sale-vk-messages-allowed')==='1')return{ok:true,cached:true};
   const config=await vkConfig();
   if(!config?.enabled||!config?.groupId)return{ok:false,skipped:'vk-messaging-not-configured'};
   try{
     const bridge=await loadBridge();
-    await bridge.send('VKWebAppInit');
     await bridge.send('VKWebAppAllowMessagesFromGroup',{group_id:Number(config.groupId)});
     sessionStorage.setItem('auto-sale-vk-messages-allowed','1');
     return{ok:true};
@@ -46,4 +68,5 @@ export async function ensureVkMessagesAllowed(){
   }
 }
 
+window.__AUTO_SALE_INIT_VK_SHELL__=initVkMiniAppShell;
 window.__AUTO_SALE_ENSURE_VK_MESSAGES__=ensureVkMessagesAllowed;
