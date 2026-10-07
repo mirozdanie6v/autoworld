@@ -294,6 +294,15 @@ jobs:
           ' >/dev/null
           printf '%s' "$SMOKE" | jq '{ok,checks,planned,cleanup}'
 
+      - name: Verify linked manager Telegram delivery
+        run: |
+          set -euo pipefail
+          DELIVERY=$(curl --connect-timeout 10 --max-time 45 -fsS -X POST \
+            -H "x-auto-sale-key: $AUTO_SALE_API_KEY" \
+            https://awgcars.ru/api/auto-sale/telegram/test-manager-delivery)
+          printf '%s' "$DELIVERY" | jq -e '.ok == true and (.messageId != null)' >/dev/null
+          printf '%s' "$DELIVERY" | jq '{ok,member,messageId}'
+
       - name: Verify normalized YDB read source
         run: |
           set -euo pipefail
