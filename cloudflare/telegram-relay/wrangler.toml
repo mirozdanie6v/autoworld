@@ -2,3 +2,8 @@ name = "viiversion-telegram-relay"
 main = "src/index.js"
 compatibility_date = "2026-09-26"
 workers_dev = true
+
+
+[[routes]]
+pattern = "integration-telegram.viiversion.com/*"
+zone_name = "viiversion.com"
