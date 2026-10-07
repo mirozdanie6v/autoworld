@@ -661,6 +661,14 @@ const server=http.createServer(async(req,res)=>{
       json(res,{ok:true,stats:await safeNotificationStats(),deliveries:await (await getStore()).notificationStatus(ids)});return;
     }
 
+    if(req.method==='GET'&&url.pathname==='/api/auto-sale/telegram/recent-command-recipients'){
+      if(!hasApiKey(req)){json(res,{error:'unauthorized'},401);return}
+      const limit=Math.min(100,Math.max(1,Number(url.searchParams.get('limit')||50)));
+      const recipients=await (await getStore()).recentBotCommandRecipients(limit);
+      json(res,{ok:true,recipients});
+      return;
+    }
+
     if(req.method==='GET'&&url.pathname==='/api/auto-sale/telegram/diagnose'){
       if(!hasApiKey(req)){json(res,{error:'unauthorized'},401);return}
       const probe=async target=>{
