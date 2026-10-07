@@ -30,6 +30,7 @@ REQUEST_DELAY = float(os.environ.get("REQUEST_DELAY", "0.20"))
 MEDIA_INDEX_PATH = os.environ.get("MEDIA_INDEX_PATH", "").strip()
 UPLOAD_MISSING_PHOTOS = os.environ.get("UPLOAD_MISSING_PHOTOS", "true").lower() in {"1","true","yes"}
 CATALOG_IMPORT_KEY = os.environ.get("AUTO_SALE_CATALOG_IMPORT_KEY", "").strip()
+CATALOG_IMPORT_BEARER = os.environ.get("AUTO_SALE_CATALOG_IMPORT_BEARER", "").strip()
 MERGE_EXISTING = os.environ.get("MERGE_EXISTING", "false").lower() in {"1","true","yes"}
 TIMEOUT = 40
 UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/126 Safari/537.36"
@@ -360,7 +361,11 @@ def upload_photo(post_id, index, url):
         "dataUrl": data_url,
         "fileName": f"{category}-{index+1}.{ext}",
     }
-    headers = {"x-auto-sale-catalog-import-key": CATALOG_IMPORT_KEY} if CATALOG_IMPORT_KEY else {}
+    headers = {}
+    if CATALOG_IMPORT_KEY:
+        headers["x-auto-sale-catalog-import-key"] = CATALOG_IMPORT_KEY
+    if CATALOG_IMPORT_BEARER:
+        headers["Authorization"] = f"Bearer {CATALOG_IMPORT_BEARER}"
     r = session.post(MEDIA_API, json=payload, headers=headers, timeout=TIMEOUT)
     r.raise_for_status()
     data = r.json()
