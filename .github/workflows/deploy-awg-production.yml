@@ -35,7 +35,7 @@ env:
   AUTO_SALE_MANAGER_CHAT_IDS: ${{ vars.AWG_MANAGER_CHAT_IDS || '' }}
   AUTO_SALE_TELEGRAM_APP_URL: ${{ vars.AWG_PRIMARY_APP_URL || 'https://awgcars.ru/' }}
   AUTO_SALE_TELEGRAM_RELAY_URL: https://integration-telegram.viiversion.com/telegram/send
-  AUTO_SALE_TELEGRAM_WEBHOOK_URL: https://integration-telegram.viiversion.com/telegram/webhook
+  AUTO_SALE_TELEGRAM_WEBHOOK_URL: https://viiversion-telegram-relay.mirozdanie6v.workers.dev/telegram/webhook
   AUTO_SALE_YDB_DUAL_WRITE: "false"
   AUTO_SALE_LEGACY_STATE_WRITE: "false"
   AUTO_SALE_YDB_READ_MODE: normalized
