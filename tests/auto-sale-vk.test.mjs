@@ -105,3 +105,48 @@ test('legacy Telegram client notification IDs and routes remain stable',async()=
   assert.equal(client.chatId,'42');
   assert.match(client.id,/client:42$/);
 });
+
+
+test('VK Mini App shell initializes once and does not require messaging config',async()=>{
+  const previousWindow=globalThis.window;
+  const previousSessionStorage=globalThis.sessionStorage;
+  const calls=[];
+  globalThis.window={
+    location:{search:'?vk_app_id=54810434&vk_user_id=42&sign=test'},
+    vkBridge:{
+      send:async method=>{
+        calls.push(method);
+        return{};
+      }
+    }
+  };
+  globalThis.sessionStorage={
+    getItem:()=>null,
+    setItem:()=>{}
+  };
+  try{
+    const url=new URL('../public/auto-sale-vk.mjs',import.meta.url);
+    url.searchParams.set('test',String(Date.now()));
+    const module=await import(url.href);
+    const first=await module.initVkMiniAppShell();
+    const second=await module.initVkMiniAppShell();
+    assert.equal(first.ok,true);
+    assert.equal(second.ok,true);
+    assert.deepEqual(calls,['VKWebAppInit']);
+  }finally{
+    if(previousWindow===undefined)delete globalThis.window;
+    else globalThis.window=previousWindow;
+    if(previousSessionStorage===undefined)delete globalThis.sessionStorage;
+    else globalThis.sessionStorage=previousSessionStorage;
+  }
+});
+
+test('VK shell bootstrap is placed only at the application startup boundary',async()=>{
+  const {readFile}=await import('node:fs/promises');
+  const source=await readFile(new URL('../public/auto-sale-bootstrap.mjs',import.meta.url),'utf8');
+  assert.equal(source.includes('const state=if('),false);
+  const initIndex=source.lastIndexOf('initVkMiniAppShell()');
+  const pullIndex=source.lastIndexOf('await pullInitialState();');
+  assert.ok(initIndex>0,'VK shell init must be present');
+  assert.ok(pullIndex>initIndex,'VK shell init must happen before the startup state pull');
+});

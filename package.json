@@ -11,7 +11,7 @@
     "build": "node scripts/build-autoworld.mjs",
     "test": "node --test tests/auto-sale*.test.mjs tests/ydb*.test.mjs tests/yandex-state-sync.test.mjs tests/object-storage.test.mjs",
     "test:relay": "npm --prefix cloudflare/telegram-relay test",
-    "check": "npm run clean && npm run build && npm test && npm run test:relay",
+    "check": "npm run check:browser-syntax && npm run clean && npm run build && npm test && npm run test:relay",
     "start:yandex": "node server/yandex-server.mjs",
     "migrate:yandex": "node scripts/migrate-auto-sale-to-ydb.mjs",
     "test:yandex": "node --test tests/yandex-state-sync.test.mjs",
@@ -19,7 +19,8 @@
     "backfill:ydb-domain": "node scripts/backfill-auto-sale-ydb-domain.mjs",
     "prepare:ydb-runtime": "node scripts/prepare-auto-sale-ydb-runtime.mjs",
     "initialize:ydb-domain": "node scripts/initialize-auto-sale-ydb-domain.mjs",
-    "ensure:production-team": "node scripts/ensure-auto-sale-production-team.mjs"
+    "ensure:production-team": "node scripts/ensure-auto-sale-production-team.mjs",
+    "check:browser-syntax": "node scripts/check-browser-syntax.mjs"
   },
   "dependencies": {
     "@ydbjs/auth": "latest",

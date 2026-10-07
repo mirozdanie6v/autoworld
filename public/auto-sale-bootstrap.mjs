@@ -283,6 +283,8 @@ function normalizeSettledPaymentField(){
   amount.max=String(remaining);
 }
 
+const vkModule=await import('./auto-sale-vk.mjs?v=20261008-vk-v3');
+if(vkLaunchParams())await vkModule.initVkMiniAppShell();
 await pullInitialState();
 await import('./auto-sale-submit-bridge.mjs?v=20260921-live-values-1');
 await import('./auto-sale-app-v3.mjs?v=20260929-entity-cutover-1');
@@ -294,7 +296,6 @@ await import('./auto-sale-required-fields.mjs');
 await import('./auto-sale-director-team.mjs?v=20260929-entity-cutover-1');
 await import('./auto-sale-telegram.mjs?v=20260929-entity-cutover-1');
 await import('./auto-sale-telegram-id.mjs?v=20260927-safe-chat-link-v2');
-await import('./auto-sale-vk.mjs?v=20261008-vk-v1');
 await import('./auto-sale-client-quote.mjs?v=20260929-entity-cutover-1');
 normalizeSettledPaymentField();
 const appRoot=document.querySelector('#app');
