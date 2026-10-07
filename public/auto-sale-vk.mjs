@@ -5,6 +5,11 @@ const hasVkLaunch=()=>{
 
 let bridgePromise=null;
 let configPromise=null;
+let initPromise=null;
+
+function timeoutAfter(ms,code){
+  return new Promise((_,reject)=>setTimeout(()=>reject(new Error(code)),ms));
+}
 
 async function vkConfig(){
   if(!configPromise)configPromise=fetch('/api/auto-sale/vk/config',{cache:'no-store'})
@@ -18,25 +23,58 @@ async function loadBridge(){
   if(bridgePromise)return bridgePromise;
   bridgePromise=new Promise((resolve,reject)=>{
     const script=document.createElement('script');
+    const timer=setTimeout(()=>reject(new Error('vk_bridge_load_timeout')),7000);
+    const settle=(fn,value)=>{
+      clearTimeout(timer);
+      script.onload=null;
+      script.onerror=null;
+      fn(value);
+    };
     script.src='https://unpkg.com/@vkontakte/vk-bridge@3.0.2/dist/browser.min.js';
     script.async=true;
     script.crossOrigin='anonymous';
     script.referrerPolicy='no-referrer';
-    script.onload=()=>window.vkBridge?resolve(window.vkBridge):reject(new Error('vk_bridge_global_missing'));
-    script.onerror=()=>reject(new Error('vk_bridge_load_failed'));
+    script.onload=()=>window.vkBridge
+      ?settle(resolve,window.vkBridge)
+      :settle(reject,new Error('vk_bridge_global_missing'));
+    script.onerror=()=>settle(reject,new Error('vk_bridge_load_failed'));
     document.head.appendChild(script);
   });
   return bridgePromise;
 }
 
+export async function initVkMiniAppShell(){
+  if(!hasVkLaunch())return{ok:true,skipped:'not-vk'};
+  if(initPromise)return initPromise;
+  initPromise=(async()=>{
+    try{
+      const bridge=await loadBridge();
+      await Promise.race([
+        bridge.send('VKWebAppInit'),
+        timeoutAfter(5000,'vk_init_timeout')
+      ]);
+      const result={ok:true};
+      window.__AUTO_SALE_VK_SHELL__=result;
+      return result;
+    }catch(error){
+      console.warn('AUTO SALE VK shell initialization failed',String(error?.message||error));
+      const result={ok:false,error:'vk_shell_init_failed'};
+      window.__AUTO_SALE_VK_SHELL__=result;
+      return result;
+    }
+  })();
+  return initPromise;
+}
+
 export async function ensureVkMessagesAllowed(){
   if(!hasVkLaunch())return{ok:true,skipped:'not-vk'};
+  const shell=await initVkMiniAppShell();
+  if(!shell.ok)return shell;
   if(sessionStorage.getItem('auto-sale-vk-messages-allowed')==='1')return{ok:true,cached:true};
   const config=await vkConfig();
   if(!config?.enabled||!config?.groupId)return{ok:false,skipped:'vk-messaging-not-configured'};
   try{
     const bridge=await loadBridge();
-    await bridge.send('VKWebAppInit');
     await bridge.send('VKWebAppAllowMessagesFromGroup',{group_id:Number(config.groupId)});
     sessionStorage.setItem('auto-sale-vk-messages-allowed','1');
     return{ok:true};
@@ -46,4 +84,5 @@ export async function ensureVkMessagesAllowed(){
   }
 }
 
+window.__AUTO_SALE_INIT_VK_SHELL__=initVkMiniAppShell;
 window.__AUTO_SALE_ENSURE_VK_MESSAGES__=ensureVkMessagesAllowed;
