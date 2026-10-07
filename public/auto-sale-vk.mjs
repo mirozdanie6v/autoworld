@@ -7,8 +7,12 @@ let bridgePromise=null;
 let configPromise=null;
 let initPromise=null;
 
-function timeoutAfter(ms,code){
-  return new Promise((_,reject)=>setTimeout(()=>reject(new Error(code)),ms));
+function withTimeout(promise,ms,code){
+  let timer=null;
+  const timeout=new Promise((_,reject)=>{
+    timer=setTimeout(()=>reject(new Error(code)),ms);
+  });
+  return Promise.race([promise,timeout]).finally(()=>clearTimeout(timer));
 }
 
 async function vkConfig(){
@@ -49,10 +53,7 @@ export async function initVkMiniAppShell(){
   initPromise=(async()=>{
     try{
       const bridge=await loadBridge();
-      await Promise.race([
-        bridge.send('VKWebAppInit'),
-        timeoutAfter(5000,'vk_init_timeout')
-      ]);
+      await withTimeout(bridge.send('VKWebAppInit'),5000,'vk_init_timeout');
       const result={ok:true};
       window.__AUTO_SALE_VK_SHELL__=result;
       return result;
