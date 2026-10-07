@@ -151,7 +151,20 @@ jobs:
           IMAGE="cr.yandex/${YC_REGISTRY_ID}/autoworld-awg:${GITHUB_SHA}"
           echo "$YC_IAM_TOKEN" | docker login --username iam --password-stdin cr.yandex
           docker build -f Dockerfile.yandex -t "$IMAGE" .
-          docker push "$IMAGE"
+          PUSH_OK=false
+          for attempt in 1 2 3; do
+            if docker push "$IMAGE"; then
+              PUSH_OK=true
+              break
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              delay=$((attempt * 15))
+              echo "Yandex Container Registry push failed; retrying in ${delay}s (attempt ${attempt}/3)"
+              sleep "$delay"
+              echo "$YC_IAM_TOKEN" | docker login --username iam --password-stdin cr.yandex
+            fi
+          done
+          test "$PUSH_OK" = "true" || { echo "Yandex Container Registry push failed after 3 attempts"; exit 1; }
           echo "AUTO_SALE_IMAGE=$IMAGE" >> "$GITHUB_ENV"
 
       - name: Generate AWG production API credential
