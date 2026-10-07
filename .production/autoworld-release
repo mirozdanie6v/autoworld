@@ -1,5 +1,5 @@
 AWG production release
-requested_at=2026-10-08T00:11:00+07:00
-source_sha=43cada95549aa48cc37813a8bd77e60da618054a
-reason=VII-143-lead-manager-first-touch-claim
+requested_at=2026-10-08T01:14:00+07:00
+source_sha=2b97908a3a99e9f67cb0b770a80d4611bfbf04bc
+reason=fix-private-container-postdeploy-gate-and-verify-vii-143
 run_real_client_e2e=false
