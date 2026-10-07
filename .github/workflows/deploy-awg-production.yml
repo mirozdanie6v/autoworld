@@ -12,9 +12,17 @@ on:
   workflow_dispatch:
     inputs:
       telegram_lifecycle:
-        description: Send the full test lifecycle to the linked Flyer_Flyer account
+        description: Send the full physical lifecycle to a linked client and manager
         type: boolean
         default: false
+      telegram_client_username:
+        description: Telegram username for the physical client E2E
+        type: string
+        default: Flyer_kg
+      telegram_client_id:
+        description: Optional numeric Telegram user ID if the client has no linked lead yet
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -215,7 +223,7 @@ jobs:
           done
           curl --connect-timeout 10 --max-time 20 -fsS "https://$GW_DOMAIN/api/health" | jq '{ok,persistence,buildSha,telegramNotifications,telegramRoutingReady,telegramRoutableManagers}'
 
-      - name: Synchronize Telegram relay credentials
+      - name: Deploy and synchronize Telegram relay
         working-directory: cloudflare/telegram-relay
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -229,10 +237,22 @@ jobs:
           test -n "$TELEGRAM_BOT_TOKEN"
           test -n "$RELAY_SECRET"
           npm install
+          npx wrangler deploy --config wrangler.toml
           printf '%s' "$TELEGRAM_BOT_TOKEN" | npx wrangler secret put TELEGRAM_BOT_TOKEN --config wrangler.toml
           printf '%s' "$RELAY_SECRET" | npx wrangler secret put AUTOWORLD_RELAY_SECRET --config wrangler.toml
           WEBHOOK_KEY=$(node -e "const {createHmac}=require('crypto');process.stdout.write(createHmac('sha256',process.env.TELEGRAM_BOT_TOKEN).update('auto-sale-telegram-webhook-v2').digest('hex').slice(0,32))")
           printf '%s' "${AWG_GATEWAY_URL%/}/api/auto-sale/telegram/webhook/$WEBHOOK_KEY" | npx wrangler secret put AUTOWORLD_YANDEX_WEBHOOK_URL --config wrangler.toml
+          for endpoint in \
+            https://viiversion-telegram-relay.mirozdanie6v.workers.dev/telegram/health \
+            https://integration-telegram.viiversion.com/telegram/health; do
+            for attempt in $(seq 1 18); do
+              if curl --connect-timeout 10 --max-time 20 -fsS "$endpoint" | jq -e '.ok == true and .service == "viiversion-telegram-relay"' >/dev/null; then
+                break
+              fi
+              test "$attempt" -lt 18 || { echo "Telegram relay health failed: $endpoint"; exit 1; }
+              sleep 5
+            done
+          done
 
       - name: Verify authenticated Telegram relay path
         env:
@@ -406,8 +426,11 @@ jobs:
           echo "Revision network configuration:"
           yc serverless container revision list --container-name "$YC_CONTAINER_NAME" --folder-id "$YC_FOLDER_ID" --format json | jq '.[0] | {id,status,network_id,subnet_id,created_at}' || true
 
-      - name: Verify full lifecycle delivery to Flyer_Flyer
+      - name: Verify physical Telegram lifecycle
         if: ${{ always() && inputs.telegram_lifecycle == true }}
+        env:
+          AUDIT_CLIENT_TELEGRAM_USERNAME: ${{ inputs.telegram_client_username || 'Flyer_kg' }}
+          AUDIT_CLIENT_TELEGRAM_ID: ${{ inputs.telegram_client_id || '' }}
         run: node scripts/test-telegram-lifecycle.mjs
 
       - name: Upload Telegram delivery receipts
