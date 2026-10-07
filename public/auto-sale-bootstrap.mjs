@@ -143,11 +143,7 @@ function refreshOperationVersions(operations){
 async function reconcileAmbiguousBatch(expected,status){
   for(let attempt=1;attempt<=3;attempt++){
     if(attempt>1)await new Promise(resolve=>setTimeout(resolve,700*attempt));
-    const state=if(vkLaunchParams()){
-  const vkModule=await import('./auto-sale-vk.mjs?v=20261008-vk-v2');
-  await vkModule.initVkMiniAppShell();
-}
-await pullInitialState();
+    const state=await pullInitialState();
     if(state&&expected.every(operation=>operationAppliedToState(state,operation))){
       const recovered={ok:true,revision,rowVersions:{},notifications:null,recovered:true,recoveredStatus:status};
       window.__AUTO_SALE_SERVER__={online:true,revision,initialized:true,entityMode:true,recovered:true,recoveredStatus:status};
@@ -298,7 +294,7 @@ await import('./auto-sale-required-fields.mjs');
 await import('./auto-sale-director-team.mjs?v=20260929-entity-cutover-1');
 await import('./auto-sale-telegram.mjs?v=20260929-entity-cutover-1');
 await import('./auto-sale-telegram-id.mjs?v=20260927-safe-chat-link-v2');
-await import('./auto-sale-vk.mjs?v=20261008-vk-v2');
+await import('./auto-sale-vk.mjs?v=20261008-vk-v1');
 await import('./auto-sale-client-quote.mjs?v=20260929-entity-cutover-1');
 normalizeSettledPaymentField();
 const appRoot=document.querySelector('#app');
