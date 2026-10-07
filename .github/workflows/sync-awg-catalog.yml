@@ -1,0 +1,124 @@
+name: Sync AWG catalog from AutoWorld Georgia
+
+on:
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .sync-awg-catalog
+
+permissions:
+  contents: read
+
+concurrency:
+  group: awg-catalog-sync
+  cancel-in-progress: false
+
+env:
+  AWG_URL: https://awgcars.ru
+  AWG_CATALOG_IMPORT_URL: https://awgcars.ru/api/auto-sale/admin/catalog-import
+  AWG_MEDIA_API: https://awgcars.ru/api/auto-sale/media
+
+jobs:
+  sync:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout canonical AutoWorld
+        uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install scraper dependencies
+        run: python -m pip install --disable-pip-version-check requests beautifulsoup4
+
+      - name: Validate catalog credential
+        env:
+          AUTO_SALE_CATALOG_IMPORT_KEY: ${{ secrets.AWG_RELAY_SECRET }}
+        run: |
+          test -n "$AUTO_SALE_CATALOG_IMPORT_KEY" || { echo "Missing secret AWG_RELAY_SECRET"; exit 1; }
+
+      - name: Seed current production media index
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/awg-import
+          curl --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 10 --max-time 30 -fsS \
+            "$AWG_URL/api/auto-sale/state" \
+            | jq '[.catalog[]? | select(.source == "AutoWorld_Georgia")]' \
+            > /tmp/awg-import/cars.json
+          test "$(jq 'length' /tmp/awg-import/cars.json)" -ge 100
+
+      - name: Scrape recent AutoWorld Georgia posts
+        env:
+          OUT_DIR: /tmp/awg-import
+          MAX_PAGES: '20'
+          REQUEST_DELAY: '0.30'
+          UPLOAD_MISSING_PHOTOS: 'true'
+          MERGE_EXISTING: 'false'
+          AUTO_SALE_MEDIA_API: https://awgcars.ru/api/auto-sale/media
+          AUTO_SALE_CATALOG_IMPORT_KEY: ${{ secrets.AWG_RELAY_SECRET }}
+        run: python scripts/scrape-autoworld-georgia.py
+
+      - name: Normalize recent posts
+        env:
+          SOURCE_PATH: /tmp/awg-import/cars.json
+          OUTPUT_PATH: /tmp/awg-catalog-import.json
+          AUDIT_PATH: /tmp/awg-catalog-import-audit.json
+          DRY_RUN: 'true'
+        run: node scripts/import-autoworld-catalog.mjs
+
+      - name: Upsert recent catalog entities
+        env:
+          AUTO_SALE_CATALOG_IMPORT_KEY: ${{ secrets.AWG_RELAY_SECRET }}
+          AUTO_SALE_CATALOG_IMPORT_URL: https://awgcars.ru/api/auto-sale/admin/catalog-import
+          SOURCE_PATH: /tmp/awg-catalog-import.json
+          REPLACE_SOURCE_ALL: 'false'
+        run: node scripts/sync-autoworld-catalog.mjs
+
+      - name: Verify public RU catalog
+        run: |
+          set -euo pipefail
+          curl --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 10 --max-time 30 -fsS \
+            "$AWG_URL/api/auto-sale/state" > /tmp/awg-state.json
+          COUNT=$(jq '[.catalog[]? | select(.source == "AutoWorld_Georgia" and .active != false)] | length' /tmp/awg-state.json)
+          LATEST=$(jq -r '[.catalog[]? | select(.source == "AutoWorld_Georgia") | (.sourcePostId|tonumber? // 0)] | max // 0' /tmp/awg-state.json)
+          NORMALIZED=$(jq 'length' /tmp/awg-catalog-import.json)
+          SKIPPED=$(jq '.skippedInvalidCount // 0' /tmp/awg-catalog-import-audit.json)
+          DUPLICATES=$(jq '.duplicateVinCount // 0' /tmp/awg-catalog-import-audit.json)
+          echo "AWG catalog count: $COUNT"
+          echo "Latest source post: $LATEST"
+          echo "Normalized recent cars: $NORMALIZED"
+          echo "Skipped invalid recent posts: $SKIPPED"
+          echo "Duplicate VIN candidates: $DUPLICATES"
+          test "$COUNT" -ge 100
+          test "$LATEST" -gt 0
+          {
+            echo "## AWG catalog sync"
+            echo
+            echo "- Canonical repo: mirozdanie6v/autoworld"
+            echo "- Production domain: https://awgcars.ru"
+            echo "- Active AutoWorld_Georgia cars: $COUNT"
+            echo "- Latest source post: $LATEST"
+            echo "- Recent normalized cars: $NORMALIZED"
+            echo "- Skipped invalid posts: $SKIPPED"
+            echo "- Duplicate VIN candidates: $DUPLICATES"
+            echo "- Source: @AutoWorld_Georgia"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload import audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: awg-catalog-import-audit
+          path: |
+            /tmp/awg-catalog-import-audit.json
+            /tmp/awg-import/report.json
+          if-no-files-found: ignore
