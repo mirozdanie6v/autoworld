@@ -42,7 +42,7 @@ env:
   AUTO_SALE_CATALOG_IMPORT_KEY: ${{ secrets.AWG_RELAY_SECRET }}
   AUTO_SALE_MANAGER_CHAT_IDS: ${{ vars.AWG_MANAGER_CHAT_IDS || '' }}
   AUTO_SALE_TELEGRAM_APP_URL: ${{ vars.AWG_PRIMARY_APP_URL || 'https://awgcars.ru/' }}
-  AUTO_SALE_TELEGRAM_RELAY_URL: https://integration-telegram.viiversion.com/telegram/send
+  AUTO_SALE_TELEGRAM_RELAY_URL: https://viiversion-telegram-relay.mirozdanie6v.workers.dev/telegram/send
   AUTO_SALE_TELEGRAM_WEBHOOK_URL: https://viiversion-telegram-relay.mirozdanie6v.workers.dev/telegram/webhook
   AUTO_SALE_YDB_DUAL_WRITE: "false"
   AUTO_SALE_LEGACY_STATE_WRITE: "false"
@@ -243,8 +243,7 @@ jobs:
           WEBHOOK_KEY=$(node -e "const {createHmac}=require('crypto');process.stdout.write(createHmac('sha256',process.env.TELEGRAM_BOT_TOKEN).update('auto-sale-telegram-webhook-v2').digest('hex').slice(0,32))")
           printf '%s' "${AWG_GATEWAY_URL%/}/api/auto-sale/telegram/webhook/$WEBHOOK_KEY" | npx wrangler secret put AUTOWORLD_YANDEX_WEBHOOK_URL --config wrangler.toml
           for endpoint in \
-            https://viiversion-telegram-relay.mirozdanie6v.workers.dev/telegram/health \
-            https://integration-telegram.viiversion.com/telegram/health; do
+            https://viiversion-telegram-relay.mirozdanie6v.workers.dev/telegram/health; do
             for attempt in $(seq 1 18); do
               if curl --connect-timeout 10 --max-time 20 -fsS "$endpoint" | jq -e '.ok == true and .service == "viiversion-telegram-relay"' >/dev/null; then
                 break
