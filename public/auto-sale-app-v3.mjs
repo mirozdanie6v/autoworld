@@ -520,6 +520,9 @@ async function submitRequest(form){
   const managerIdentity=managerMode?managerTelegramIdentity(data.manager,parse(localStorage,KEYS.team,[])):null;
   if(managerMode&&!supportedClientOrigin(data.origin))errors.push('Выберите сценарий США или Грузия.');
   if(errors.length){showErrors(form,[...new Set(errors)]);return}
+  if(!managerMode&&typeof window.__AUTO_SALE_ENSURE_VK_MESSAGES__==='function'){
+    try{await window.__AUTO_SALE_ENSURE_VK_MESSAGES__()}catch{}
+  }
   const lead={id:managerMode?nextId('L',leads):distributedId('L'),name:data.name.trim(),contact:data.contact.trim(),model:data.model.trim(),origin:String(data.origin||''),budget:Number(data.budget)||0,source:managerMode?data.source:'Mini App',manager:managerMode?data.manager:activeManagers()[0]||'',status:'Новый',priority:managerMode?data.priority:'Средний',createdAt:new Date().toISOString(),nextAction:managerMode?data.nextAction:today,note:data.note||'',clientCreated:!managerMode,yearFrom:managerMode?'':data.yearFrom||'',yearTo:managerMode?'':data.yearTo||'',mileageMax:managerMode?'':data.mileageMax||'',engine:managerMode?'Не важно':data.engine||'Не важно',drive:managerMode?'Не важно':data.drive||'Не важно',damage:managerMode?'Минимальные':data.damage||'Минимальные',deliveryCity:managerMode?'':data.deliveryCity||'',deposit:0,depositDate:'',paymentMethod:'',managerTelegramUsername:managerMode?String(managerIdentity?.username||''):String(data.managerTelegram||'').trim().replace(/^@/,''),managerTelegramUserId:managerMode?String(managerIdentity?.id||''):'',managerTelegramName:managerMode?String(managerIdentity?.name||data.manager||''):''};
   const note=noteEntry('Лид создан.');
   const saved=window.__AUTO_SALE_ENTITY_BATCH__?await commitEntities([{resource:'lead',operation:'create',id:lead.id,input:lead},{resource:'note',operation:'create',leadId:lead.id,input:note}],form):{ok:true,localOnly:true};if(!saved)return;

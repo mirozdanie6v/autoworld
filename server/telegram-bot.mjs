@@ -24,7 +24,17 @@ function quoteLead(state,quote){
 function orderLead(state,order){
   return leadFor(state,order?.leadId);
 }
-function clientId(lead){return /^\d+$/.test(clean(lead?.telegramUserId))?clean(lead.telegramUserId):''}
+function clientId(lead){
+  if(clean(lead?.clientProvider)&&clean(lead.clientProvider)!=='telegram')return'';
+  return /^\d+$/.test(clean(lead?.telegramUserId))?clean(lead.telegramUserId):'';
+}
+function clientRoute(lead){
+  const provider=clean(lead?.clientProvider).toLowerCase();
+  const providerUserId=clean(lead?.clientProviderUserId);
+  if(provider==='vk'&&/^\d+$/.test(providerUserId))return{channel:'vk',id:providerUserId};
+  const telegramUserId=clientId(lead);
+  return telegramUserId?{channel:'telegram',id:telegramUserId}:null;
+}
 function managerIds(lead,fallback=[],state=null){
   const team=arr(state?.team);
   const managerName=clean(lead?.manager);
@@ -184,14 +194,19 @@ export function createTelegramService({
 
     const appUrl=clean(process.env.AUTO_SALE_TELEGRAM_APP_URL||'');
     const actionMarkup=label=>appUrl?{inline_keyboard:[[{text:label,web_app:{url:appUrl}}]]}:null;
-    const deliver=async(chatId,message,meta,replyMarkup=null)=>{
-      deliveries.push({chatId,message,replyMarkup,id:eventKey(meta)+':'+meta.target+':'+chatId,...meta});
+    const deliver=async(route,message,meta,replyMarkup=null)=>{
+      const channel=clean(route?.channel)||'telegram';
+      const recipientId=clean(route?.id);
+      if(!recipientId)return;
+      const recipientKey=channel==='telegram'?recipientId:`${channel}:${recipientId}`;
+      const routeFields=channel==='vk'?{channel:'vk',vkUserId:recipientId}:{channel:'telegram',chatId:recipientId};
+      deliveries.push({...routeFields,message,replyMarkup,id:eventKey(meta)+':'+meta.target+':'+recipientKey,...meta});
     };
     const toManagers=async(lead,message,meta,label='Открыть заявку')=>{
-      for(const chatId of managerIds(lead,fallbackManagers,next))await deliver(chatId,message,{target:'manager',...meta},actionMarkup(label));
+      for(const chatId of managerIds(lead,fallbackManagers,next))await deliver({channel:'telegram',id:chatId},message,{target:'manager',...meta},actionMarkup(label));
     };
     const toClient=async(lead,message,meta,label='Открыть AUTO МИР')=>{
-      const chatId=clientId(lead);if(chatId)await deliver(chatId,message,{target:'client',...meta},actionMarkup(label));
+      const route=clientRoute(lead);if(route)await deliver(route,message,{target:'client',...meta},actionMarkup(label));
     };
 
     for(const lead of arr(next?.leads)){
@@ -260,6 +275,7 @@ export function createTelegramService({
   async function notifyStateChanges(previous,next){
     const deliveries=[];
     for(const item of await collectStateChanges(previous,next)){
+      if(item.channel==='vk'){deliveries.push({...item,ok:false,error:'vk_delivery_requires_router'});continue}
       try{const result=await send(item.chatId,item.message,{replyMarkup:item.replyMarkup});deliveries.push({...item,ok:true,messageId:result?.message_id||null})}
       catch(error){deliveries.push({...item,ok:false,error:clean(error.telegramDescription||error.message)||'telegram_send_failed'})}
     }

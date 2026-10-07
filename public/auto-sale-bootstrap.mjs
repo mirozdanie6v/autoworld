@@ -7,9 +7,17 @@ let revision=Number(sessionStorage.getItem(REVISION_KEY)||0);
 let rowVersions={lead:{},quote:{},order:{},team:{},catalog:{}};
 
 function telegramInitData(){return String(window.Telegram?.WebApp?.initData||'').trim()}
+function vkLaunchParams(){
+  const params=new URLSearchParams(window.location.search||'');
+  if(!params.get('vk_app_id')||!params.get('vk_user_id')||!params.get('sign'))return'';
+  const signed=new URLSearchParams();
+  for(const [key,value] of params.entries())if(key==='sign'||key.startsWith('vk_'))signed.append(key,value);
+  return signed.toString();
+}
 function authHeaders(extra={}){
-  const headers={...extra},initData=telegramInitData();
+  const headers={...extra},initData=telegramInitData(),vkParams=vkLaunchParams();
   if(initData)headers['x-telegram-init-data']=initData;
+  else if(vkParams)headers['x-vk-launch-params']=vkParams;
   return headers;
 }
 window.__AUTO_SALE_AUTH_HEADERS__=authHeaders;
@@ -286,6 +294,7 @@ await import('./auto-sale-required-fields.mjs');
 await import('./auto-sale-director-team.mjs?v=20260929-entity-cutover-1');
 await import('./auto-sale-telegram.mjs?v=20260929-entity-cutover-1');
 await import('./auto-sale-telegram-id.mjs?v=20260927-safe-chat-link-v2');
+await import('./auto-sale-vk.mjs?v=20261008-vk-v1');
 await import('./auto-sale-client-quote.mjs?v=20260929-entity-cutover-1');
 normalizeSettledPaymentField();
 const appRoot=document.querySelector('#app');
