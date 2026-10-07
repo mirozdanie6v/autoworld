@@ -18,6 +18,8 @@ test('production Telegram workflows share one bot secret and configurable primar
   assert.doesNotMatch(relay,/secrets\.AUTO_SALE_TELEGRAM_BOT_TOKEN/);
   assert.match(relay,/secrets\.AWG_RELAY_SECRET/);
   assert.match(relay,/wrangler secret put AUTOWORLD_RELAY_SECRET/);
+  assert.match(deploy,/npx wrangler deploy --config wrangler\.toml/);
+  assert.ok(deploy.indexOf('npx wrangler deploy --config wrangler.toml') < deploy.indexOf('wrangler secret put TELEGRAM_BOT_TOKEN'));
   assert.match(configure,/AUTO_SALE_TELEGRAM_WEBHOOK_BASE_URL: https:\/\/awgcars\.ru\//);
   assert.match(deploy,/telegramNotifications == "enabled"/);
   assert.match(deploy,/telegramRoutingReady/);
