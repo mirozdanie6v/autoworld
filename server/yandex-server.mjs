@@ -800,9 +800,8 @@ const server=http.createServer(async(req,res)=>{
       try{
         const claim=await claimAdminFromWebhook(input);
         if(claim&&!claim.ok)console.error('AUTO SALE Telegram admin webhook claim failed',claim.error);
-        const result=await telegram.handleWebhookUpdate(input,{appUrl:process.env.AUTO_SALE_TELEGRAM_APP_URL||'https://awgcars.ru/',webhookReply:true});
-        if(result?.webhookMethod&&result?.webhookPayload){json(res,{method:result.webhookMethod,...result.webhookPayload},200);return}
-        json(res,result,200);
+        const result=await telegram.handleWebhookUpdate(input,{appUrl:process.env.AUTO_SALE_TELEGRAM_APP_URL||'https://awgcars.ru/',webhookReply:false});
+        json(res,{ok:true,handled:result?.handled||null,ignored:Boolean(result?.ignored),messageId:result?.messageId||null},200);
       }catch(error){
         const status=Number(error?.statusCode)||500;
         json(res,{error:String(error?.message||'telegram_webhook_failed'),telegramDescription:String(error?.telegramDescription||''),detail:String(error?.cause?.message||error?.cause||'')},status);
