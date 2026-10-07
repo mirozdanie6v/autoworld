@@ -240,3 +240,41 @@ test('Telegram notification planning uses pinned admin identities as manager rou
   assert.match(server,/prepareNotifications:notifyTelegram\?collectTelegramStateChanges:null/);
   assert.match(server,/const healthState=enrichStateWithAdminPins/);
 });
+
+
+test('bot command replies use the authenticated relay when configured',async()=>{
+  const sent=[];
+  const fetchImpl=async(url,options)=>{
+    sent.push({url,headers:options.headers,body:JSON.parse(options.body)});
+    if(String(url)==='https://relay.example/telegram/send'){
+      return{ok:true,status:200,async json(){return{ok:true,messageId:321}}};
+    }
+    throw new Error('unexpected_direct_telegram_call');
+  };
+  const service=createTelegramService({
+    token:TOKEN,
+    fetchImpl,
+    relayUrl:'https://relay.example/telegram/send',
+    relaySecret:'relay-secret',
+    now:()=>1700000000000
+  });
+  const result=await service.handleWebhookUpdate({
+    update_id:100,
+    message:{chat:{id:700},from:{id:700,first_name:'Анна'},text:'/start'}
+  },{appUrl:'https://awgcars.ru/',webhookReply:false});
+  assert.equal(result.ok,true);
+  assert.equal(result.messageId,321);
+  assert.equal(sent.length,1);
+  assert.equal(sent[0].url,'https://relay.example/telegram/send');
+  assert.equal(sent[0].body.chatId,'700');
+  assert.match(sent[0].body.text,/Здравствуйте, Анна/);
+  assert.equal(sent[0].body.replyMarkup.inline_keyboard[0][0].web_app.url,'https://awgcars.ru/');
+  assert.ok(sent[0].headers['x-relay-signature']);
+});
+
+test('production webhook no longer relies on Telegram response-body sendMessage',async()=>{
+  const server=await readFile(new URL('../server/yandex-server.mjs',import.meta.url),'utf8');
+  assert.match(server,/handleWebhookUpdate\(input,\{appUrl:[\s\S]*webhookReply:false\}\)/);
+  const webhookBlock=server.slice(server.indexOf("if(req.method==='POST'&&telegram.isWebhookPath"),server.indexOf("if(url.pathname==='/api/auto-sale/telegram/message'"));
+  assert.doesNotMatch(webhookBlock,/\{method:result\.webhookMethod/);
+});
