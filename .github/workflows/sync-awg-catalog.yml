@@ -11,6 +11,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 concurrency:
   group: awg-catalog-sync
@@ -40,11 +41,22 @@ jobs:
       - name: Install scraper dependencies
         run: python -m pip install --disable-pip-version-check requests beautifulsoup4
 
-      - name: Validate catalog credential
+      - name: Request canonical catalog OIDC token
+        uses: actions/github-script@v7
+        id: oidc
+        with:
+          script: |
+            const token = await core.getIDToken('autoworld-catalog-import')
+            core.setSecret(token)
+            core.setOutput('token', token)
+
+      - name: Export catalog OIDC token
         env:
-          AUTO_SALE_CATALOG_IMPORT_KEY: ${{ secrets.AWG_RELAY_SECRET }}
+          CATALOG_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
         run: |
-          test -n "$AUTO_SALE_CATALOG_IMPORT_KEY" || { echo "Missing secret AWG_RELAY_SECRET"; exit 1; }
+          test -n "$CATALOG_OIDC_TOKEN"
+          echo "::add-mask::$CATALOG_OIDC_TOKEN"
+          echo "AUTO_SALE_CATALOG_IMPORT_BEARER=$CATALOG_OIDC_TOKEN" >> "$GITHUB_ENV"
 
       - name: Seed current production media index
         run: |
@@ -64,7 +76,6 @@ jobs:
           UPLOAD_MISSING_PHOTOS: 'true'
           MERGE_EXISTING: 'false'
           AUTO_SALE_MEDIA_API: https://awgcars.ru/api/auto-sale/media
-          AUTO_SALE_CATALOG_IMPORT_KEY: ${{ secrets.AWG_RELAY_SECRET }}
         run: python scripts/scrape-autoworld-georgia.py
 
       - name: Normalize recent posts
@@ -77,7 +88,6 @@ jobs:
 
       - name: Upsert recent catalog entities
         env:
-          AUTO_SALE_CATALOG_IMPORT_KEY: ${{ secrets.AWG_RELAY_SECRET }}
           AUTO_SALE_CATALOG_IMPORT_URL: https://awgcars.ru/api/auto-sale/admin/catalog-import
           SOURCE_PATH: /tmp/awg-catalog-import.json
           REPLACE_SOURCE_ALL: 'false'
