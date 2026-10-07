@@ -52,8 +52,8 @@ env:
   AUTO_SALE_YDB_READ_MODE: normalized
   AUTO_SALE_ADMIN_TELEGRAM_USERNAMES: Flyer_Flyer,smit44744,Ivan_AWG
   AUTO_SALE_VK_ENABLED: ${{ github.event_name == 'workflow_dispatch' && inputs.vk_enable == true && 'true' || 'false' }}
-  AUTO_SALE_VK_APP_ID: ${{ vars.AWG_VK_APP_ID || '' }}
-  AUTO_SALE_VK_GROUP_ID: ${{ vars.AWG_VK_GROUP_ID || '' }}
+  AUTO_SALE_VK_APP_ID: ${{ vars.AWG_VK_APP_ID || '54810434' }}
+  AUTO_SALE_VK_GROUP_ID: ${{ vars.AWG_VK_GROUP_ID || '242103542' }}
   AUTO_SALE_VK_APP_SECRET: ${{ secrets.AWG_VK_APP_SECRET }}
   AUTO_SALE_VK_COMMUNITY_TOKEN: ${{ secrets.AWG_VK_COMMUNITY_TOKEN }}
 
