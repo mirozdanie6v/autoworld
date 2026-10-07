@@ -3,4 +3,4 @@ date: 2026-10-08
 repository: mirozdanie6v/autoworld
 branch: main
 purpose: verify Yandex workload identity trust before production release
-probe after Yandex federation link 2026-10-08
+probe after federation link with claim diagnostics 2026-10-08
