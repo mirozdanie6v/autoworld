@@ -1,5 +1,5 @@
 AWG production release
-requested_at=2026-10-08T04:49:00+07:00
-source_sha=85ad48cdf92e59e3b37e0ce34fc8128cc7adb615
-reason=stage-vii-145-vk-shell-init-with-vk-forced-off
+requested_at=2026-10-08T05:08:00+07:00
+source_sha=e452750d74be735f6df46cb13de442a810b09017
+reason=stage-vii-145-local-vk-bridge-with-vk-forced-off
 run_real_client_e2e=false
