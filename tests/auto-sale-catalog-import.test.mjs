@@ -55,3 +55,24 @@ test('catalog scraper skips media upload for invalid VIN posts',async()=>{
   assert.ok(scraper.includes('skip_media_invalid_or_missing_vin'));
   assert.ok(scraper.includes('if not str(car.get("vin")'));
 });
+
+
+test('catalog automation is canonical and RU-only',async()=>{
+  const workflow=await root('.github/workflows/sync-awg-catalog.yml');
+  const scraper=await root('scripts/scrape-autoworld-georgia.py');
+  const sync=await root('scripts/sync-autoworld-catalog.mjs');
+  const normalizer=await root('scripts/import-autoworld-catalog.mjs');
+  assert.ok(workflow.includes("cron: '17 * * * *'"));
+  assert.ok(workflow.includes('https://awgcars.ru'));
+  assert.ok(workflow.includes('secrets.AWG_RELAY_SECRET'));
+  assert.ok(workflow.includes('MAX_PAGES: \'20\''));
+  assert.ok(sync.includes("https://awgcars.ru/api/auto-sale/admin/catalog-import"));
+  assert.ok(sync.includes('AbortSignal.timeout'));
+  assert.ok(sync.includes('attempt<=5'));
+  assert.ok(scraper.includes('https://awgcars.ru/api/auto-sale/media'));
+  assert.ok(normalizer.includes('https://awgcars.ru/api/auto-sale/state'));
+  for(const text of [workflow,scraper,sync,normalizer]){
+    assert.ok(!text.includes('awg.viiversion.com'));
+    assert.ok(!text.includes('auto-sale-demo.viiversion.com'));
+  }
+});
