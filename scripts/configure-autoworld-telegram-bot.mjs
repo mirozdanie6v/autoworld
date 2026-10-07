@@ -14,7 +14,7 @@ const api=async(method,payload={},options={})=>{
   for(let attempt=1;attempt<=3;attempt++){
     const response=await fetch(`https://api.telegram.org/bot${token}/${method}`,{
       method:'POST',
-      headers:{'content-type':'application/json','x-telegram-bot-api-secret-token':webhookSecretToken},
+      headers:{'content-type':'application/json'},
       body:JSON.stringify(payload)
     });
     const data=await response.json().catch(()=>({}));
