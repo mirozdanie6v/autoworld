@@ -286,6 +286,10 @@ const server=http.createServer(async(req,res)=>{
     if(req.method==='OPTIONS'&&url.pathname.startsWith('/api/')){
       res.writeHead(204,apiHeaders);res.end();return;
     }
+    if(url.pathname==='/api/auto-sale/vk/config'&&req.method==='GET'){
+      json(res,{enabled:Boolean(vk.enabled),messagingEnabled:Boolean(vk.messagingEnabled),groupId:vk.enabled?(vk.groupId||''):''});
+      return;
+    }
     if(url.pathname==='/api/health'){
       const liveStore=await getStore();
       await liveStore.ping();
@@ -294,7 +298,7 @@ const server=http.createServer(async(req,res)=>{
       const activeManagers=(Array.isArray(healthState?.team)?healthState.team:[]).filter(item=>item?.active!==false&&String(item?.role||'').trim()==='Менеджер');
       const routableManagerIds=new Set(activeManagers.flatMap(member=>telegram.managerIds({manager:String(member?.name||'').trim()},healthState)));
       const routableManagers=routableManagerIds.size;
-      json(res,{ok:true,service:'auto-sale-yandex',persistence:'ydb-serverless',schemaVersion:6,writeMode:'telegram-rbac',stateReadMode:'viewer-filtered',publicDemoWrite:Boolean(publicDemoWrite),maxAdminAccounts:MAX_ADMIN_ACCOUNTS,adminInvites:adminTelegramUsernames.length,linkedAdminAccounts:pins.length,legacyStateWrite:legacyStateWriteEnabled?'rollback-only':'retired',normalizedAuthoritative:ydbReadMode==='normalized'&&!legacyStateWriteEnabled,ydbDomainDualWrite:liveStore.domainDualWriteEnabled?'enabled':'disabled',ydbStateReadMode:ydbReadMode,mediaStorage:mediaBucket?'object-storage':'disabled',mediaBucket:mediaBucket||null,telegramNotifications:telegram.enabled?'enabled':'disabled',telegramFallbackManagers:telegram.fallbackManagerCount,telegramRoutableManagers:routableManagers,telegramRoutingReady:Boolean(telegram.enabled&&routableManagers>0),catalogImport:(catalogImportKey?'secret+github-oidc':'github-oidc'),buildSha:String(process.env.AUTO_SALE_BUILD_SHA||'')});
+      json(res,{ok:true,service:'auto-sale-yandex',persistence:'ydb-serverless',schemaVersion:6,writeMode:'telegram-rbac',stateReadMode:'viewer-filtered',publicDemoWrite:Boolean(publicDemoWrite),maxAdminAccounts:MAX_ADMIN_ACCOUNTS,adminInvites:adminTelegramUsernames.length,linkedAdminAccounts:pins.length,legacyStateWrite:legacyStateWriteEnabled?'rollback-only':'retired',normalizedAuthoritative:ydbReadMode==='normalized'&&!legacyStateWriteEnabled,ydbDomainDualWrite:liveStore.domainDualWriteEnabled?'enabled':'disabled',ydbStateReadMode:ydbReadMode,mediaStorage:mediaBucket?'object-storage':'disabled',mediaBucket:mediaBucket||null,telegramNotifications:telegram.enabled?'enabled':'disabled',vkAuth:vk.enabled?'enabled':'disabled',vkMessaging:vk.messagingEnabled?'enabled':'disabled',telegramFallbackManagers:telegram.fallbackManagerCount,telegramRoutableManagers:routableManagers,telegramRoutingReady:Boolean(telegram.enabled&&routableManagers>0),catalogImport:(catalogImportKey?'secret+github-oidc':'github-oidc'),buildSha:String(process.env.AUTO_SALE_BUILD_SHA||'')});
       return;
     }
     if(url.pathname==='/api/auto-sale/admin/read-parity'&&req.method==='GET'){
