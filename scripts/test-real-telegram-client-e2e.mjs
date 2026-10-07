@@ -191,7 +191,7 @@ try{
   const ids=createdResult.data?.notifications?.ids||[];
   const deliveries=await waitDeliveries(ids);
   report.notifications=deliveries.map(item=>({
-    id:item.id,target:item.target,event:item.event,messageId:item.messageId,status:item.status
+    target:item.target,event:item.event,messageId:item.messageId,status:item.status
   }));
   assert.ok(deliveries.some(item=>item.target==='client'&&item.event==='lead_created_confirmation'&&item.messageId),'client confirmation not delivered');
   assert.ok(deliveries.some(item=>item.target==='manager'&&item.event==='lead_created'&&item.messageId),'manager notification not delivered');
