@@ -221,9 +221,12 @@ async function batch(label,expected,operations){
 }
 
 const initial=await state();
-const manager=(initial.team||[]).find(x=>x.active!==false&&String(x.telegramUsername||x.telegram||'').replace(/^@/,'').toLowerCase()==='flyer_flyer'&&/^\d+$/.test(String(x.telegramUserId||'')));
-assert.ok(manager,'Flyer_Flyer manager Telegram must be linked');
-const telegramUserId=String(manager.telegramUserId),suffix=Date.now().toString(36).toUpperCase();
+const auditManagerTelegramId=String(process.env.AUDIT_MANAGER_TELEGRAM_ID||'').trim();
+const manager=(initial.team||[]).find(x=>x.active!==false&&String(x.telegramUsername||x.telegram||'').replace(/^@/,'').toLowerCase()==='flyer_flyer');
+assert.ok(manager,'Flyer_Flyer manager must exist in production team');
+const telegramUserId=/^\d+$/.test(String(manager.telegramUserId||''))?String(manager.telegramUserId):auditManagerTelegramId;
+assert.match(telegramUserId,/^\d+$/,'Flyer_Flyer manager Telegram must be linked');
+const suffix=Date.now().toString(36).toUpperCase();
 const leadId='L-QA-'+suffix,quoteId='Q-QA-'+suffix,orderId='O-QA-'+suffix;
 const today=new Date().toISOString().slice(0,10),future=new Date(Date.now()+30*86400000).toISOString().slice(0,10);
 const model='ТЕСТ · BMW X5 · '+suffix;
@@ -252,7 +255,7 @@ const payment=i=>({
   paymentStage:plan[i].id,
   note:'ТЕСТ, деньги не переводились'
 });
-const report={leadId,quoteId,orderId,telegram:'@Flyer_Flyer',writePath:'entity-batch',receipts,cleanup:null};
+const report={leadId,quoteId,orderId,telegram:'@Flyer_Flyer',writePath:'entity-batch',logicalRoles:['client','manager'],physicalRecipients:1,receipts,cleanup:null};
 let scenarioStarted=false;
 let cleanupFailure=null;
 
