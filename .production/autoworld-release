@@ -1,5 +1,5 @@
 AWG production release
-requested_at=2026-10-08T06:25:00+07:00
-source_sha=6c6b886d667659f9938a08fe0191c51e2decb7e7
-reason=retry-vii-145-safe-vk-shell-with-hardened-yandex-transports-vk-forced-off
+requested_at=2026-10-08T06:35:00+07:00
+source_sha=97e9456247385c31d17d303d22b09249c51e4a2d
+reason=retry-vii-145-safe-vk-shell-with-official-yc-archive-fallback-vk-forced-off
 run_real_client_e2e=false
