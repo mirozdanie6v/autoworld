@@ -14,7 +14,7 @@ const api=async(method,payload={},options={})=>{
   for(let attempt=1;attempt<=3;attempt++){
     const response=await fetch(`https://api.telegram.org/bot${token}/${method}`,{
       method:'POST',
-      headers:{'content-type':'application/json'},
+      headers:{'content-type':'application/json','x-telegram-bot-api-secret-token':webhookSecretToken},
       body:JSON.stringify(payload)
     });
     const data=await response.json().catch(()=>({}));
@@ -55,6 +55,7 @@ await api('setChatMenuButton',{menu_button:{
 }},{skipLongRateLimit:true});
 
 const webhookKey=createHmac('sha256',token).update('auto-sale-telegram-webhook-v2').digest('hex').slice(0,32);
+const webhookSecretToken=createHmac('sha256',token).update('auto-sale-telegram-webhook-secret-v1').digest('hex');
 const webhookPath=`/api/auto-sale/telegram/webhook/${webhookKey}`;
 const webhookUrl=explicitWebhookUrl
   ?new URL(explicitWebhookUrl).toString()
@@ -63,6 +64,7 @@ await api('deleteWebhook',{drop_pending_updates:false});
 const webhookConfiguredAt=Math.floor(Date.now()/1000);
 await api('setWebhook',{
   url:webhookUrl,
+  secret_token:webhookSecretToken,
   allowed_updates:['message'],
   drop_pending_updates:false
 });
@@ -75,7 +77,7 @@ for(let attempt=1;attempt<=18;attempt++){
   try{
     webhookProbe=await fetch(webhookUrl,{
       method:'POST',
-      headers:{'content-type':'application/json'},
+      headers:{'content-type':'application/json','x-telegram-bot-api-secret-token':webhookSecretToken},
       body:JSON.stringify({update_id:-1}),
       signal:AbortSignal.timeout(10_000)
     });
@@ -93,7 +95,7 @@ if(!webhookProbe?.ok||webhookProbeBody?.ok!==true){
 
 const outboundProbe=await fetch(webhookUrl,{
   method:'POST',
-  headers:{'content-type':'application/json'},
+  headers:{'content-type':'application/json','x-telegram-bot-api-secret-token':webhookSecretToken},
   body:JSON.stringify({update_id:-2,message:{message_id:-2,chat:{id:me.id,type:'private'},from:{id:me.id,is_bot:true,first_name:'probe'},text:'/help'}})
 });
 const outboundProbeBody=await outboundProbe.json().catch(()=>({}));
