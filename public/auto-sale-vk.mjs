@@ -19,10 +19,8 @@ async function loadBridge(){
   if(bridgePromise)return bridgePromise;
   bridgePromise=new Promise((resolve,reject)=>{
     const script=document.createElement('script');
-    script.src='https://unpkg.com/@vkontakte/vk-bridge@3.0.2/dist/browser.min.js';
+    script.src='/vendor/vk-bridge-3.0.2.min.js';
     script.async=true;
-    script.crossOrigin='anonymous';
-    script.referrerPolicy='no-referrer';
     script.onload=()=>window.vkBridge?resolve(window.vkBridge):reject(new Error('vk_bridge_global_missing'));
     script.onerror=()=>reject(new Error('vk_bridge_load_failed'));
     document.head.appendChild(script);
