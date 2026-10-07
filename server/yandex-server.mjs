@@ -12,6 +12,7 @@ import {createTelegramService} from './telegram-bot.mjs';
 import {addAutoSaleNote,addAutoSalePayment,deleteAutoSaleLeadCascade,mutateAutoSaleEntity,mutateAutoSaleEntityBatch,readAutoSaleEntity} from './ydb-entity-commands.mjs';
 import {MAX_ADMIN_ACCOUNTS,stateForAccess,rowVersionsForAccess,sanitizeClientOperations,sanitizeAdminOperations} from './auto-sale-access.mjs';
 import {managerTelegramUsername} from '../shared/auto-sale-manager-directory.mjs';
+import {verifyGitHubCatalogOidcToken} from './github-oidc-auth.mjs';
 
 const rootDir=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const distDir=path.join(rootDir,'dist');
@@ -153,7 +154,7 @@ const apiHeaders={
   'content-type':'application/json; charset=utf-8',
   'cache-control':'no-store',
   'access-control-allow-origin':'*',
-  'access-control-allow-headers':'content-type,x-auto-sale-key,x-auto-sale-catalog-import-key,x-telegram-init-data,x-auto-sale-skip-telegram',
+  'access-control-allow-headers':'content-type,authorization,x-auto-sale-key,x-auto-sale-catalog-import-key,x-telegram-init-data,x-auto-sale-skip-telegram',
   'access-control-allow-methods':'GET,PUT,POST,DELETE,OPTIONS'
 };
 const json=(res,data,status=200)=>{
@@ -168,6 +169,15 @@ const safeSecretMatch=(expectedValue,suppliedValue)=>{
 };
 const hasApiKey=req=>safeSecretMatch(apiKey,req.headers['x-auto-sale-key']);
 const hasCatalogImportKey=req=>safeSecretMatch(catalogImportKey,req.headers['x-auto-sale-catalog-import-key']);
+const hasCatalogImportAuth=async req=>{
+  if(hasCatalogImportKey(req))return true;
+  const raw=String(req.headers.authorization||'').trim();
+  const match=raw.match(/^Bearer\s+(.+)$/i);
+  if(!match)return false;
+  const result=await verifyGitHubCatalogOidcToken(match[1]);
+  if(!result.ok)console.warn('AUTO SALE catalog GitHub OIDC rejected',result.error);
+  return result.ok;
+};
 const stableJson=value=>JSON.stringify(value,(_,entry)=>{
   if(!entry||Array.isArray(entry)||typeof entry!=='object')return entry;
   return Object.fromEntries(Object.keys(entry).sort().map(key=>[key,entry[key]]));
@@ -262,7 +272,7 @@ const server=http.createServer(async(req,res)=>{
       const activeManagers=(Array.isArray(healthState?.team)?healthState.team:[]).filter(item=>item?.active!==false&&String(item?.role||'').trim()==='Менеджер');
       const routableManagerIds=new Set(activeManagers.flatMap(member=>telegram.managerIds({manager:String(member?.name||'').trim()},healthState)));
       const routableManagers=routableManagerIds.size;
-      json(res,{ok:true,service:'auto-sale-yandex',persistence:'ydb-serverless',schemaVersion:6,writeMode:'telegram-rbac',stateReadMode:'viewer-filtered',publicDemoWrite:Boolean(publicDemoWrite),maxAdminAccounts:MAX_ADMIN_ACCOUNTS,adminInvites:adminTelegramUsernames.length,linkedAdminAccounts:pins.length,legacyStateWrite:legacyStateWriteEnabled?'rollback-only':'retired',normalizedAuthoritative:ydbReadMode==='normalized'&&!legacyStateWriteEnabled,ydbDomainDualWrite:liveStore.domainDualWriteEnabled?'enabled':'disabled',ydbStateReadMode:ydbReadMode,mediaStorage:mediaBucket?'object-storage':'disabled',mediaBucket:mediaBucket||null,telegramNotifications:telegram.enabled?'enabled':'disabled',telegramFallbackManagers:telegram.fallbackManagerCount,telegramRoutableManagers:routableManagers,telegramRoutingReady:Boolean(telegram.enabled&&routableManagers>0),catalogImport:catalogImportKey?'enabled':'disabled'});
+      json(res,{ok:true,service:'auto-sale-yandex',persistence:'ydb-serverless',schemaVersion:6,writeMode:'telegram-rbac',stateReadMode:'viewer-filtered',publicDemoWrite:Boolean(publicDemoWrite),maxAdminAccounts:MAX_ADMIN_ACCOUNTS,adminInvites:adminTelegramUsernames.length,linkedAdminAccounts:pins.length,legacyStateWrite:legacyStateWriteEnabled?'rollback-only':'retired',normalizedAuthoritative:ydbReadMode==='normalized'&&!legacyStateWriteEnabled,ydbDomainDualWrite:liveStore.domainDualWriteEnabled?'enabled':'disabled',ydbStateReadMode:ydbReadMode,mediaStorage:mediaBucket?'object-storage':'disabled',mediaBucket:mediaBucket||null,telegramNotifications:telegram.enabled?'enabled':'disabled',telegramFallbackManagers:telegram.fallbackManagerCount,telegramRoutableManagers:routableManagers,telegramRoutingReady:Boolean(telegram.enabled&&routableManagers>0),catalogImport:(catalogImportKey?'secret+github-oidc':'github-oidc')});
       return;
     }
     if(url.pathname==='/api/auto-sale/admin/read-parity'&&req.method==='GET'){
@@ -278,7 +288,7 @@ const server=http.createServer(async(req,res)=>{
       return;
     }
     if(url.pathname==='/api/auto-sale/admin/catalog-import'&&req.method==='POST'){
-      if(!hasCatalogImportKey(req)){json(res,{error:'catalog_import_unauthorized'},401);return}
+      if(!await hasCatalogImportAuth(req)){json(res,{error:'catalog_import_unauthorized'},401);return}
       const input=await parseJson(req,8_000_000);
       const sourceName=String(input?.source||'AutoWorld_Georgia').trim();
       if(sourceName!=='AutoWorld_Georgia'){json(res,{error:'unsupported_catalog_source'},400);return}
@@ -822,7 +832,7 @@ const server=http.createServer(async(req,res)=>{
     }
     if(url.pathname==='/api/auto-sale/media'&&req.method==='POST'){
       const {access}=await requestAccess(req);
-      if(access.role!=='admin'&&!hasCatalogImportKey(req)){json(res,{error:'admin_required'},403);return}
+      if(access.role!=='admin'&&!await hasCatalogImportAuth(req)){json(res,{error:'admin_required'},403);return}
       if(!mediaBucket){json(res,{error:'media_storage_not_configured'},503);return}
       const input=await parseJson(req,3_000_000);
       if(!input||typeof input!=='object'){json(res,{error:'invalid_json'},400);return}
