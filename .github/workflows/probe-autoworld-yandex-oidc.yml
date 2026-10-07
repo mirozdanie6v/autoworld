@@ -29,6 +29,18 @@ jobs:
             core.setSecret(token)
             core.setOutput('token', token)
 
+      - name: Report non-secret OIDC claims
+        env:
+          GITHUB_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        run: |
+          node <<'NODE'
+          const token = process.env.GITHUB_OIDC_TOKEN || ''
+          const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString('utf8'))
+          const keys = ['iss','aud','sub','repository','repository_id','repository_owner','repository_owner_id','ref','workflow_ref']
+          const safe = Object.fromEntries(keys.filter(k => payload[k] !== undefined).map(k => [k, payload[k]]))
+          console.log(JSON.stringify(safe))
+          NODE
+
       - name: Verify Yandex workload identity trust
         env:
           GITHUB_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
