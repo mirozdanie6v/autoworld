@@ -88,8 +88,6 @@ export function sanitizeClientOperations(state,operations,user){
   const createdLeadIds=new Set();
   const leadById=new Map((state?.leads||[]).map(item=>[clean(item.id),item]));
   const quoteById=new Map((state?.quotes||[]).map(item=>[clean(item.id),item]));
-  const managers=staffMembers(state).filter(item=>clean(item.role)==='Менеджер');
-  const defaultManager=clean(managers[0]?.name);
   const out=[];
 
   for(const raw of source){
@@ -102,7 +100,7 @@ export function sanitizeClientOperations(state,operations,user){
       operation.input={
         ...allowedLeadPatch(input),
         id,
-        source:'Mini App',manager:defaultManager,status:'Новый',priority:'Средний',
+        source:'Mini App',manager:'',status:'Новый',priority:'Средний',
         createdAt:input.createdAt||new Date().toISOString(),nextAction:input.nextAction||new Date().toISOString().slice(0,10),
         deposit:0,depositDate:'',paymentMethod:'',
         ...clientIdentityPatch(user)
@@ -136,6 +134,74 @@ export function sanitizeClientOperations(state,operations,user){
       out.push(operation);continue;
     }
     return{ok:false,status:403,error:'client_entity_forbidden'};
+  }
+  return{ok:true,operations:out};
+}
+
+function managerActor(state,access){
+  if(access?.role!=='admin'||access?.apiKey)return null;
+  const userId=telegramId(access?.user?.id);
+  const userName=username(access?.user?.username||access?.admin?.username);
+  return staffMembers(state).find(item=>{
+    if(clean(item?.role)!=='Менеджер')return false;
+    const memberId=telegramId(item?.telegramUserId);
+    const memberUsername=username(item?.telegramUsername||item?.telegram);
+    return Boolean((userId&&memberId===userId)||(userName&&memberUsername===userName));
+  })||null;
+}
+
+export function applyManagerLeadClaims(state,operations,access,{now=()=>new Date().toISOString()}={}){
+  const source=Array.isArray(operations)?operations:[];
+  if(access?.apiKey)return{ok:true,operations:source};
+  const actor=managerActor(state,access);
+  const actorName=clean(actor?.name);
+  const actorTelegramId=telegramId(access?.user?.id);
+  const actorTelegramUsername=username(access?.user?.username||access?.admin?.username||actor?.telegramUsername||actor?.telegram);
+  const leads=new Map((Array.isArray(state?.leads)?state.leads:[]).map(item=>[clean(item.id),{...item}]));
+  const out=[];
+
+  for(const raw of source){
+    const operation={...raw,input:raw?.input&&typeof raw.input==='object'?{...raw.input}:raw?.input};
+    if(clean(operation.resource)!=='lead'||clean(operation.operation)!=='patch'){
+      out.push(operation);continue;
+    }
+    const id=clean(operation.id||operation.input?.id);
+    const current=leads.get(id);
+    if(!current){out.push(operation);continue}
+    const input=operation.input&&typeof operation.input==='object'?{...operation.input}:{};
+    const assignedManager=clean(current.manager);
+    const isFirstTouchClaim=Boolean(clean(current.managerClaimedAt));
+    const hasStatus=Object.prototype.hasOwnProperty.call(input,'status');
+    const statusChanged=hasStatus&&clean(input.status)!==clean(current.status);
+
+    if(isFirstTouchClaim&&assignedManager){
+      if(!actorName||actorName!==assignedManager){
+        return{ok:false,status:409,error:'lead_claimed_by_other_manager',id,assignedManager};
+      }
+      const requestedManager=clean(input.manager);
+      if(requestedManager&&requestedManager!==assignedManager){
+        return{ok:false,status:409,error:'lead_reassignment_requires_api_key',id,assignedManager};
+      }
+      input.manager=assignedManager;
+    }else if(!assignedManager){
+      if(statusChanged){
+        if(!actorName){
+          return{ok:false,status:403,error:'manager_identity_required',id};
+        }
+        input.manager=actorName;
+        input.managerClaimedAt=clean(input.managerClaimedAt)||now();
+        input.managerClaimedByTelegramUserId=actorTelegramId;
+        input.managerClaimedByTelegramUsername=actorTelegramUsername;
+        if(actorTelegramId)input.managerTelegramUserId=actorTelegramId;
+        if(actorTelegramUsername)input.managerTelegramUsername=actorTelegramUsername;
+      }else{
+        for(const key of ['manager','managerClaimedAt','managerClaimedByTelegramUserId','managerClaimedByTelegramUsername','managerTelegramUserId','managerTelegramUsername'])delete input[key];
+      }
+    }
+
+    operation.input=input;
+    leads.set(id,{...current,...input,id});
+    out.push(operation);
   }
   return{ok:true,operations:out};
 }
