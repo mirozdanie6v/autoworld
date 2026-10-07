@@ -229,12 +229,12 @@ export async function createYdbStateStore({connectionString,credentialsProvider=
       return rows.map(row=>{let payload={};try{payload=JSON.parse(String(row.payload||'{}'))}catch{}return{...payload,id:String(row.id),status:String(row.status),attempts:Number(row.attempts||0n)}});
     });
   }
-  async function markNotification(id,{ok,messageId='',error='',attempts=0}={}){
+  async function markNotification(id,{ok,messageId='',error='',attempts=0,permanent=false}={}){
     const now=new Date(),current=Number(attempts)||0,nextAttempts=current+1,maxAttempts=8;
     const delay=Math.min(3600,Math.max(5,5*(2**Math.min(current,8))));
     const next=new Date(now.getTime()+delay*1000).toISOString();
-    const status=ok?'sent':(nextAttempts>=maxAttempts?'dead':'retry');
-    await sql`UPDATE auto_sale_notification_outbox SET status=${status}, attempts=${new Uint64(BigInt(nextAttempts))}, next_attempt_at=${ok?now.toISOString():next}, updated_at=${now.toISOString()}, last_error=${String(error||'')}, message_id=${String(messageId||'')} WHERE id=${String(id)}`;
+    const status=ok?'sent':(permanent||nextAttempts>=maxAttempts?'dead':'retry');
+    await sql`UPDATE auto_sale_notification_outbox SET status=${status}, attempts=${new Uint64(BigInt(nextAttempts))}, next_attempt_at=${ok||permanent?now.toISOString():next}, updated_at=${now.toISOString()}, last_error=${String(error||'')}, message_id=${String(messageId||'')} WHERE id=${String(id)}`;
   }
   async function notificationStats(){
     const [rows]=await readQuery(()=>sql`SELECT status, COUNT(*) AS count FROM auto_sale_notification_outbox GROUP BY status`,'notification-stats');
