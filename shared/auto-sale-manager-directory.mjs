@@ -39,3 +39,12 @@ export function managerTelegramIdentity(name,team=[]){
     name:directory.name
   };
 }
+
+
+export function canonicalAutoSaleTeam(){
+  return[
+    {id:'TM-DMITRY',name:'Дмитрий',role:'Менеджер',telegramUsername:'Flyer_Flyer',telegram:'@Flyer_Flyer',active:true,planDeals:4,note:''},
+    {id:'TM-ALEXEY',name:'Алексей',role:'Менеджер',telegramUsername:'smit44744',telegram:'@smit44744',active:true,planDeals:4,note:''},
+    {id:'TM-IVAN',name:'Иван',role:'Менеджер',telegramUsername:'Ivan_AWG',telegram:'@Ivan_AWG',active:true,planDeals:4,note:''}
+  ].map(member=>({...member}));
+}
