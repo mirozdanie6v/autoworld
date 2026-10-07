@@ -18,8 +18,8 @@ test('production Telegram workflows share one bot secret and configurable primar
   assert.doesNotMatch(relay,/secrets\.AUTO_SALE_TELEGRAM_BOT_TOKEN/);
   assert.match(relay,/secrets\.AWG_RELAY_SECRET/);
   assert.match(relay,/wrangler secret put AUTOWORLD_RELAY_SECRET/);
-  assert.match(deploy,/npx wrangler deploy --config wrangler\.toml/);
-  assert.ok(deploy.indexOf('npx wrangler deploy --config wrangler.toml') < deploy.indexOf('wrangler secret put TELEGRAM_BOT_TOKEN'));
+  assert.doesNotMatch(deploy,/npx wrangler deploy --config wrangler\.toml/);
+  assert.match(deploy,/AUTO_SALE_TELEGRAM_RELAY_URL: https:\/\/integration-telegram\.viiversion\.com\/telegram\/send/);
   assert.match(configure,/AUTO_SALE_TELEGRAM_WEBHOOK_BASE_URL: https:\/\/awgcars\.ru\//);
   assert.match(deploy,/telegramNotifications == "enabled"/);
   assert.match(deploy,/telegramRoutingReady/);
@@ -59,15 +59,14 @@ test('production Telegram cutover waits for the exact deployed source SHA',async
 });
 
 
-test('Telegram webhook ingress uses authenticated relay endpoint',async()=>{
+test('Telegram webhook ingress goes directly to the ready Yandex API Gateway',async()=>{
   const deploy=await readFile(new URL('../.github/workflows/deploy-awg-production.yml',import.meta.url),'utf8');
   const configure=await readFile(new URL('../scripts/configure-autoworld-telegram-bot.mjs',import.meta.url),'utf8');
-  const relay=await readFile(new URL('../cloudflare/telegram-relay/src/index.js',import.meta.url),'utf8');
-  assert.match(deploy,/AUTO_SALE_TELEGRAM_WEBHOOK_URL: https:\/\/viiversion-telegram-relay\.mirozdanie6v\.workers\.dev\/telegram\/webhook/);
+  assert.match(deploy,/AUTO_SALE_TELEGRAM_WEBHOOK_BASE_URL=https:\/\/\$GW_DOMAIN\//);
+  assert.doesNotMatch(deploy,/AUTO_SALE_TELEGRAM_WEBHOOK_URL:/);
   assert.match(configure,/secret_token:webhookSecretToken/);
   assert.match(configure,/x-telegram-bot-api-secret-token/);
-  assert.match(relay,/invalid_telegram_webhook_secret/);
-  assert.match(relay,/AUTOWORLD_YANDEX_WEBHOOK_URL/);
+  assert.match(configure,/new URL\(webhookPath,webhookBaseUrl/);
 });
 
 
