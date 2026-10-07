@@ -34,3 +34,15 @@ test('Yandex runtime image contains shared manager directory used by server',asy
   assert.doesNotMatch(server,/\.\.\/public\/auto-sale-manager-directory\.mjs/);
   assert.match(build,/shared[^\n]+auto-sale-manager-directory\.mjs/);
 });
+
+
+test('production deploy seeds canonical managers before runtime deployment',async()=>{
+  const deploy=await readFile(new URL('../.github/workflows/deploy-awg-production.yml',import.meta.url),'utf8');
+  const pkg=JSON.parse(await readFile(new URL('../package.json',import.meta.url),'utf8'));
+  const script=await readFile(new URL('../scripts/ensure-auto-sale-production-team.mjs',import.meta.url),'utf8');
+  assert.equal(pkg.scripts['ensure:production-team'],'node scripts/ensure-auto-sale-production-team.mjs');
+  assert.match(deploy,/npm run ensure:production-team/);
+  assert.match(script,/canonicalAutoSaleTeam/);
+  assert.match(script,/current\.length/);
+  assert.match(script,/mutateAutoSaleEntityBatch/);
+});
