@@ -3,7 +3,25 @@ export const MAX_ADMIN_ACCOUNTS=3;
 
 const clean=value=>String(value??'').trim();
 const telegramId=value=>/^\d+$/.test(clean(value))?clean(value):'';
+const providerId=value=>/^\d+$/.test(clean(value))?clean(value):'';
+const providerName=value=>['telegram','vk'].includes(clean(value).toLowerCase())?clean(value).toLowerCase():'';
 const username=value=>clean(value).replace(/^@/,'').toLowerCase();
+const identityFrom=(value,fallbackProvider='telegram')=>{
+  if(value&&typeof value==='object'){
+    const provider=providerName(value.provider||value.authType||fallbackProvider);
+    const id=providerId(value.id||value.userId||value.providerUserId);
+    return provider&&id?{provider,id,key:`${provider}:${id}`}:null;
+  }
+  const id=providerId(value);
+  return id?{provider:'telegram',id,key:`telegram:${id}`}:null;
+};
+const leadIdentity=lead=>{
+  const provider=providerName(lead?.clientProvider);
+  const id=providerId(lead?.clientProviderUserId);
+  if(provider&&id)return{provider,id,key:`${provider}:${id}`};
+  const legacy=telegramId(lead?.telegramUserId);
+  return legacy?{provider:'telegram',id:legacy,key:`telegram:${legacy}`}:null;
+};
 
 export function staffMembers(state){
   return (Array.isArray(state?.team)?state.team:[]).filter(item=>item&&item.active!==false&&STAFF_ROLES.has(clean(item.role)));
@@ -24,9 +42,10 @@ export function publicState(state){
   };
 }
 
-export function clientState(state,userId){
-  const id=telegramId(userId);
-  const leads=(Array.isArray(state?.leads)?state.leads:[]).filter(item=>telegramId(item?.telegramUserId)===id);
+export function clientState(state,userIdentity){
+  const identity=identityFrom(userIdentity);
+  const key=identity?.key||'';
+  const leads=(Array.isArray(state?.leads)?state.leads:[]).filter(item=>leadIdentity(item)?.key===key);
   const leadIds=new Set(leads.map(item=>clean(item.id)));
   return{
     ...state,
@@ -41,7 +60,7 @@ export function clientState(state,userId){
 
 export function stateForAccess(state,access){
   if(access?.role==='admin')return state;
-  if(access?.role==='client')return clientState(state,access?.user?.id);
+  if(access?.role==='client')return clientState(state,access?.identity||{provider:access?.authType||'telegram',id:access?.user?.id});
   return publicState(state);
 }
 
@@ -67,24 +86,35 @@ function allowedLeadPatch(input={}){
   return Object.fromEntries(keys.filter(key=>Object.prototype.hasOwnProperty.call(input,key)).map(key=>[key,input[key]]));
 }
 
-function clientIdentityPatch(user){
+function clientIdentityPatch(user,identityInput=null){
+  const identity=identityFrom(identityInput||{provider:user?.provider||'telegram',id:user?.id});
   const uname=clean(user?.username).replace(/^@/,'');
-  return{
+  const now=new Date().toISOString();
+  const base={
     clientCreated:true,
-    telegramUserId:telegramId(user?.id),
+    clientProvider:identity?.provider||'',
+    clientProviderUserId:identity?.id||'',
+    clientIdentityKey:identity?.key||'',
+    clientDisplayName:[clean(user?.first_name),clean(user?.last_name)].filter(Boolean).join(' ')||uname||identity?.id||'',
+    clientLinkedAt:now
+  };
+  if(identity?.provider!=='telegram')return base;
+  return{
+    ...base,
+    telegramUserId:identity.id,
     telegramUsername:uname,
     telegramFirstName:clean(user?.first_name),
     telegramLastName:clean(user?.last_name),
-    telegramDisplayName:[clean(user?.first_name),clean(user?.last_name)].filter(Boolean).join(' ')||uname||telegramId(user?.id),
-    telegramLinkedAt:new Date().toISOString()
+    telegramDisplayName:base.clientDisplayName,
+    telegramLinkedAt:now
   };
 }
 
-export function sanitizeClientOperations(state,operations,user){
-  const userId=telegramId(user?.id);
-  if(!userId)return{ok:false,status:401,error:'telegram_auth_required'};
+export function sanitizeClientOperations(state,operations,user,identityInput=null){
+  const identity=identityFrom(identityInput||{provider:user?.provider||'telegram',id:user?.id});
+  if(!identity)return{ok:false,status:401,error:'telegram_auth_required'};
   const source=Array.isArray(operations)?operations:[];
-  const ownedLeadIds=new Set((state?.leads||[]).filter(item=>telegramId(item?.telegramUserId)===userId).map(item=>clean(item.id)));
+  const ownedLeadIds=new Set((state?.leads||[]).filter(item=>leadIdentity(item)?.key===identity.key).map(item=>clean(item.id)));
   const createdLeadIds=new Set();
   const leadById=new Map((state?.leads||[]).map(item=>[clean(item.id),item]));
   const quoteById=new Map((state?.quotes||[]).map(item=>[clean(item.id),item]));
@@ -103,7 +133,7 @@ export function sanitizeClientOperations(state,operations,user){
         source:'Mini App',manager:'',status:'Новый',priority:'Средний',
         createdAt:input.createdAt||new Date().toISOString(),nextAction:input.nextAction||new Date().toISOString().slice(0,10),
         deposit:0,depositDate:'',paymentMethod:'',
-        ...clientIdentityPatch(user)
+        ...clientIdentityPatch(user,identity)
       };
       createdLeadIds.add(id);ownedLeadIds.add(id);out.push(operation);continue;
     }
