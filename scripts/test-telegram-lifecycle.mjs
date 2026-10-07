@@ -111,7 +111,7 @@ async function delivered(notifications,expected,label,revision=0){
   }
   assert.equal(rows.filter(x=>x.target==='client').length,expected/2,label+' client');
   assert.equal(rows.filter(x=>x.target==='manager').length,expected/2,label+' manager');
-  receipts.push(...rows.map(x=>({...x,step:label})));
+  receipts.push(...rows.map(x=>({id:x.id,target:x.target,event:x.event,messageId:x.messageId,status:x.status,step:label})));
   console.log('TELEGRAM_STEP_OK',JSON.stringify({step:label,deliveries:rows.map(({target,event,messageId})=>({target,event,messageId}))}));
 }
 
