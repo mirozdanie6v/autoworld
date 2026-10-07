@@ -47,6 +47,11 @@ env:
   AUTO_SALE_LEGACY_STATE_WRITE: "false"
   AUTO_SALE_YDB_READ_MODE: normalized
   AUTO_SALE_ADMIN_TELEGRAM_USERNAMES: Flyer_Flyer,smit44744,Ivan_AWG
+  AUTO_SALE_VK_ENABLED: ${{ vars.AWG_VK_ENABLED || 'false' }}
+  AUTO_SALE_VK_APP_ID: ${{ vars.AWG_VK_APP_ID || '' }}
+  AUTO_SALE_VK_GROUP_ID: ${{ vars.AWG_VK_GROUP_ID || '' }}
+  AUTO_SALE_VK_APP_SECRET: ${{ secrets.AWG_VK_APP_SECRET }}
+  AUTO_SALE_VK_COMMUNITY_TOKEN: ${{ secrets.AWG_VK_COMMUNITY_TOKEN }}
 
 jobs:
   deploy:
@@ -70,6 +75,11 @@ jobs:
           done
           BOT_USERNAME=$(curl -fsS "https://api.telegram.org/bot${AUTO_SALE_TELEGRAM_BOT_TOKEN}/getMe" | jq -r '.result.username // empty')
           test "$BOT_USERNAME" = "AutoWorld_Georgia_bot" || { echo "Unexpected Telegram bot: @$BOT_USERNAME"; exit 1; }
+          if [[ "${AUTO_SALE_VK_ENABLED,,}" =~ ^(1|true|yes)$ ]]; then
+            for name in AUTO_SALE_VK_APP_ID AUTO_SALE_VK_GROUP_ID AUTO_SALE_VK_APP_SECRET AUTO_SALE_VK_COMMUNITY_TOKEN; do
+              test -n "${!name:-}" || { echo "VK enabled but missing production configuration: $name"; exit 1; }
+            done
+          fi
 
       - name: Validate application
         run: |
@@ -170,6 +180,15 @@ jobs:
           fi
           if [ -n "${AUTO_SALE_MANAGER_CHAT_IDS:-}" ]; then
             EXTRA_ENV+=(--environment "AUTO_SALE_MANAGER_CHAT_IDS=$AUTO_SALE_MANAGER_CHAT_IDS")
+          fi
+          EXTRA_ENV+=(--environment "AUTO_SALE_VK_ENABLED=$AUTO_SALE_VK_ENABLED")
+          if [[ "${AUTO_SALE_VK_ENABLED,,}" =~ ^(1|true|yes)$ ]]; then
+            echo "::add-mask::$AUTO_SALE_VK_APP_SECRET"
+            echo "::add-mask::$AUTO_SALE_VK_COMMUNITY_TOKEN"
+            EXTRA_ENV+=(--environment "AUTO_SALE_VK_APP_ID=$AUTO_SALE_VK_APP_ID")
+            EXTRA_ENV+=(--environment "AUTO_SALE_VK_APP_SECRET=$AUTO_SALE_VK_APP_SECRET")
+            EXTRA_ENV+=(--environment "AUTO_SALE_VK_GROUP_ID=$AUTO_SALE_VK_GROUP_ID")
+            EXTRA_ENV+=(--environment "AUTO_SALE_VK_COMMUNITY_TOKEN=$AUTO_SALE_VK_COMMUNITY_TOKEN")
           fi
           yc serverless container revision deploy \
             --container-name "$YC_CONTAINER_NAME" \
