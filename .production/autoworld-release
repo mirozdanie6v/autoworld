@@ -1,5 +1,5 @@
 AWG production release
-requested_at=2026-10-08T01:14:00+07:00
-source_sha=2b97908a3a99e9f67cb0b770a80d4611bfbf04bc
-reason=fix-private-container-postdeploy-gate-and-verify-vii-143
+requested_at=2026-10-08T01:33:00+07:00
+source_sha=a5178ea8048688cfba904f9e26adc211f9b54116
+reason=stage-vii-145-vk-runtime-with-vk-forced-off
 run_real_client_e2e=false
