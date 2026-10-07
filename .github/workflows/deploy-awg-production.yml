@@ -173,6 +173,7 @@ jobs:
             --service-account-id "$YC_RUNTIME_SA_ID" \
             --environment "YDB_CONNECTION_STRING=$YDB_CONNECTION_STRING" \
             --environment "AUTO_SALE_API_KEY=$AUTO_SALE_API_KEY" \
+            --environment "AUTO_SALE_BUILD_SHA=$GITHUB_SHA" \
             --environment "AUTO_SALE_PUBLIC_DEMO_WRITE=false" \
             --environment "AUTO_SALE_LEGACY_STATE_WRITE=$AUTO_SALE_LEGACY_STATE_WRITE" \
             --environment "AUTO_SALE_YDB_DUAL_WRITE=$AUTO_SALE_YDB_DUAL_WRITE" \
@@ -211,7 +212,7 @@ jobs:
             test "$attempt" -lt 30 || exit 1
             sleep 5
           done
-          curl --connect-timeout 10 --max-time 20 -fsS "https://$GW_DOMAIN/api/health" | jq '{ok,persistence,telegramNotifications,telegramRoutingReady,telegramRoutableManagers}'
+          curl --connect-timeout 10 --max-time 20 -fsS "https://$GW_DOMAIN/api/health" | jq '{ok,persistence,buildSha,telegramNotifications,telegramRoutingReady,telegramRoutableManagers}'
 
       - name: Synchronize Telegram relay credentials
         working-directory: cloudflare/telegram-relay
@@ -265,7 +266,7 @@ jobs:
           echo "::add-mask::$AUTO_SALE_API_KEY"
           echo "AUTO_SALE_API_KEY=$AUTO_SALE_API_KEY" >> "$GITHUB_ENV"
           for attempt in $(seq 1 20); do
-            if curl -fsS "${URL%/}/api/health" | jq -e '.ok == true and .persistence == "ydb-serverless" and .writeMode == "telegram-rbac" and .stateReadMode == "viewer-filtered" and .publicDemoWrite == false and .maxAdminAccounts == 3 and .adminInvites == 3 and (.linkedAdminAccounts|tonumber) <= 3 and .legacyStateWrite == "retired" and .normalizedAuthoritative == true and .ydbDomainDualWrite == "disabled" and .ydbStateReadMode == "normalized" and .mediaStorage == "object-storage" and .mediaBucket == env.AUTO_SALE_MEDIA_BUCKET and .telegramNotifications == "enabled"' >/dev/null; then
+            if curl -fsS "${URL%/}/api/health" | jq -e '.ok == true and .persistence == "ydb-serverless" and .writeMode == "telegram-rbac" and .stateReadMode == "viewer-filtered" and .publicDemoWrite == false and .maxAdminAccounts == 3 and .adminInvites == 3 and (.linkedAdminAccounts|tonumber) <= 3 and .legacyStateWrite == "retired" and .normalizedAuthoritative == true and .ydbDomainDualWrite == "disabled" and .ydbStateReadMode == "normalized" and .mediaStorage == "object-storage" and .mediaBucket == env.AUTO_SALE_MEDIA_BUCKET and .telegramNotifications == "enabled" and .buildSha == env.GITHUB_SHA' >/dev/null; then
               break
             fi
             test "$attempt" -lt 20 || exit 1
