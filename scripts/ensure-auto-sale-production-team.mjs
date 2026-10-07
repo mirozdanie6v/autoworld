@@ -14,12 +14,12 @@ const legacyStore=await createYdbStateStore({
   connectionString,
   credentialsProvider,
   domainDualWrite:false,
-  ensureSchema:true
+  ensureSchema:false
 });
 const domainStore=await createYdbDomainStore({
   connectionString,
   credentialsProvider,
-  ensureSchema:true
+  ensureSchema:false
 });
 
 try{
