@@ -795,6 +795,9 @@ const server=http.createServer(async(req,res)=>{
     }
 
     if(req.method==='POST'&&telegram.isWebhookPath(url.pathname)){
+      if(!telegram.isWebhookSecretToken(req.headers['x-telegram-bot-api-secret-token'])){
+        json(res,{error:'invalid_telegram_webhook_secret'},401);return;
+      }
       const input=await parseJson(req,100_000);
       if(!input||typeof input!=='object'){json(res,{error:'invalid_json'},400);return}
       try{
