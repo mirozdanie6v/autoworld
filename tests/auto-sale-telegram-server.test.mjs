@@ -272,11 +272,15 @@ test('bot command replies use the authenticated relay when configured',async()=>
   assert.ok(sent[0].headers['x-relay-signature']);
 });
 
-test('production webhook no longer relies on Telegram response-body sendMessage',async()=>{
+test('production webhook persists command replies before ACK and delivers them after the response',async()=>{
   const server=await readFile(new URL('../server/yandex-server.mjs',import.meta.url),'utf8');
-  assert.match(server,/handleWebhookUpdate\(input,\{appUrl:[\s\S]*webhookReply:false\}\)/);
   const webhookBlock=server.slice(server.indexOf("if(req.method==='POST'&&telegram.isWebhookPath"),server.indexOf("if(url.pathname==='/api/auto-sale/telegram/message'"));
-  assert.doesNotMatch(webhookBlock,/\{method:result\.webhookMethod/);
+  assert.match(webhookBlock,/handleWebhookUpdate\(input,\{appUrl:[\s\S]*webhookReply:true\}\)/);
+  assert.match(webhookBlock,/enqueueNotifications\(\[notification\]\)/);
+  assert.match(webhookBlock,/id:\`webhook:\\${updateId}:\\${result\.handled\|\|'reply'}\`/);
+  assert.match(webhookBlock,/json\(res,\{ok:true,handled:result\.handled\|\|null,queued:true\},200\)/);
+  assert.match(webhookBlock,/deferNotificationIds\(ids,'AUTO SALE webhook command reply deferred'\)/);
+  assert.doesNotMatch(webhookBlock,/await telegram\.send/);
 });
 
 
