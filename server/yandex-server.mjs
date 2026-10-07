@@ -9,6 +9,7 @@ import {readAutoSaleState} from './ydb-read-mode.mjs';
 import {syncYdbState} from './ydb-sync.mjs';
 import {createObjectStorage} from './object-storage.mjs';
 import {createTelegramService} from './telegram-bot.mjs';
+import {createVkService} from './vk.mjs';
 import {addAutoSaleNote,addAutoSalePayment,deleteAutoSaleLeadCascade,mutateAutoSaleEntity,mutateAutoSaleEntityBatch,readAutoSaleEntity} from './ydb-entity-commands.mjs';
 import {MAX_ADMIN_ACCOUNTS,stateForAccess,rowVersionsForAccess,sanitizeClientOperations,sanitizeAdminOperations,applyManagerLeadClaims} from './auto-sale-access.mjs';
 import {managerTelegramUsername} from '../shared/auto-sale-manager-directory.mjs';
@@ -86,6 +87,7 @@ async function getApiState(){
 }
 const media=createObjectStorage({bucket:mediaBucket});
 const telegram=createTelegramService();
+const vk=createVkService();
 async function getStore(){
   if(store)return store;
   if(!storePromise){
@@ -109,14 +111,17 @@ async function deliverNotificationBatch(pending){
   const results=[];
   for(const item of pending){
     try{
-      const sent=await telegram.send(item.chatId,item.message,{replyMarkup:item.replyMarkup});
-      if(!sent?.message_id)throw new Error('telegram_message_id_missing');
+      const channel=String(item?.channel||'telegram');
+      const sent=channel==='vk'
+        ?await vk.send(item.vkUserId,item.message,{idempotencyKey:item.id})
+        :await telegram.send(item.chatId,item.message,{replyMarkup:item.replyMarkup});
+      if(!sent?.message_id)throw new Error(channel==='vk'?'vk_message_id_missing':'telegram_message_id_missing');
       await (await getStore()).markNotification(item.id,{ok:true,messageId:sent?.message_id||'',attempts:item.attempts});
-      results.push({id:item.id,ok:true,messageId:sent?.message_id||null});
+      results.push({id:item.id,ok:true,channel,messageId:sent?.message_id||null});
     }catch(error){
-      const message=String(error?.telegramDescription||error?.message||'telegram_send_failed');
-      await (await getStore()).markNotification(item.id,{ok:false,error:message,attempts:item.attempts});
-      results.push({id:item.id,ok:false,error:message});
+      const message=String(error?.vkDescription||error?.telegramDescription||error?.message||'notification_send_failed');
+      await (await getStore()).markNotification(item.id,{ok:false,error:message,attempts:item.attempts,permanent:Boolean(error?.permanent)});
+      results.push({id:item.id,ok:false,channel:String(item?.channel||'telegram'),error:message});
     }
   }
   return results;
@@ -158,7 +163,7 @@ const apiHeaders={
   'content-type':'application/json; charset=utf-8',
   'cache-control':'no-store',
   'access-control-allow-origin':'*',
-  'access-control-allow-headers':'content-type,authorization,x-auto-sale-key,x-auto-sale-catalog-import-key,x-telegram-init-data,x-auto-sale-skip-telegram',
+  'access-control-allow-headers':'content-type,authorization,x-auto-sale-key,x-auto-sale-catalog-import-key,x-telegram-init-data,x-vk-launch-params,x-auto-sale-skip-telegram',
   'access-control-allow-methods':'GET,PUT,POST,DELETE,OPTIONS'
 };
 const json=(res,data,status=200)=>{
@@ -190,31 +195,44 @@ const telegramAuth=req=>{
   const raw=String(req.headers['x-telegram-init-data']||'').trim();
   return raw?telegram.validateInitData(raw):{ok:false,error:'telegram_init_data_required'};
 };
+const vkAuth=req=>{
+  const raw=String(req.headers['x-vk-launch-params']||'').trim();
+  return raw?vk.validateLaunchParams(raw):{ok:false,error:'vk_launch_params_required'};
+};
 async function requestAccess(req,state=null){
   const current=state||await (await getDomainStore()).loadState();
-  if(hasApiKey(req))return{state:current,access:{role:'admin',authenticated:true,authType:'api-key',apiKey:true,user:null,admin:null}};
+  if(hasApiKey(req))return{state:current,access:{role:'admin',authenticated:true,authType:'api-key',apiKey:true,user:null,identity:null,admin:null}};
+  const hasTelegram=Boolean(String(req.headers['x-telegram-init-data']||'').trim());
+  const hasVk=Boolean(String(req.headers['x-vk-launch-params']||'').trim());
+  if(hasTelegram&&hasVk)return{state:current,access:{role:'public',authenticated:false,authType:'public',apiKey:false,user:null,identity:null,admin:null,error:'multiple_auth_providers'}};
+  if(hasVk){
+    const auth=vkAuth(req);
+    if(!auth.ok)return{state:current,access:{role:'public',authenticated:false,authType:'public',apiKey:false,user:null,identity:null,admin:null,error:auth.error}};
+    return{state:current,access:{role:'client',authenticated:true,authType:'vk',apiKey:false,user:auth.user,identity:auth.identity,admin:null}};
+  }
   const auth=telegramAuth(req);
-  if(!auth.ok)return{state:current,access:{role:'public',authenticated:false,authType:'public',apiKey:false,user:null,admin:null,error:auth.error}};
+  if(!auth.ok)return{state:current,access:{role:'public',authenticated:false,authType:'public',apiKey:false,user:null,identity:null,admin:null,error:auth.error}};
   const user=auth.user;
+  const identity={provider:'telegram',id:String(user.id),key:`telegram:${String(user.id)}`};
   const stateStore=await getStore();
   const pinned=await stateStore.adminAccessByUserId(String(user.id));
   if(pinned&&adminTelegramUsernames.includes(String(pinned.username||'').toLowerCase())){
-    return{state:current,access:{role:'admin',authenticated:true,authType:'telegram',apiKey:false,user,admin:pinned}};
+    return{state:current,access:{role:'admin',authenticated:true,authType:'telegram',apiKey:false,user,identity,admin:pinned}};
   }
   const username=String(user.username||'').replace(/^@/,'').toLowerCase();
   if(username&&adminTelegramUsernames.includes(username)){
     const claim=await stateStore.claimAdminAccess(username,String(user.id));
-    if(claim?.ok)return{state:current,access:{role:'admin',authenticated:true,authType:'telegram',apiKey:false,user,admin:claim}};
-    return{state:current,access:{role:'client',authenticated:true,authType:'telegram',apiKey:false,user,admin:null,adminClaimError:claim?.error||'admin_claim_failed'}};
+    if(claim?.ok)return{state:current,access:{role:'admin',authenticated:true,authType:'telegram',apiKey:false,user,identity,admin:claim}};
+    return{state:current,access:{role:'client',authenticated:true,authType:'telegram',apiKey:false,user,identity,admin:null,adminClaimError:claim?.error||'admin_claim_failed'}};
   }
-  return{state:current,access:{role:'client',authenticated:true,authType:'telegram',apiKey:false,user,admin:null}};
+  return{state:current,access:{role:'client',authenticated:true,authType:'telegram',apiKey:false,user,identity,admin:null}};
 }
 const accessSummary=access=>({
   role:access.role,
   authenticated:Boolean(access.authenticated),
   authType:access.authType,
   member:access.role==='admin'?{name:String(access.user?.first_name||access.admin?.username||'Администратор')} : null,
-  user:access.user?{id:String(access.user.id),username:String(access.user.username||'')} : null,
+  user:access.user?{id:String(access.user.id),username:String(access.user.username||''),provider:String(access.identity?.provider||access.authType||'')} : null,
   adminInvites:access.role==='admin'?adminTelegramUsernames.map(x=>'@'+x):undefined
 });
 function visibleEntity(state,access,resource,id){
@@ -452,7 +470,7 @@ const server=http.createServer(async(req,res)=>{
       if(access.role==='public'){json(res,{error:'telegram_auth_required'},401);return}
       let operations=Array.isArray(input?.operations)?input.operations:[];
       if(access.role==='client'){
-        const sanitized=sanitizeClientOperations(accessState,operations,access.user);
+        const sanitized=sanitizeClientOperations(accessState,operations,access.user,access.identity);
         if(!sanitized.ok){json(res,{error:sanitized.error},sanitized.status);return}
         operations=sanitized.operations;
       }else{
