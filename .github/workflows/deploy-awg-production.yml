@@ -212,6 +212,9 @@ jobs:
           GW_DOMAIN=$(printf '%s' "$GW_JSON" | jq -r '.domain')
           test -n "$GW_DOMAIN" && test "$GW_DOMAIN" != "null"
           echo "AWG_GATEWAY_URL=https://$GW_DOMAIN/" >> "$GITHUB_ENV"
+          # All post-deploy HTTP checks must go through the public API Gateway.
+          # The underlying Serverless Container is intentionally private and returns 403 directly.
+          echo "AWG_URL=https://$GW_DOMAIN/" >> "$GITHUB_ENV"
           echo "AUTO_SALE_TELEGRAM_WEBHOOK_BASE_URL=https://$GW_DOMAIN/" >> "$GITHUB_ENV"
           for attempt in $(seq 1 30); do
             if curl --connect-timeout 10 --max-time 20 -fsS "https://$GW_DOMAIN/api/health" | jq -e '.ok == true and .persistence == "ydb-serverless"' >/dev/null; then
@@ -252,8 +255,8 @@ jobs:
       - name: Verify Telegram RBAC read/write boundary
         run: |
           set -euo pipefail
-          URL=$(yc serverless container get --name "$YC_CONTAINER_NAME" --folder-id "$YC_FOLDER_ID" --format json | jq -r '.url')
-          test -n "$URL" && test "$URL" != "null"
+          URL=${AWG_GATEWAY_URL%/}
+          test -n "$URL"
           echo "AWG_URL=$URL" >> "$GITHUB_ENV"
           # Re-export the exact generated credential after deployment so every protected
           # live-delivery check uses the same bytes that were injected into the revision.
@@ -412,7 +415,7 @@ jobs:
         run: |
           set -euo pipefail
           URL=${AWG_URL%/}
-          echo "Container URL: $URL"
+          echo "Production URL: $URL"
           curl -fsS "$URL/api/health" | jq '{ok,telegramNotifications,telegramFallbackManagers}'
           echo "Cloudflare relay reachability:"
           relay_code=$(curl -sS --connect-timeout 10 --max-time 20 -o /tmp/relay-probe -w '%{http_code}' "$AUTO_SALE_TELEGRAM_RELAY_URL" || true)
