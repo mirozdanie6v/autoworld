@@ -277,6 +277,28 @@ export async function createYdbStateStore({connectionString,credentialsProvider=
     return results;
   }
 
+  async function recentBotCommandRecipients(limit=50){
+    const max=Math.min(100,Math.max(1,Number(limit)||50));
+    const [rows]=await readQuery(()=>sql`
+      SELECT id,status,payload,created_at,message_id
+      FROM auto_sale_notification_outbox
+    `,'recent-bot-command-recipients');
+    return rows.map(row=>{
+      let item={};try{item=JSON.parse(String(row.payload||'{}'))}catch{}
+      return{
+        id:String(row.id||''),
+        status:String(row.status||''),
+        event:String(item.event||''),
+        target:String(item.target||''),
+        chatId:String(item.chatId||''),
+        createdAt:String(row.created_at||''),
+        messageId:String(row.message_id||'')
+      };
+    }).filter(item=>item.event==='bot_command_reply'&&item.target==='telegram_user'&&/^\\d+$/.test(item.chatId))
+      .sort((a,b)=>b.createdAt.localeCompare(a.createdAt))
+      .slice(0,max);
+  }
+
   async function adminAccessByUserId(userId){
     const id=String(userId||'').trim();if(!id)return null;
     const [rows]=await readQuery(()=>sql`SELECT username,telegram_user_id,linked_at,last_seen_at FROM auto_sale_admin_access WHERE telegram_user_id = ${id}`,'admin-access-by-user');
@@ -315,5 +337,5 @@ export async function createYdbStateStore({connectionString,credentialsProvider=
     driver.close();
   }
 
-  return{loadState,replaceState,commitDomainState,enqueueNotifications,pendingNotifications,pendingNotificationsByIds,markNotification,notificationStats,notificationStatus,notificationStatusByRevision,adminAccessByUserId,adminAccessByUsername,adminAccessList,claimAdminAccess,ping,close,domainDualWriteEnabled:domainDualWrite};
+  return{loadState,replaceState,commitDomainState,enqueueNotifications,pendingNotifications,pendingNotificationsByIds,markNotification,notificationStats,notificationStatus,notificationStatusByRevision,recentBotCommandRecipients,adminAccessByUserId,adminAccessByUsername,adminAccessList,claimAdminAccess,ping,close,domainDualWriteEnabled:domainDualWrite};
 }
