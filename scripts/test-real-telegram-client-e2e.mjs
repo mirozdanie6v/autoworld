@@ -7,6 +7,7 @@ const apiKey=String(process.env.AUTO_SALE_API_KEY||'').trim();
 const botToken=String(process.env.AUTO_SALE_TELEGRAM_BOT_TOKEN||'').trim();
 const username=String(process.env.AUDIT_CLIENT_TELEGRAM_USERNAME||'Flyer_kg').trim().replace(/^@/,'');
 const explicitTelegramId=String(process.env.AUDIT_CLIENT_TELEGRAM_ID||'').trim();
+const expectedManagerName=String(process.env.AUDIT_MANAGER_NAME||'Дмитрий').trim();
 const recentMinutes=Math.max(5,Number(process.env.AUDIT_RECENT_COMMAND_MAX_AGE_MINUTES||120));
 if(!apiKey)throw new Error('AUTO_SALE_API_KEY required');
 if(!botToken)throw new Error('AUTO_SALE_TELEGRAM_BOT_TOKEN required');
@@ -207,6 +208,7 @@ try{
   assert.equal(persisted.priority,'Средний','client cannot override priority');
   assert.notEqual(persisted.manager,'CLIENT_MUST_NOT_ASSIGN','client cannot assign manager');
   assert.ok(String(persisted.manager||'').trim(),'server must assign a manager');
+  assert.equal(String(persisted.manager||'').trim(),expectedManagerName,'real client request must be assigned to the requested audit manager');
 
   const ownState=await client('/api/auto-sale/state',initData);
   assert.equal(ownState.response.status,200,'client state verification');
