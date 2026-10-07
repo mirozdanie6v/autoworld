@@ -107,6 +107,7 @@ jobs:
           export YDB_ACCESS_TOKEN_CREDENTIALS="$YC_IAM_TOKEN"
           npm run prepare:ydb-runtime
           npm run initialize:ydb-domain
+          npm run ensure:production-team
 
       - name: Install Yandex Cloud CLI
         run: |
