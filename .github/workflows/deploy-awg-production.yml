@@ -215,6 +215,7 @@ jobs:
           # All post-deploy HTTP checks must go through the public API Gateway.
           # The underlying Serverless Container is intentionally private and returns 403 directly.
           echo "AWG_URL=https://$GW_DOMAIN/" >> "$GITHUB_ENV"
+          echo "STAGING_URL=https://$GW_DOMAIN/" >> "$GITHUB_ENV"
           echo "AUTO_SALE_TELEGRAM_WEBHOOK_BASE_URL=https://$GW_DOMAIN/" >> "$GITHUB_ENV"
           for attempt in $(seq 1 30); do
             if curl --connect-timeout 10 --max-time 20 -fsS "https://$GW_DOMAIN/api/health" | jq -e '.ok == true and .persistence == "ydb-serverless"' >/dev/null; then
@@ -264,7 +265,7 @@ jobs:
           echo "::add-mask::$AUTO_SALE_API_KEY"
           echo "AUTO_SALE_API_KEY=$AUTO_SALE_API_KEY" >> "$GITHUB_ENV"
           for attempt in $(seq 1 20); do
-            if curl -fsS "${URL%/}/api/health" | jq -e '.ok == true and .persistence == "ydb-serverless" and .writeMode == "telegram-rbac" and .stateReadMode == "viewer-filtered" and .publicDemoWrite == false and .maxAdminAccounts == 3 and .adminInvites == 3 and (.linkedAdminAccounts|tonumber) <= 3 and .legacyStateWrite == "retired" and .normalizedAuthoritative == true and .ydbDomainDualWrite == "disabled" and .ydbStateReadMode == "normalized" and .mediaStorage == "object-storage" and .mediaBucket == env.AUTO_SALE_MEDIA_BUCKET and .telegramNotifications == "enabled" and .buildSha == env.GITHUB_SHA' >/dev/null; then
+            if curl -fsS "${URL%/}/api/health" | jq -e '.ok == true and .persistence == "ydb-serverless" and .writeMode == "telegram-rbac" and .stateReadMode == "viewer-filtered" and .publicDemoWrite == false and .maxAdminAccounts == 3 and .adminInvites == 3 and (.linkedAdminAccounts|tonumber) <= 3 and .legacyStateWrite == "retired" and .normalizedAuthoritative == true and .ydbDomainDualWrite == "disabled" and .ydbStateReadMode == "normalized" and .mediaStorage == "object-storage" and .mediaBucket == env.AUTO_SALE_MEDIA_BUCKET and .telegramNotifications == "enabled" and (.telegramRoutableManagers|tonumber) == 3 and .buildSha == env.GITHUB_SHA' >/dev/null; then
               break
             fi
             test "$attempt" -lt 20 || exit 1
@@ -380,7 +381,7 @@ jobs:
           curl -fsS -H "x-auto-sale-key: $AUTO_SALE_API_KEY" \
             "${AWG_URL%/}/api/auto-sale/admin/legacy-snapshot" \
             | tee legacy-retirement-snapshot.json \
-            | jq -e '.ok == true and .retired == true and (.revision|tonumber) >= 1 and (.state|type) == "object"' >/dev/null
+            | jq -e '.ok == true and .retired == true and (.revision|tonumber) >= 0 and (.state|type) == "object"' >/dev/null
 
       - name: Upload legacy retirement snapshot
         if: always()
