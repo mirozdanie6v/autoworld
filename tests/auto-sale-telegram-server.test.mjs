@@ -278,3 +278,17 @@ test('production webhook no longer relies on Telegram response-body sendMessage'
   const webhookBlock=server.slice(server.indexOf("if(req.method==='POST'&&telegram.isWebhookPath"),server.indexOf("if(url.pathname==='/api/auto-sale/telegram/message'"));
   assert.doesNotMatch(webhookBlock,/\{method:result\.webhookMethod/);
 });
+
+
+test('derived webhook secret accepts only the matching Telegram header',()=>{
+  const service=createTelegramService({token:TOKEN,fetchImpl:fakeFetch([]),relayUrl:''});
+  assert.match(service.webhookSecretToken,/^[a-f0-9]{64}$/);
+  assert.equal(service.isWebhookSecretToken(service.webhookSecretToken),true);
+  assert.equal(service.isWebhookSecretToken('bad'),false);
+});
+
+test('production webhook requires Telegram secret header before processing updates',async()=>{
+  const server=await readFile(new URL('../server/yandex-server.mjs',import.meta.url),'utf8');
+  assert.match(server,/isWebhookSecretToken\(req\.headers\['x-telegram-bot-api-secret-token'\]\)/);
+  assert.match(server,/invalid_telegram_webhook_secret/);
+});
