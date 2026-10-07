@@ -135,22 +135,37 @@ jobs:
         run: |
           set -euo pipefail
           INSTALL_URL="https://storage.yandexcloud.net/yandexcloud-yc/install.sh"
+          ARCHIVE_URL="https://storage.yandexcloud.net/yandexcloud-yc/release/yc_linux_amd64.tar.gz"
           INSTALL_OK=false
           for attempt in 1 2 3; do
-            rm -f /tmp/yc-install.sh
-            if curl --connect-timeout 10 --max-time 120 --retry 3 --retry-all-errors --retry-delay 3 -fsSL "$INSTALL_URL" -o /tmp/yc-install.sh \
+            rm -f /tmp/yc-install.sh /tmp/yc_linux_amd64.tar.gz
+            rm -rf /tmp/yc-direct
+            if curl --connect-timeout 10 --max-time 120 --retry 2 --retry-all-errors --retry-delay 3 -fsSL "$INSTALL_URL" -o /tmp/yc-install.sh \
               && test -s /tmp/yc-install.sh \
               && bash /tmp/yc-install.sh -n; then
               INSTALL_OK=true
               break
             fi
+            echo "Installer script unavailable; trying official direct CLI archive."
+            mkdir -p /tmp/yc-direct
+            if curl --connect-timeout 10 --max-time 180 --retry 2 --retry-all-errors --retry-delay 3 -fsSL "$ARCHIVE_URL" -o /tmp/yc_linux_amd64.tar.gz \
+              && tar -xzf /tmp/yc_linux_amd64.tar.gz -C /tmp/yc-direct; then
+              YC_BIN=$(find /tmp/yc-direct -type f -name yc -print -quit)
+              if [ -n "$YC_BIN" ]; then
+                mkdir -p "$HOME/yandex-cloud/bin"
+                install -m 0755 "$YC_BIN" "$HOME/yandex-cloud/bin/yc"
+                INSTALL_OK=true
+                break
+              fi
+            fi
             if [ "$attempt" -lt 3 ]; then
               delay=$((attempt * 20))
-              echo "Yandex Cloud CLI installer unavailable; retrying in ${delay}s (attempt ${attempt}/3)"
+              echo "Both Yandex CLI sources unavailable; retrying in ${delay}s (attempt ${attempt}/3)"
               sleep "$delay"
             fi
           done
-          test "$INSTALL_OK" = "true" || { echo "Yandex Cloud CLI installation failed after 3 bounded attempts"; exit 1; }
+          test "$INSTALL_OK" = "true" || { echo "Yandex Cloud CLI installation failed from installer and direct archive"; exit 1; }
+          "$HOME/yandex-cloud/bin/yc" version
           echo "$HOME/yandex-cloud/bin" >> "$GITHUB_PATH"
 
       - name: Configure Yandex Cloud CLI from OIDC token
