@@ -74,6 +74,7 @@ export function createTelegramService({
   const enabled=Boolean(botToken&&fetchImpl);
   const webhookKey=botToken?createHmac('sha256',botToken).update('auto-sale-telegram-webhook-v2').digest('hex').slice(0,32):'';
   const webhookPath=webhookKey?`/api/auto-sale/telegram/webhook/${webhookKey}`:'';
+  const webhookSecretToken=botToken?createHmac('sha256',botToken).update('auto-sale-telegram-webhook-secret-v1').digest('hex'):'';
 
   async function api(method,payload){
     if(!enabled){const error=new Error('telegram_not_configured');error.statusCode=503;throw error}
@@ -310,7 +311,9 @@ export function createTelegramService({
     enabled,
     fallbackManagerCount:fallbackManagers.length,
     webhookPath,
+    webhookSecretToken,
     isWebhookPath,
+    isWebhookSecretToken:value=>safeEqualHex(clean(value),webhookSecretToken),
     handleWebhookUpdate,
     send,
     validateInitData,
