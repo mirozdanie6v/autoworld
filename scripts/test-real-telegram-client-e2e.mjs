@@ -66,7 +66,7 @@ function signInitData(user){
 
 async function resolvePhysicalUser(){
   if(explicitTelegramId){
-    assert.match(explicitTelegramId,/^\\d+$/,'AUDIT_CLIENT_TELEGRAM_ID must be numeric');
+    assert.match(explicitTelegramId,/^\d+$/,'AUDIT_CLIENT_TELEGRAM_ID must be numeric');
     const chat=await getTelegramChat(explicitTelegramId);
     assert.ok(chat,'explicit physical Telegram identity must be reachable through bot getChat');
     assert.equal(String(chat.username||'').replace(/^@/,'').toLowerCase(),username.toLowerCase(),'explicit Telegram ID must belong to requested username');
