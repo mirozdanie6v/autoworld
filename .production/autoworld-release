@@ -1,5 +1,5 @@
 AWG production release
-requested_at=2026-10-08T05:15:00+07:00
-source_sha=b04dcee7daf216f1dd9ada7a0efcbd09f853c11a
-reason=emergency-rollback-to-known-good-before-vk-shell-changes
+requested_at=2026-10-08T06:05:00+07:00
+source_sha=477484fe2edc6a3a4936b401a4b7036d2aab77d6
+reason=stage-vii-145-safe-vk-shell-with-vk-forced-off
 run_real_client_e2e=false
