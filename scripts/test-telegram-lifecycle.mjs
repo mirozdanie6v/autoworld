@@ -222,10 +222,11 @@ async function batch(label,expected,operations){
 
 const initial=await state();
 const auditManagerTelegramId=String(process.env.AUDIT_MANAGER_TELEGRAM_ID||'').trim();
+const auditManagerName=String(process.env.AUDIT_MANAGER_NAME||'Дмитрий').trim();
 const auditClientUsername=String(process.env.AUDIT_CLIENT_TELEGRAM_USERNAME||'Flyer_kg').trim().replace(/^@/,'');
 const auditClientTelegramId=String(process.env.AUDIT_CLIENT_TELEGRAM_ID||'').trim();
-const manager=(initial.team||[]).find(x=>x.active!==false&&String(x.telegramUsername||x.telegram||'').replace(/^@/,'').toLowerCase()==='flyer_flyer');
-assert.ok(manager,'Flyer_Flyer manager must exist in production team');
+const manager=(initial.team||[]).find(x=>x.active!==false&&String(x.name||'').trim()===auditManagerName&&String(x.telegramUsername||x.telegram||'').replace(/^@/,'').toLowerCase()==='flyer_flyer');
+assert.ok(manager,`${auditManagerName} / Flyer_Flyer manager must exist in production team`);
 const managerTelegramUserId=/^\d+$/.test(String(manager.telegramUserId||''))?String(manager.telegramUserId):auditManagerTelegramId;
 assert.match(managerTelegramUserId,/^\d+$/,'Flyer_Flyer manager Telegram must be linked');
 const linkedClientLead=(initial.leads||[]).find(x=>
