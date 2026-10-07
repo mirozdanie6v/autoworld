@@ -64,11 +64,13 @@ test('catalog automation is canonical and RU-only',async()=>{
   const normalizer=await root('scripts/import-autoworld-catalog.mjs');
   assert.ok(workflow.includes("cron: '17 * * * *'"));
   assert.ok(workflow.includes('https://awgcars.ru'));
-  assert.ok(workflow.includes('secrets.AWG_RELAY_SECRET'));
+  assert.ok(workflow.includes("core.getIDToken('autoworld-catalog-import')"));
   assert.ok(workflow.includes('MAX_PAGES: \'20\''));
   assert.ok(sync.includes("https://awgcars.ru/api/auto-sale/admin/catalog-import"));
   assert.ok(sync.includes('AbortSignal.timeout'));
   assert.ok(sync.includes('attempt<=5'));
+  assert.ok(sync.includes('AUTO_SALE_CATALOG_IMPORT_BEARER'));
+  assert.ok(scraper.includes('AUTO_SALE_CATALOG_IMPORT_BEARER'));
   assert.ok(scraper.includes('https://awgcars.ru/api/auto-sale/media'));
   assert.ok(normalizer.includes('https://awgcars.ru/api/auto-sale/state'));
   for(const text of [workflow,scraper,sync,normalizer]){
