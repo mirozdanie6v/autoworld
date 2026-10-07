@@ -284,7 +284,7 @@ export function createTelegramService({
       const payload={chat_id:chatId,text:greeting};
       if(webAppUrl)payload.reply_markup={inline_keyboard:[[{text:'🚗 Открыть каталог',web_app:{url:webAppUrl}}]]};
       if(webhookReply)return{ok:true,handled:command,webhookMethod:'sendMessage',webhookPayload:payload};
-      const result=await api('sendMessage',payload);
+      const result=await send(chatId,greeting,{replyMarkup:payload.reply_markup||null});
       return{ok:true,handled:command,messageId:result?.message_id||null};
     }
 
@@ -293,14 +293,14 @@ export function createTelegramService({
       const payload={chat_id:chatId,text:body};
       if(webAppUrl)payload.reply_markup={inline_keyboard:[[{text:'Открыть AUTO МИР',web_app:{url:webAppUrl}}]]};
       if(webhookReply)return{ok:true,handled:'/help',webhookMethod:'sendMessage',webhookPayload:payload};
-      const result=await api('sendMessage',payload);
+      const result=await send(chatId,body,{replyMarkup:payload.reply_markup||null});
       return{ok:true,handled:'/help',messageId:result?.message_id||null};
     }
 
     if(textValue){
       const payload={chat_id:chatId,text:'Для работы с AUTO МИР используйте кнопку каталога ниже или команду /help.'};
       if(webhookReply)return{ok:true,handled:'fallback',webhookMethod:'sendMessage',webhookPayload:payload};
-      const result=await api('sendMessage',payload);
+      const result=await send(chatId,payload.text);
       return{ok:true,handled:'fallback',messageId:result?.message_id||null};
     }
     return{ok:true,ignored:true};
