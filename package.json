@@ -18,7 +18,8 @@
     "prepare:ydb-domain": "node scripts/prepare-auto-sale-ydb-domain.mjs",
     "backfill:ydb-domain": "node scripts/backfill-auto-sale-ydb-domain.mjs",
     "prepare:ydb-runtime": "node scripts/prepare-auto-sale-ydb-runtime.mjs",
-    "initialize:ydb-domain": "node scripts/initialize-auto-sale-ydb-domain.mjs"
+    "initialize:ydb-domain": "node scripts/initialize-auto-sale-ydb-domain.mjs",
+    "ensure:production-team": "node scripts/ensure-auto-sale-production-team.mjs"
   },
   "dependencies": {
     "@ydbjs/auth": "latest",
