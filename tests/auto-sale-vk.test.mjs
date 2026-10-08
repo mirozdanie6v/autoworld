@@ -145,14 +145,17 @@ test('VK Mini App shell initializes once and does not require messaging config',
   }
 });
 
-test('VK shell bootstrap is placed only at the application startup boundary',async()=>{
+test('VK shell bootstrap starts safely without blocking first render on server state',async()=>{
   const {readFile}=await import('node:fs/promises');
   const source=await readFile(new URL('../public/auto-sale-bootstrap.mjs',import.meta.url),'utf8');
   assert.equal(source.includes('const state=if('),false);
   const initIndex=source.lastIndexOf('initVkMiniAppShell()');
-  const pullIndex=source.lastIndexOf('await pullInitialState();');
+  const pullIndex=source.lastIndexOf('const initialStatePromise=pullInitialState();');
+  const appIndex=source.lastIndexOf("await import('./auto-sale-app-v3.mjs");
   assert.ok(initIndex>0,'VK shell init must be present');
-  assert.ok(pullIndex>initIndex,'VK shell init must happen before the startup state pull');
+  assert.ok(pullIndex>initIndex,'server hydration must start after VK shell initialization is scheduled');
+  assert.ok(appIndex>pullIndex,'application import must proceed while state hydration is pending');
+  assert.equal(source.includes('await pullInitialState();'),false);
 });
 
 
