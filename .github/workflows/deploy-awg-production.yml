@@ -41,6 +41,7 @@ env:
   AWG_GATEWAY_NAME: ${{ vars.AWG_GATEWAY_NAME || 'autoworld-awg-prod' }}
   YDB_CONNECTION_STRING: ${{ vars.AWG_YDB_CONNECTION_STRING || 'grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1ggsmuiq7tb2d27f89q/etn00ojk5iv1u7dgpdar' }}
   AUTO_SALE_MEDIA_BUCKET: ${{ vars.AWG_MEDIA_BUCKET || 'viiversion-autoworld-awg-media' }}
+  AWG_STATIC_BUCKET: ${{ vars.AWG_STATIC_BUCKET || 'viiversion-autoworld-awg-static-b1g8u8vqkgehvtbj8n13' }}
   AUTO_SALE_TELEGRAM_BOT_TOKEN: ${{ secrets.AWG_TELEGRAM_BOT_TOKEN }}
   AUTOWORLD_RELAY_SECRET: ${{ secrets.AWG_RELAY_SECRET }}
   AUTO_SALE_CATALOG_IMPORT_KEY: ${{ secrets.AWG_RELAY_SECRET }}
@@ -71,7 +72,7 @@ jobs:
       - name: Validate Yandex configuration
         run: |
           set -euo pipefail
-          for name in YC_FOLDER_ID YC_DEPLOY_SA_ID YC_RUNTIME_SA_ID YC_REGISTRY_ID YC_CONTAINER_NAME YDB_CONNECTION_STRING AUTO_SALE_MEDIA_BUCKET AUTO_SALE_TELEGRAM_APP_URL; do
+          for name in YC_FOLDER_ID YC_DEPLOY_SA_ID YC_RUNTIME_SA_ID YC_REGISTRY_ID YC_CONTAINER_NAME YDB_CONNECTION_STRING AUTO_SALE_MEDIA_BUCKET AWG_STATIC_BUCKET AUTO_SALE_TELEGRAM_APP_URL; do
             test -n "${!name:-}" || { echo "Missing production configuration: $name"; exit 1; }
           done
           for name in AUTO_SALE_TELEGRAM_BOT_TOKEN AUTOWORLD_RELAY_SECRET; do
@@ -177,6 +178,25 @@ jobs:
           yc config get endpoint | grep -Fx 'api.cloud.yandex.net:443'
           yc config get folder-id | grep -Fx "$YC_FOLDER_ID"
 
+      - name: Publish static frontend to Yandex Object Storage
+        run: |
+          set -euo pipefail
+          npm run build
+          if ! yc storage bucket list --folder-id "$YC_FOLDER_ID" --format json \
+            | jq -e --arg name "$AWG_STATIC_BUCKET" '.[] | select(.name == $name)' >/dev/null; then
+            yc storage bucket create --name "$AWG_STATIC_BUCKET" --folder-id "$YC_FOLDER_ID" --max-size 1073741824
+          fi
+          yc storage s3 rm "s3://$AWG_STATIC_BUCKET/" --recursive --quiet || true
+          yc storage s3 cp dist/ "s3://$AWG_STATIC_BUCKET/" --recursive \
+            --cache-control 'public, max-age=300, stale-while-revalidate=86400' \
+            --only-show-errors
+          yc storage s3 cp dist/index.html "s3://$AWG_STATIC_BUCKET/index.html" \
+            --cache-control 'no-cache, no-store, must-revalidate' \
+            --content-type 'text/html; charset=utf-8' \
+            --only-show-errors
+          yc storage s3api head-object --bucket "$AWG_STATIC_BUCKET" --key index.html >/dev/null
+          yc storage s3api head-object --bucket "$AWG_STATIC_BUCKET" --key auto-sale-bootstrap.mjs >/dev/null
+
       - name: Build and push image
         run: |
           set -euo pipefail
@@ -265,6 +285,29 @@ jobs:
           yc serverless container get --name "$YC_CONTAINER_NAME" --folder-id "$YC_FOLDER_ID"
           echo "=== Recent runtime logs ==="
           timeout 20s yc logging read --folder-id "$YC_FOLDER_ID" --since 20m --limit 200 --format json || true
+
+      - name: Route static frontend through Object Storage
+        run: |
+          set -euo pipefail
+          yc serverless api-gateway update \
+            --name "$AWG_GATEWAY_NAME" \
+            --folder-id "$YC_FOLDER_ID" \
+            --spec=infra/yandex/awg-production-gateway.yaml
+          for attempt in $(seq 1 20); do
+            INDEX_CODE=$(curl --connect-timeout 5 --max-time 10 -sS -o /tmp/awg-index.html -w '%{http_code}' https://awgcars.ru/ || true)
+            APP_CODE=$(curl --connect-timeout 5 --max-time 10 -sS -o /tmp/awg-bootstrap.mjs -w '%{http_code}' https://awgcars.ru/auto-sale-bootstrap.mjs || true)
+            if [ "$INDEX_CODE" = "200" ] && [ "$APP_CODE" = "200" ] \
+              && grep -q 'auto-sale-bootstrap.mjs' /tmp/awg-index.html \
+              && grep -q 'pullInitialState' /tmp/awg-bootstrap.mjs; then
+              break
+            fi
+            test "$attempt" -lt 20 || { echo "Static Object Storage route did not become healthy"; exit 1; }
+            sleep 3
+          done
+          curl --connect-timeout 5 --max-time 10 -sS -o /dev/null \
+            -w 'Static index TTFB=%{time_starttransfer}s total=%{time_total}s\n' https://awgcars.ru/
+          curl --connect-timeout 5 --max-time 10 -sS -o /dev/null \
+            -w 'Static bootstrap TTFB=%{time_starttransfer}s total=%{time_total}s\n' https://awgcars.ru/auto-sale-bootstrap.mjs
 
       - name: Resolve production container URL
         run: |
