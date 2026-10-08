@@ -13,9 +13,8 @@ permissions:
 env:
   YC_FOLDER_ID: ${{ vars.AWG_YC_FOLDER_ID || 'b1g8u8vqkgehvtbj8n13' }}
   YC_DEPLOY_SA_ID: ${{ vars.AWG_YC_DEPLOY_SA_ID || 'aje775bcl6hgp40eu8of' }}
-  YC_CONTAINER_NAME: ${{ vars.AWG_YC_CONTAINER_NAME || 'autoworld-awg-prod' }}
-  AWG_GATEWAY_NAME: ${{ vars.AWG_GATEWAY_NAME || 'autoworld-awg-prod' }}
-  TARGET_REVISION_ID: bba4fdb27ga201p91a5a
+  YDB_CONNECTION_STRING: ${{ vars.AWG_YDB_CONNECTION_STRING || 'grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1ggsmuiq7tb2d27f89q/etn00ojk5iv1u7dgpdar' }}
+  AWG_GATEWAY_URL: https://d5dbgio6limv03usvipl.s183zexc.apigw.yandexcloud.net
   EXPECTED_BUILD_SHA: 391f19ff5e042e05c05b06548b277721b0804272
 
 jobs:
@@ -24,6 +23,13 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Install locked dependencies
+        run: npm ci
 
       - name: Request GitHub OIDC token
         uses: actions/github-script@v7
@@ -54,69 +60,69 @@ jobs:
           echo "::add-mask::$IAM_TOKEN"
           echo "YC_IAM_TOKEN=$IAM_TOKEN" >> "$GITHUB_ENV"
 
-      - name: Install and configure Yandex CLI
+      - name: Verify production health
         run: |
           set -euo pipefail
-          curl -fsSL --retry 3 --retry-delay 3 https://storage.yandexcloud.net/yandexcloud-yc/install.sh -o /tmp/yc-install.sh
-          bash /tmp/yc-install.sh -n
-          echo "$HOME/yandex-cloud/bin" >> "$GITHUB_PATH"
-          "$HOME/yandex-cloud/bin/yc" config set endpoint api.cloud.yandex.net:443
-          "$HOME/yandex-cloud/bin/yc" config set token "$YC_IAM_TOKEN"
-          "$HOME/yandex-cloud/bin/yc" config set folder-id "$YC_FOLDER_ID"
-
-      - name: Resolve current production credentials and gateway
-        run: |
-          set -euo pipefail
-          REVISION_JSON=$(yc serverless container revision get "$TARGET_REVISION_ID" --folder-id "$YC_FOLDER_ID" --format json)
-          BUILD_SHA=$(printf '%s' "$REVISION_JSON" | jq -r '.environment.AUTO_SALE_BUILD_SHA // empty')
-          VK_ENABLED=$(printf '%s' "$REVISION_JSON" | jq -r '.environment.AUTO_SALE_VK_ENABLED // empty')
-          API_KEY=$(printf '%s' "$REVISION_JSON" | jq -r '.environment.AUTO_SALE_API_KEY // empty')
-          test "$BUILD_SHA" = "$EXPECTED_BUILD_SHA"
-          test "$VK_ENABLED" = "true"
-          test -n "$API_KEY"
-          echo "::add-mask::$API_KEY"
-          echo "AUTO_SALE_API_KEY=$API_KEY" >> "$GITHUB_ENV"
-          GW_JSON=$(yc serverless api-gateway get --name "$AWG_GATEWAY_NAME" --folder-id "$YC_FOLDER_ID" --format json)
-          GW_DOMAIN=$(printf '%s' "$GW_JSON" | jq -r '.domain // empty')
-          test -n "$GW_DOMAIN"
-          echo "AWG_GATEWAY_URL=https://$GW_DOMAIN" >> "$GITHUB_ENV"
-          echo "production build=$BUILD_SHA vk=$VK_ENABLED revision=$TARGET_REVISION_ID"
-
-      - name: Diagnose latest VK lead and notification delivery
-        run: |
-          set -euo pipefail
-          URL="${AWG_GATEWAY_URL%/}"
-          STATE=$(curl -fsS -H "x-auto-sale-key: $AUTO_SALE_API_KEY" "$URL/api/auto-sale/state")
-          HEALTH=$(curl -fsS "$URL/api/health")
+          HEALTH=$(curl -fsS "${AWG_GATEWAY_URL%/}/api/health")
           echo "$HEALTH" | jq '{ok,buildSha,vkAuth,vkMessaging,telegramRoutableManagers}'
-          LEAD=$(printf '%s' "$STATE" | jq -c '[.leads[]? | select(.clientProvider=="vk")] | sort_by(.createdAt // "") | reverse | .[0] // {}')
-          LEAD_ID=$(printf '%s' "$LEAD" | jq -r '.id // empty')
-          test -n "$LEAD_ID" || { echo "No VK lead found"; exit 2; }
-          printf '%s' "$LEAD" | jq '{
-            id,
-            createdAt,
-            status,
-            manager,
-            source,
-            model,
-            clientProvider,
-            hasProviderUserId: ((.clientProviderUserId // "")|length>0),
-            hasIdentityKey: ((.clientIdentityKey // "")|startswith("vk:")),
-            contactLooksVk: ((.contact // "")|test("^https://vk\\.com/"))
-          }'
-          CURRENT_REV=$(printf '%s' "$STATE" | jq -r '.revision // 0')
-          START_REV=$(( CURRENT_REV > 6 ? CURRENT_REV - 6 : 1 ))
-          FOUND=0
-          for REV in $(seq "$START_REV" "$CURRENT_REV"); do
-            DATA=$(curl -fsS -H "x-auto-sale-key: $AUTO_SALE_API_KEY" "$URL/api/auto-sale/notifications/revision?revision=$REV")
-            MATCH=$(printf '%s' "$DATA" | jq --arg id "$LEAD_ID" -c '[.deliveries[]? | select(.leadId==$id) | {revision:'"$REV"',event,target,status,error,attempts,hasMessageId:((.messageId // "")|length>0)}]')
-            COUNT=$(printf '%s' "$MATCH" | jq 'length')
-            if [ "$COUNT" -gt 0 ]; then
-              FOUND=1
-              printf '%s' "$MATCH" | jq .
-            fi
-          done
-          if [ "$FOUND" -eq 0 ]; then
-            echo "No notification records found for latest VK lead in recent revisions"
-            exit 3
-          fi
+          echo "$HEALTH" | jq -e --arg sha "$EXPECTED_BUILD_SHA" '.ok==true and .buildSha==$sha and .vkAuth=="enabled" and .vkMessaging=="enabled"' >/dev/null
+
+      - name: Diagnose latest VK lead and notifications from YDB
+        env:
+          YDB_ACCESS_TOKEN_CREDENTIALS: ${{ env.YC_IAM_TOKEN }}
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import {AccessTokenCredentialsProvider} from '@ydbjs/auth/access-token';
+          import {createYdbDomainStore} from './server/ydb-domain-store.mjs';
+          import {createYdbStateStore} from './server/ydb-state.mjs';
+
+          const token=String(process.env.YC_IAM_TOKEN||process.env.YDB_ACCESS_TOKEN_CREDENTIALS||'').trim();
+          const connectionString=String(process.env.YDB_CONNECTION_STRING||'').trim();
+          if(!token||!connectionString)throw new Error('diagnostic_ydb_credentials_missing');
+          const credentialsProvider=new AccessTokenCredentialsProvider({token});
+          const domain=await createYdbDomainStore({connectionString,credentialsProvider,ensureSchema:false});
+          const runtime=await createYdbStateStore({connectionString,credentialsProvider,ensureSchema:false,domainDualWrite:false});
+          try{
+            const state=await domain.loadState();
+            const leads=(Array.isArray(state.leads)?state.leads:[])
+              .filter(item=>String(item?.clientProvider||'')==='vk')
+              .sort((a,b)=>String(b?.createdAt||'').localeCompare(String(a?.createdAt||'')));
+            const lead=leads[0];
+            if(!lead)throw new Error('no_vk_lead_found');
+            console.log('VK_LEAD',JSON.stringify({
+              id:String(lead.id||''),
+              createdAt:String(lead.createdAt||''),
+              status:String(lead.status||''),
+              manager:String(lead.manager||''),
+              source:String(lead.source||''),
+              model:String(lead.model||''),
+              clientProvider:String(lead.clientProvider||''),
+              hasProviderUserId:Boolean(String(lead.clientProviderUserId||'')),
+              hasIdentityKey:String(lead.clientIdentityKey||'').startsWith('vk:'),
+              contactLooksVk:/^https:\/\/vk\.com\//.test(String(lead.contact||''))
+            }));
+            const current=Number(state.revision)||0;
+            const start=Math.max(1,current-10);
+            const deliveries=[];
+            for(let revision=start;revision<=current;revision++){
+              const rows=await runtime.notificationStatusByRevision(revision);
+              for(const row of rows||[]){
+                if(String(row.leadId||'')!==String(lead.id||''))continue;
+                deliveries.push({
+                  revision,
+                  event:String(row.event||''),
+                  target:String(row.target||''),
+                  status:String(row.status||''),
+                  error:String(row.error||''),
+                  attempts:Number(row.attempts||0),
+                  hasMessageId:Boolean(String(row.messageId||''))
+                });
+              }
+            }
+            console.log('VK_DELIVERIES',JSON.stringify(deliveries));
+            if(!deliveries.length)throw new Error('no_vk_notification_records_found');
+          }finally{
+            await Promise.allSettled([domain.close(),runtime.close()]);
+          }
+          NODE
