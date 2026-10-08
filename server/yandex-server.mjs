@@ -10,6 +10,7 @@ import {syncYdbState} from './ydb-sync.mjs';
 import {createObjectStorage} from './object-storage.mjs';
 import {createTelegramService} from './telegram-bot.mjs';
 import {createVkService} from './vk.mjs';
+import {createVkWebAuth} from './vk-web-auth.mjs';
 import {addAutoSaleNote,addAutoSalePayment,deleteAutoSaleLeadCascade,mutateAutoSaleEntity,mutateAutoSaleEntityBatch,readAutoSaleEntity} from './ydb-entity-commands.mjs';
 import {MAX_ADMIN_ACCOUNTS,stateForAccess,rowVersionsForAccess,sanitizeClientOperations,sanitizeAdminOperations,applyManagerLeadClaims} from './auto-sale-access.mjs';
 import {managerTelegramUsername} from '../shared/auto-sale-manager-directory.mjs';
@@ -88,6 +89,7 @@ async function getApiState(){
 const media=createObjectStorage({bucket:mediaBucket});
 const telegram=createTelegramService();
 const vk=createVkService();
+const vkWeb=createVkWebAuth();
 async function getStore(){
   if(store)return store;
   if(!storePromise){
@@ -204,12 +206,15 @@ async function requestAccess(req,state=null){
   if(hasApiKey(req))return{state:current,access:{role:'admin',authenticated:true,authType:'api-key',apiKey:true,user:null,identity:null,admin:null}};
   const hasTelegram=Boolean(String(req.headers['x-telegram-init-data']||'').trim());
   const hasVk=Boolean(String(req.headers['x-vk-launch-params']||'').trim());
+  const webIdentity=vkWeb.auth(req);
+  if(webIdentity&&(hasTelegram||hasVk))return{state:current,access:{role:'public',authenticated:false,authType:'public',apiKey:false,user:null,identity:null,admin:null,error:'multiple_auth_providers'}};
   if(hasTelegram&&hasVk)return{state:current,access:{role:'public',authenticated:false,authType:'public',apiKey:false,user:null,identity:null,admin:null,error:'multiple_auth_providers'}};
   if(hasVk){
     const auth=vkAuth(req);
     if(!auth.ok)return{state:current,access:{role:'public',authenticated:false,authType:'public',apiKey:false,user:null,identity:null,admin:null,error:auth.error}};
     return{state:current,access:{role:'client',authenticated:true,authType:'vk',apiKey:false,user:auth.user,identity:auth.identity,admin:null}};
   }
+  if(webIdentity)return{state:current,access:{role:'client',authenticated:true,authType:'vk-web',apiKey:false,user:webIdentity.user,identity:webIdentity.identity,admin:null}};
   const auth=telegramAuth(req);
   if(!auth.ok)return{state:current,access:{role:'public',authenticated:false,authType:'public',apiKey:false,user:null,identity:null,admin:null,error:auth.error}};
   const user=auth.user;
@@ -285,6 +290,25 @@ const server=http.createServer(async(req,res)=>{
     const url=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);
     if(req.method==='OPTIONS'&&url.pathname.startsWith('/api/')){
       res.writeHead(204,apiHeaders);res.end();return;
+    }
+    if(url.pathname==='/api/auto-sale/vk/web/config'&&req.method==='GET'){
+      json(res,{enabled:vkWeb.enabled,authenticated:Boolean(vkWeb.auth(req))});return;
+    }
+    if(url.pathname==='/api/auto-sale/vk/web/start'&&req.method==='GET'){
+      const result=vkWeb.start(req,res);
+      if(result.location){res.writeHead(302,{location:result.location,'cache-control':'no-store'});res.end()}
+      else json(res,{error:result.error},result.status);
+      return;
+    }
+    if(url.pathname==='/api/auto-sale/vk/web/callback'&&req.method==='GET'){
+      const result=await vkWeb.complete(req,res,url);
+      if(result.location){res.writeHead(302,{location:result.location,'cache-control':'no-store'});res.end()}
+      else json(res,{error:result.error},result.status);
+      return;
+    }
+    if(url.pathname==='/api/auto-sale/vk/web/logout'&&req.method==='POST'){
+      if(!vkWeb.isTrustedWrite(req)){json(res,{error:'origin_forbidden'},403);return}
+      vkWeb.logout(res);json(res,{ok:true});return;
     }
     if(url.pathname==='/api/auto-sale/vk/config'&&req.method==='GET'){
       json(res,{enabled:Boolean(vk.enabled),messagingEnabled:Boolean(vk.messagingEnabled),groupId:vk.enabled?(vk.groupId||''):''});
@@ -471,6 +495,7 @@ const server=http.createServer(async(req,res)=>{
     if(url.pathname==='/api/auto-sale/entities/batch'&&req.method==='POST'){
       const input=await parseJson(req);
       const {state:accessState,access}=await requestAccess(req);
+      if(access.authType==='vk-web'&&!vkWeb.isTrustedWrite(req)){json(res,{error:'origin_forbidden'},403);return}
       if(access.role==='public'){json(res,{error:'telegram_auth_required'},401);return}
       let operations=Array.isArray(input?.operations)?input.operations:[];
       if(access.role==='client'){

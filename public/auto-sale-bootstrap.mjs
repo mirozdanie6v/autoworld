@@ -343,6 +343,7 @@ const vkShellPromise=vkLaunchParams()?vkModule.initVkMiniAppShell():Promise.reso
 const initialStatePromise=pullInitialState();
 await import('./auto-sale-submit-bridge.mjs?v=20260921-live-values-1');
 await import('./auto-sale-app-v3.mjs?v=20260929-entity-cutover-1');
+await import('./auto-sale-vk-web.mjs?v=20261008-web-auth-v1');
 await import('./auto-sale-ui-business-guard.mjs?v=20260929-entity-cutover-1');
 await import('./auto-sale-quote-lead-serialization.mjs');
 await import('./auto-sale-quote-save-fix.mjs?v=20260929-entity-cutover-1');
