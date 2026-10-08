@@ -1,5 +1,5 @@
 AWG production release
-requested_at=2026-10-08T06:35:00+07:00
-source_sha=97e9456247385c31d17d303d22b09249c51e4a2d
-reason=retry-vii-145-safe-vk-shell-with-official-yc-archive-fallback-vk-forced-off
+requested_at=2026-10-08T11:42:00+07:00
+source_sha=68173a1c939f8687ca7cd40896b09da3ccd61ed6
+reason=retry-vii-145-safe-vk-rollout-after-registry-timeout-vk-forced-off
 run_real_client_e2e=false
