@@ -315,8 +315,8 @@ function reloadFromCache(){
 }
 saveAll();
 
-const access=window.__AUTO_SALE_ACCESS__||{role:'admin',authenticated:false,member:{name:'Test staff'},testHarnessFallback:true};
-const hasAdminAccess=access.role==='admin';
+let access=window.__AUTO_SALE_ACCESS__||{role:'admin',authenticated:false,member:{name:'Test staff'},testHarnessFallback:true};
+let hasAdminAccess=access.role==='admin';
 const roleLabels={client:'Клиент',manager:'Работа',owner:'Аналитика'};
 const roleIcons={client:'user',manager:'briefcase',owner:'chart'};
 const nav={client:[['home','Главная','home'],['catalog','Авто','car'],['orders','Мои заказы','clipboard'],['about','Как работаем','route']],manager:[['work','Работа','dashboard'],['leads','Лиды','users'],['quotes','Расчёты','calculator'],['catalogAdmin','Каталог','car'],['shipping','Логистика','truck']],owner:[['overview','Обзор','dashboard'],['pipeline','Продажи','chart'],['finance','Финансы','wallet'],['ordersAdmin','Заказы','clipboard']]};
@@ -339,6 +339,18 @@ const savedRole=sessionStorage.getItem(KEYS.role);
 const initialRole=access.testHarnessFallback?(nav[savedRole]?savedRole:'client'):(hasAdminAccess&&['manager','owner'].includes(savedRole)?savedRole:(hasAdminAccess?'manager':'client'));
 const state={role:initialRole,route:'home',query:'',brand:'all',origin:'all',budget:'all',leadQuery:'',leadStatus:'all',leadSource:'all',leadManager:'all',orderQuery:'',orderStage:'all',orderManager:'all',orderRisk:'all',modal:null};
 state.route=nav[state.role][0][0];
+function refreshRuntimeFromServer(){
+  reloadFromCache();
+  access=window.__AUTO_SALE_ACCESS__||access;
+  hasAdminAccess=access.role==='admin';
+  const saved=sessionStorage.getItem(KEYS.role);
+  const nextRole=hasAdminAccess&&['manager','owner'].includes(saved)?saved:(hasAdminAccess?'manager':'client');
+  if(!hasAdminAccess||state.role==='client')state.role=nextRole;
+  if(!nav[state.role]?.some(([id])=>id===state.route))state.route=nav[state.role][0][0];
+  state.modal=null;
+  render();
+}
+window.addEventListener('auto-sale-server-synced',()=>queueMicrotask(refreshRuntimeFromServer));
 const dashboard=()=>dashboardStats(leads,orders,quotes);
 const finances=()=>financeStats(orders);
 const taskDue=l=>l.nextAction&&l.nextAction<=today&&!['Сделка','Отказ'].includes(l.status);
