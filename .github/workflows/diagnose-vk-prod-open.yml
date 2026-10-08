@@ -9,24 +9,21 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 4
     steps:
-      - name: Measure AWG loading waterfall
+      - name: Measure live AWG after static cutover
         run: |
           set -euo pipefail
           measure() {
             name="$1"; url="$2"
             for n in 1 2 3; do
-              curl -L -sS --connect-timeout 8 --max-time 30 -o /tmp/body \
-                -w "PERF $name run=$n code=%{http_code} bytes=%{size_download} dns=%{time_namelookup} connect=%{time_connect} tls=%{time_appconnect} ttfb=%{time_starttransfer} total=%{time_total}\n" \
-                "$url" || true
+              curl -L -sS --connect-timeout 5 --max-time 20 -o /tmp/body \
+                -w "PERF $name run=$n code=%{http_code} bytes=%{size_download} ttfb=%{time_starttransfer} total=%{time_total}\n" \
+                "$url"
             done
-            echo "HEADERS $name"
-            curl -L -sSI --connect-timeout 8 --max-time 20 "$url" | grep -Ei '^(HTTP/|cache-control:|content-type:|content-length:|content-encoding:|etag:|last-modified:|server:|via:|age:)' | tail -20 || true
           }
           measure index https://awgcars.ru/
-          measure css https://awgcars.ru/auto-sale.css?v=20260927-calc-crypto-v3
-          measure bootstrap https://awgcars.ru/auto-sale-bootstrap.mjs?v=20260928-lifecycle-v1
-          measure app https://awgcars.ru/auto-sale-app-v3.mjs?v=20260929-entity-cutover-1
-          measure telegram https://telegram.org/js/telegram-web-app.js?63
-          measure tracker https://dashboard.viiversion.com/tracker.js
-          measure health https://d5dbgio6limv03usvipl.s183zexc.apigw.yandexcloud.net/api/health
-          measure public_state https://awgcars.ru/api/auto-sale/state
+          measure bootstrap https://awgcars.ru/auto-sale-bootstrap.mjs
+          measure app https://awgcars.ru/auto-sale-app-v3.mjs
+          measure health https://awgcars.ru/api/health
+          echo HEALTH_JSON
+          curl -L -fsS --connect-timeout 5 --max-time 20 https://awgcars.ru/api/health \
+            | jq '{ok,buildSha,vkAuth,vkMessaging,telegramRoutableManagers}'
