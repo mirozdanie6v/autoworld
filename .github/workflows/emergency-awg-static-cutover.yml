@@ -98,14 +98,17 @@ jobs:
               *) echo 'application/octet-stream' ;;
             esac
           }
-          while IFS= read -r -d '' file; do
-            key="${file#dist/}"
-            [ "$key" = "index.html" ] && continue
-            yc storage s3 cp "$file" "s3://$AWG_STATIC_BUCKET/$key" \
-              --cache-control 'public, max-age=300, stale-while-revalidate=86400' \
-              --content-type "$(mime_for "$file")" \
-              --only-show-errors
-          done < <(find dist -type f -print0)
+          export -f mime_for
+          export AWG_STATIC_BUCKET
+          find dist -type f ! -name 'index.html' -print0 \
+            | xargs -0 -n1 -P12 bash -c '
+                file="$1"
+                key="${file#dist/}"
+                yc storage s3 cp "$file" "s3://$AWG_STATIC_BUCKET/$key" \
+                  --cache-control "public, max-age=300, stale-while-revalidate=86400" \
+                  --content-type "$(mime_for "$file")" \
+                  --only-show-errors
+              ' _
           yc storage s3 cp dist/index.html "s3://$AWG_STATIC_BUCKET/index.html" \
             --cache-control 'no-cache, no-store, must-revalidate' \
             --content-type 'text/html; charset=utf-8' \
