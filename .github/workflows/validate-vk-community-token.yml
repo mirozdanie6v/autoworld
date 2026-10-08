@@ -1,0 +1,133 @@
+name: Validate VK Community Token
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .diagnostics/vk-token-trigger
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  YC_DEPLOY_SA_ID: ${{ vars.AWG_YC_DEPLOY_SA_ID || 'aje775bcl6hgp40eu8of' }}
+  YDB_CONNECTION_STRING: ${{ vars.AWG_YDB_CONNECTION_STRING || 'grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1ggsmuiq7tb2d27f89q/etn00ojk5iv1u7dgpdar' }}
+  VK_GROUP_ID: ${{ vars.AWG_VK_GROUP_ID || '242103542' }}
+  VK_TOKEN: ${{ secrets.AWG_VK_COMMUNITY_TOKEN }}
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Validate VK community token metadata
+        run: |
+          set -euo pipefail
+          test -n "$VK_TOKEN" || { echo "AWG_VK_COMMUNITY_TOKEN is missing"; exit 1; }
+          echo "::add-mask::$VK_TOKEN"
+          RESPONSE=$(curl -sS -X POST https://api.vk.com/method/groups.getTokenPermissions \
+            --data-urlencode "access_token=$VK_TOKEN" \
+            --data-urlencode "v=5.199")
+          if printf '%s' "$RESPONSE" | jq -e '.error' >/dev/null; then
+            printf '%s' "$RESPONSE" | jq '{ok:false,error_code:.error.error_code,error_msg:.error.error_msg}'
+            exit 1
+          fi
+          printf '%s' "$RESPONSE" | jq '{ok:true,settings:(.response.settings // [])}'
+          printf '%s' "$RESPONSE" | jq -e '[(.response.settings // [])[] | .name] | index("messages") != null' >/dev/null
+
+      - name: Request GitHub OIDC token
+        uses: actions/github-script@v7
+        id: oidc
+        with:
+          script: |
+            const token = await core.getIDToken('https://github.com/mirozdanie6v')
+            core.setSecret(token)
+            core.setOutput('token', token)
+
+      - name: Exchange OIDC token for Yandex IAM token
+        env:
+          GITHUB_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        run: |
+          set -euo pipefail
+          RESPONSE=$(curl -sS -w '\n%{http_code}' -H 'Content-Type: application/x-www-form-urlencoded' \
+            --data-urlencode 'grant_type=urn:ietf:params:oauth:grant-type:token-exchange' \
+            --data-urlencode 'requested_token_type=urn:ietf:params:oauth:token-type:access_token' \
+            --data-urlencode "audience=${YC_DEPLOY_SA_ID}" \
+            --data-urlencode "subject_token=${GITHUB_OIDC_TOKEN}" \
+            --data-urlencode 'subject_token_type=urn:ietf:params:oauth:token-type:id_token' \
+            https://auth.yandex.cloud/oauth/token)
+          HTTP_CODE=$(printf '%s' "$RESPONSE" | tail -n1)
+          BODY=$(printf '%s' "$RESPONSE" | sed '$d')
+          test "$HTTP_CODE" = "200"
+          IAM_TOKEN=$(printf '%s' "$BODY" | jq -r '.access_token')
+          test -n "$IAM_TOKEN" && test "$IAM_TOKEN" != "null"
+          echo "::add-mask::$IAM_TOKEN"
+          echo "YC_IAM_TOKEN=$IAM_TOKEN" >> "$GITHUB_ENV"
+
+      - name: Send controlled VK test message to latest VK client
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import {AccessTokenCredentialsProvider} from '@ydbjs/auth/access-token';
+          import {createYdbDomainStore} from './server/ydb-domain-store.mjs';
+
+          const token=String(process.env.YC_IAM_TOKEN||'').trim();
+          const connectionString=String(process.env.YDB_CONNECTION_STRING||'').trim();
+          const vkToken=String(process.env.VK_TOKEN||'').trim();
+          const groupId=String(process.env.VK_GROUP_ID||'').trim();
+          if(!token||!connectionString||!vkToken||!groupId)throw new Error('diagnostic_credentials_missing');
+
+          const domain=await createYdbDomainStore({
+            connectionString,
+            credentialsProvider:new AccessTokenCredentialsProvider({token}),
+            ensureSchema:false
+          });
+          try{
+            const state=await domain.loadState();
+            const lead=(Array.isArray(state.leads)?state.leads:[])
+              .filter(item=>String(item?.clientProvider||'')==='vk' && /^\d+$/.test(String(item?.clientProviderUserId||'')))
+              .sort((a,b)=>String(b?.createdAt||'').localeCompare(String(a?.createdAt||'')))[0];
+            if(!lead)throw new Error('no_vk_client_for_message_probe');
+
+            const peerId=String(lead.clientProviderUserId);
+            const body=new URLSearchParams({
+              access_token:vkToken,
+              v:'5.199',
+              peer_id:peerId,
+              random_id:String(Number(process.env.GITHUB_RUN_ID||1)%2147483647),
+              message:'AUTO МИР · проверка VK уведомлений. Связь с системой настроена.'
+            });
+            const response=await fetch('https://api.vk.com/method/messages.send',{
+              method:'POST',
+              headers:{'content-type':'application/x-www-form-urlencoded'},
+              body:body.toString(),
+              signal:AbortSignal.timeout(8000)
+            });
+            const data=await response.json().catch(()=>({}));
+            if(!response.ok||data?.error){
+              console.log('VK_MESSAGE_PROBE',JSON.stringify({
+                ok:false,
+                errorCode:Number(data?.error?.error_code||0),
+                errorMsg:String(data?.error?.error_msg||('HTTP '+response.status))
+              }));
+              process.exitCode=1;
+              return;
+            }
+            const messageId=typeof data.response==='number'||typeof data.response==='string'
+              ?String(data.response)
+              :String(data?.response?.message_id||'');
+            console.log('VK_MESSAGE_PROBE',JSON.stringify({ok:true,hasMessageId:Boolean(messageId)}));
+          }finally{
+            await domain.close();
+          }
+          NODE
