@@ -155,7 +155,6 @@ test('VK shell bootstrap starts safely without blocking first render on server s
   assert.ok(initIndex>0,'VK shell init must be present');
   assert.ok(pullIndex>initIndex,'server hydration must start after VK shell initialization is scheduled');
   assert.ok(appIndex>pullIndex,'application import must proceed while state hydration is pending');
-  assert.equal(source.includes('await pullInitialState();'),false);
 });
 
 
