@@ -1,0 +1,69 @@
+name: Publish AWG VK Web candidate image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/publish-awg-vk-web-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: awg-vk-web-candidate-publisher
+  cancel-in-progress: false
+
+env:
+  YC_DEPLOY_SA_ID: ${{ vars.AWG_YC_DEPLOY_SA_ID || 'aje775bcl6hgp40eu8of' }}
+  YC_REGISTRY_ID: ${{ vars.AWG_YC_REGISTRY_ID || 'crptu0l7jn0iui8b8laa' }}
+
+jobs:
+  publish-image-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - name: Test and build candidate
+        run: |
+          npm ci
+          npm run check
+          docker build -f Dockerfile.yandex -t "cr.yandex/$YC_REGISTRY_ID/autoworld-awg:vk-web-candidate-$GITHUB_SHA" .
+      - name: Request short-lived GitHub OIDC token
+        uses: actions/github-script@v7
+        id: oidc
+        with:
+          script: |
+            const token = await core.getIDToken('https://github.com/mirozdanie6v')
+            core.setSecret(token)
+            core.setOutput('token', token)
+      - name: Exchange OIDC for Yandex IAM token
+        env:
+          GITHUB_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        run: |
+          set -euo pipefail
+          RESPONSE=$(curl --fail-with-body -fsS --connect-timeout 15 --max-time 30 \
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            --data-urlencode 'grant_type=urn:ietf:params:oauth:grant-type:token-exchange' \
+            --data-urlencode 'requested_token_type=urn:ietf:params:oauth:token-type:access_token' \
+            --data-urlencode "audience=$YC_DEPLOY_SA_ID" \
+            --data-urlencode "subject_token=$GITHUB_OIDC_TOKEN" \
+            --data-urlencode 'subject_token_type=urn:ietf:params:oauth:token-type:id_token' \
+            https://auth.yandex.cloud/oauth/token)
+          TOKEN=$(printf '%s' "$RESPONSE" | jq -r '.access_token // empty')
+          test -n "$TOKEN"
+          echo "::add-mask::$TOKEN"
+          echo "$TOKEN" | docker login --username iam --password-stdin cr.yandex
+      - name: Push candidate image without deployment
+        run: |
+          set -euo pipefail
+          IMAGE="cr.yandex/$YC_REGISTRY_ID/autoworld-awg:vk-web-candidate-$GITHUB_SHA"
+          docker push "$IMAGE"
+          echo "### Candidate published; production unchanged" >> "$GITHUB_STEP_SUMMARY"
+          echo "\\`$IMAGE\\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "This workflow **does not** create a Yandex revision, change API Gateway, upload statics or enable VK ID." >> "$GITHUB_STEP_SUMMARY"
