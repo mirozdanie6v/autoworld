@@ -40,10 +40,10 @@ jobs:
             --data-urlencode "v=5.199")
           if printf '%s' "$RESPONSE" | jq -e '.error' >/dev/null; then
             printf '%s' "$RESPONSE" | jq '{ok:false,error_code:.error.error_code,error_msg:.error.error_msg}'
-            exit 1
+            echo "Token metadata probe failed; continuing to definitive messages.send probe."
+          else
+            printf '%s' "$RESPONSE" | jq '{ok:true,settings:(.response.settings // [])}'
           fi
-          printf '%s' "$RESPONSE" | jq '{ok:true,settings:(.response.settings // [])}'
-          printf '%s' "$RESPONSE" | jq -e '[(.response.settings // [])[] | .name] | index("messages") != null' >/dev/null
 
       - name: Request GitHub OIDC token
         uses: actions/github-script@v7
