@@ -1,0 +1,99 @@
+name: Install VK Community Cover
+on:
+  push:
+    branches: [feat/vk-community-branding-20261008]
+    paths:
+      - .github/workflows/install-vk-community-cover.yml
+permissions:
+  contents: read
+jobs:
+  cover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      VK_GROUP_ID: "242103542"
+      VK_TOKEN: ${{ secrets.AWG_VK_COMMUNITY_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Pillow for brand image export
+        run: python -m pip install pillow==11.3.0
+      - name: Render premium 1920x768 cover from canonical AutoWorld asset
+        run: |
+          python - <<'PY'
+          from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageFilter
+          from pathlib import Path
+          src=Image.open('public/assets/auto-mir-hero-desktop-v3.webp').convert('RGB')
+          w,h=1920,768
+          photo=ImageOps.fit(src,(w,h),method=Image.Resampling.LANCZOS,centering=(0.65,0.5))
+          base=Image.new('RGB',(w,h),(6,10,15))
+          base.paste(photo)
+          # Robust dark left panel; original brand car imagery stays right.
+          mask=Image.new('L',(w,h),0)
+          px=mask.load()
+          for x in range(w):
+            a=round(244*(1-min(1,max(0,(x-580)/1000)))**1.7)+14
+            for y in range(h):
+              px[x,y]=min(250,max(0,a))
+          overlay=Image.new('RGB',(w,h),(6,9,14))
+          base.paste(overlay,(0,0),mask)
+          d=ImageDraw.Draw(base)
+          gold=(228,182,109);cream=(247,246,242);muted=(194,199,205)
+          bold='/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
+          regular='/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'
+          fTop=ImageFont.truetype(regular,26)
+          fTitle=ImageFont.truetype(bold,112)
+          fSub=ImageFont.truetype(regular,40)
+          fFoot=ImageFont.truetype(regular,27)
+          d.rounded_rectangle((310,140,374,147),radius=3,fill=gold)
+          d.text((391,126),'AUTO WORLD GEORGIA',font=fTop,fill=gold,stroke_width=0)
+          d.text((305,226),'АВТО',font=fTitle,fill=cream)
+          prefix=d.textbbox((0,0),'АВТО',font=fTitle)[2]
+          d.text((310+prefix,226),'МИР',font=fTitle,fill=gold)
+          d.text((316,385),'АВТОМОБИЛИ ИЗ США И ГРУЗИИ',font=fSub,fill=cream)
+          d.line((316,483,1000,483),fill=(121,104,76),width=2)
+          d.text((316,512),'ПОДБОР  •  ВЫКУП  •  ДОСТАВКА',font=fFoot,fill=muted)
+          d.text((316,621),'AWGCARS.RU',font=fFoot,fill=gold)
+          Path('vk-assets').mkdir(exist_ok=True)
+          base.save('vk-assets/awg-vk-cover-1920x768.jpg',quality=94,optimize=True,subsampling=0)
+          print('cover_generated: size=1920x768, source='+str(src.size))
+          PY
+      - name: Upload to VK only when no cover exists
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import {readFile} from 'node:fs/promises';
+          const token=process.env.VK_TOKEN,group=process.env.VK_GROUP_ID,version='5.199';
+          if(!token)throw new Error('missing_community_token');
+          async function api(method,params={}){
+            const body=new URLSearchParams({...params,access_token:token,v:version});
+            const response=await fetch('https://api.vk.com/method/'+method,{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body,signal:AbortSignal.timeout(15000)});
+            const data=await response.json();
+            if(data.error)throw new Error(method+': code='+data.error.error_code+' '+String(data.error.error_msg||''));
+            return data.response;
+          }
+          const pick=data=>data?.groups?.[0]||data?.[0]||{};
+          const before=pick(await api('groups.getById',{group_ids:group,fields:'cover'}));
+          if(String(before.id)!==group)throw new Error('group_mismatch');
+          if(before.cover?.enabled){console.log('cover_unchanged_existing_cover_protected');process.exit(0)}
+          const upload=await api('photos.getOwnerCoverPhotoUploadServer',{group_id:group,crop_x:0,crop_y:0,crop_x2:1920,crop_y2:768});
+          if(!upload?.upload_url)throw new Error('cover_upload_url_missing');
+          const data=new FormData();
+          data.set('photo',new Blob([await readFile('vk-assets/awg-vk-cover-1920x768.jpg')],{type:'image/jpeg'}),'cover.jpg');
+          const res=await fetch(upload.upload_url,{method:'POST',body:data,signal:AbortSignal.timeout(30000)});
+          const payload=await res.json();
+          if(!res.ok||payload.error||!payload.photo||!payload.hash)throw new Error('cover_binary_upload_failed: http='+res.status+' keys='+Object.keys(payload).join(','));
+          const params={photo:payload.photo,hash:payload.hash};
+          if(payload.response_json)params.response_json=payload.response_json;
+          await api('photos.saveOwnerCoverPhoto',params);
+          const after=pick(await api('groups.getById',{group_ids:group,fields:'cover'}));
+          console.log(JSON.stringify({cover_uploaded:true,verified_enabled:after.cover?.enabled===1,group_id:group}));
+          NODE
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: awg-vk-cover-ready
+          path: vk-assets/awg-vk-cover-1920x768.jpg
+          retention-days: 30
