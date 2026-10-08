@@ -6,7 +6,7 @@ const from64=value=>JSON.parse(Buffer.from(value,'base64url').toString('utf8'));
 const encode=value=>encodeURIComponent(value);
 const COOKIE_TX='awg_vkid_tx';
 const COOKIE_SESSION='awg_vkid_session';
-const cookies=req=>Object.fromEntries(String(req.headers.cookie||'').split(';').map(part=>part.trim().split(/=(.*)/s).slice(0,2)).filter(([key])=>key));
+const cookies=req=>Object.fromEntries(String(req.headers.cookie||'').split(';').map(part=>{const pos=part.indexOf('=');return pos<0?[]:[part.slice(0,pos).trim(),part.slice(pos+1).trim()]}).filter(([key])=>key));
 const setCookie=(res,name,value,maxAge)=>res.setHeader('set-cookie',[...(res.getHeader('set-cookie')||[]),name+'='+value+'; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age='+maxAge]);
 const digest=(key,text)=>createHmac('sha256',key).update(text).digest('base64url');
 
