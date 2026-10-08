@@ -28,10 +28,25 @@ async function copy(from, key, cache) {
   await yc('storage', 's3', 'cp', from, `s3://${bucket}/${key}`,
     '--content-type', staticContentType(key), '--cache-control', cache, '--only-show-errors');
 }
+let probeSequence = 0;
+async function request(url, origin) {
+  const output = path.join(temp, 'awg-static-probe-' + probeSequence++);
+  const args = ['-4', '-L', '-sS', '--connect-timeout', '10', '--max-time', '30',
+    '--retry', '2', '--retry-all-errors', '--retry-delay', '1',
+    '-D', output + '.headers', '-o', output + '.body', '-w', '%{http_code} %{time_starttransfer}'];
+  if (origin) args.push('-H', 'Origin: ' + origin);
+  args.push(url);
+  const {stdout} = await exec('curl', args, {timeout: 110000, maxBuffer: 100000});
+  const [status, ttfb] = stdout.trim().split(/\s+/).slice(-2);
+  const headers = new Map((await readFile(output + '.headers', 'utf8')).split(/\r?\n/)
+    .filter(line => line.indexOf(':') > 0)
+    .map(line => [line.slice(0, line.indexOf(':')).toLowerCase(), line.slice(line.indexOf(':') + 1).trim()]));
+  return {status: Number(status), ttfbMs: Math.round(Number(ttfb) * 1000), headers, body: await readFile(output + '.body', 'utf8')};
+}
 async function health() {
-  const response = await fetch(appUrl + 'api/health', {signal: AbortSignal.timeout(45000), cache: 'no-store'});
+  const response = await request(appUrl + 'api/health');
   assert.equal(response.status, 200, 'production API health status');
-  const json = await response.json();
+  const json = JSON.parse(response.body);
   assert.equal(json.ok, true);
   assert.equal(json.vkAuth, 'enabled', 'VK auth must remain enabled');
   assert.equal(json.vkMessaging, 'enabled', 'VK notifications must remain enabled');
@@ -58,16 +73,14 @@ await yc('storage', 'bucket', 'update', '--name', bucket,
 
 // Probe actual CORS and MIME from the app origin before touching the entrypoint.
 for (const [file, type] of [['auto-sale-bootstrap.mjs', 'javascript'], ['auto-sale-app-v3.mjs', 'javascript'], ['auto-sale.css', 'text/css']]) {
-  const started = performance.now();
-  const response = await fetch(base + file, {headers: {Origin: appUrl.slice(0, -1)}, signal: AbortSignal.timeout(20000)});
-  const ttfbMs = Math.round(performance.now() - started);
+  const response = await request(base + file, appUrl.slice(0, -1));
   assert.equal(response.status, 200, file);
   assert.ok(response.headers.get('content-type')?.includes(type), file + ' MIME');
   assert.equal(response.headers.get('access-control-allow-origin'), '*', file + ' CORS');
   assert.ok(response.headers.get('cache-control')?.includes('immutable'), file + ' immutable cache');
-  const content = await response.text();
+  const content = response.body;
   assert.ok(content.length > 100, file + ' body');
-  console.log(JSON.stringify({directStaticProbe: file, ttfbMs, contentType: response.headers.get('content-type')}));
+  console.log(JSON.stringify({directStaticProbe: file, ttfbMs: response.ttfbMs, contentType: response.headers.get('content-type')}));
 }
 const smokeScript = path.join(root, 'scripts', 'smoke-awg-browser.mjs');
 async function smoke(entryFile) {
@@ -85,9 +98,9 @@ try {
   await smoke();
   const after = await health();
   assert.deepEqual(after, before, 'backend revision/features changed during static-only deployment');
-  const response = await fetch(appUrl + 'api/auto-sale/state', {signal: AbortSignal.timeout(45000), cache: 'no-store'});
+  const response = await request(appUrl + 'api/auto-sale/state');
   assert.equal(response.status, 200);
-  const state = await response.json();
+  const state = JSON.parse(response.body);
   assert.equal(state._access?.role, 'public');
   for (const key of ['leads', 'quotes', 'orders', 'team']) assert.equal(state[key]?.length, 0, 'public state boundary: ' + key);
   console.log(JSON.stringify({directStaticDeployment: 'verified', release, backend: after, rollbackKey: `rollbacks/${release}/index.html`}));

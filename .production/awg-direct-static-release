@@ -3,3 +3,4 @@ source=94215085196dafb2d1fec8780ffdbdb8b45459b6
 preserve_backend=true
 vk_auth=enabled
 vk_messaging=enabled
+probe_transport=curl-ipv4-retry
