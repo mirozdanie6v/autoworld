@@ -1,0 +1,127 @@
+name: VK Sales Cycle Step
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .diagnostics/vk-sales-cycle-trigger
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  YC_FOLDER_ID: ${{ vars.AWG_YC_FOLDER_ID || 'b1g8u8vqkgehvtbj8n13' }}
+  YC_DEPLOY_SA_ID: ${{ vars.AWG_YC_DEPLOY_SA_ID || 'aje775bcl6hgp40eu8of' }}
+  TARGET_REVISION_ID: bba13foieugcgmu9n72r
+  AWG_GATEWAY_URL: https://d5dbgio6limv03usvipl.s183zexc.apigw.yandexcloud.net
+
+jobs:
+  step:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Request GitHub OIDC token
+        uses: actions/github-script@v7
+        id: oidc
+        with:
+          script: |
+            const token = await core.getIDToken('https://github.com/mirozdanie6v')
+            core.setSecret(token)
+            core.setOutput('token', token)
+
+      - name: Exchange OIDC token for Yandex IAM token
+        env:
+          GITHUB_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        run: |
+          set -euo pipefail
+          RESPONSE=$(curl -sS -w '\n%{http_code}' -H 'Content-Type: application/x-www-form-urlencoded' \
+            --data-urlencode 'grant_type=urn:ietf:params:oauth:grant-type:token-exchange' \
+            --data-urlencode 'requested_token_type=urn:ietf:params:oauth:token-type:access_token' \
+            --data-urlencode "audience=${YC_DEPLOY_SA_ID}" \
+            --data-urlencode "subject_token=${GITHUB_OIDC_TOKEN}" \
+            --data-urlencode 'subject_token_type=urn:ietf:params:oauth:token-type:id_token' \
+            https://auth.yandex.cloud/oauth/token)
+          HTTP_CODE=$(printf '%s' "$RESPONSE" | tail -n1)
+          BODY=$(printf '%s' "$RESPONSE" | sed '$d')
+          test "$HTTP_CODE" = "200"
+          IAM_TOKEN=$(printf '%s' "$BODY" | jq -r '.access_token')
+          test -n "$IAM_TOKEN" && test "$IAM_TOKEN" != "null"
+          echo "::add-mask::$IAM_TOKEN"
+          echo "YC_IAM_TOKEN=$IAM_TOKEN" >> "$GITHUB_ENV"
+
+      - name: Install Yandex CLI
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 --retry-delay 3 https://storage.yandexcloud.net/yandexcloud-yc/install.sh -o /tmp/yc-install.sh
+          bash /tmp/yc-install.sh -n
+          echo "$HOME/yandex-cloud/bin" >> "$GITHUB_PATH"
+          "$HOME/yandex-cloud/bin/yc" config set endpoint api.cloud.yandex.net:443
+          "$HOME/yandex-cloud/bin/yc" config set token "$YC_IAM_TOKEN"
+          "$HOME/yandex-cloud/bin/yc" config set folder-id "$YC_FOLDER_ID"
+
+      - name: Resolve production API credential
+        run: |
+          set -euo pipefail
+          REV=$(yc serverless container revision get "$TARGET_REVISION_ID" --folder-id "$YC_FOLDER_ID" --format json)
+          test "$(printf '%s' "$REV" | jq -r '.environment.AUTO_SALE_VK_ENABLED // ""')" = "true"
+          API_KEY=$(printf '%s' "$REV" | jq -r '.environment.AUTO_SALE_API_KEY // empty')
+          test -n "$API_KEY"
+          echo "::add-mask::$API_KEY"
+          echo "AUTO_SALE_API_KEY=$API_KEY" >> "$GITHUB_ENV"
+
+      - name: Retry VK confirmation and move latest VK lead to In Progress
+        run: |
+          set -euo pipefail
+          URL="${AWG_GATEWAY_URL%/}"
+          H=(-H "x-auto-sale-key: $AUTO_SALE_API_KEY")
+          STATE=$(curl -fsS "${H[@]}" "$URL/api/auto-sale/state")
+          LEAD=$(printf '%s' "$STATE" | jq -c '[.leads[]? | select(.clientProvider=="vk")] | sort_by(.createdAt // "") | reverse | .[0] // {}')
+          LEAD_ID=$(printf '%s' "$LEAD" | jq -r '.id // empty')
+          STATUS=$(printf '%s' "$LEAD" | jq -r '.status // empty')
+          MODEL=$(printf '%s' "$LEAD" | jq -r '.model // empty')
+          test -n "$LEAD_ID" || { echo "No VK lead found"; exit 2; }
+          echo "VK_TEST_LEAD id=$LEAD_ID status=$STATUS model=$MODEL"
+
+          CURRENT_REV=$(printf '%s' "$STATE" | jq -r '.revision // 0')
+          START_REV=$(( CURRENT_REV > 8 ? CURRENT_REV - 8 : 1 ))
+          CONFIRM_ID=""
+          for REV in $(seq "$START_REV" "$CURRENT_REV"); do
+            DATA=$(curl -fsS "${H[@]}" "$URL/api/auto-sale/notifications/revision?revision=$REV")
+            ID=$(printf '%s' "$DATA" | jq -r --arg id "$LEAD_ID" '.deliveries[]? | select(.leadId==$id and .event=="lead_created_confirmation" and .target=="client") | .id' | head -n1)
+            if [ -n "$ID" ]; then CONFIRM_ID="$ID"; break; fi
+          done
+
+          if [ -n "$CONFIRM_ID" ]; then
+            echo "Retrying original VK confirmation"
+            curl -fsS -X POST "${H[@]}" "$URL/api/auto-sale/notifications/process?id=$(python3 -c 'import os,urllib.parse; print(urllib.parse.quote(os.environ["CONFIRM_ID"]))' 2>/dev/null || printf '%s' "$CONFIRM_ID")" >/tmp/confirm.json || true
+            cat /tmp/confirm.json | jq '{processed,results:[.results[]? | {ok,channel,error,hasMessageId:(.messageId!=null)}]}'
+          fi
+
+          if [ "$STATUS" = "Новый" ]; then
+            ROW_VERSION=$(printf '%s' "$STATE" | jq -r --arg id "$LEAD_ID" '._rowVersions.lead[$id] // empty')
+            test -n "$ROW_VERSION"
+            NEXT_ACTION=$(date -u -d '+1 day' +%F)
+            BODY=$(jq -nc --argjson rv "$ROW_VERSION" --arg next "$NEXT_ACTION" '{baseRowVersion:$rv,status:"В работе",nextAction:$next}')
+            PATCH=$(curl -fsS -X PATCH "${H[@]}" -H 'content-type: application/json' --data "$BODY" "$URL/api/auto-sale/leads/$LEAD_ID")
+            NEW_REV=$(printf '%s' "$PATCH" | jq -r '.revision // empty')
+            test -n "$NEW_REV"
+            echo "LEAD_PATCH status=В работе revision=$NEW_REV"
+            sleep 1
+            PROC=$(curl -fsS -X POST "${H[@]}" "$URL/api/auto-sale/notifications/process")
+            printf '%s' "$PROC" | jq '{processed,results:[.results[]? | {ok,channel,error,hasMessageId:(.messageId!=null)}]}'
+            DELIVERY=$(curl -fsS "${H[@]}" "$URL/api/auto-sale/notifications/revision?revision=$NEW_REV")
+            printf '%s' "$DELIVERY" | jq --arg id "$LEAD_ID" '{
+              leadStatus:[
+                .deliveries[]? |
+                select(.leadId==$id and .event=="lead_status") |
+                {target,channel,status,error,attempts,hasMessageId:((.messageId // "")|length>0)}
+              ]
+            }'
+          else
+            echo "Lead is already past Новый; no status mutation performed."
+          fi
+        env:
+          CONFIRM_ID: ""
