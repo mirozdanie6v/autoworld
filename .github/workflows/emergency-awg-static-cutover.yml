@@ -1,0 +1,241 @@
+name: Emergency AWG Static Cutover
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/emergency-awg-static-cutover.yml
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  YC_FOLDER_ID: ${{ vars.AWG_YC_FOLDER_ID || 'b1g8u8vqkgehvtbj8n13' }}
+  YC_DEPLOY_SA_ID: ${{ vars.AWG_YC_DEPLOY_SA_ID || 'aje775bcl6hgp40eu8of' }}
+  YC_CONTAINER_NAME: ${{ vars.AWG_YC_CONTAINER_NAME || 'autoworld-awg-prod' }}
+  AWG_GATEWAY_NAME: ${{ vars.AWG_GATEWAY_NAME || 'autoworld-awg-prod' }}
+  AWG_STATIC_BUCKET: ${{ vars.AWG_STATIC_BUCKET || 'viiversion-autoworld-awg-static-b1g8u8vqkgehvtbj8n13' }}
+  SMOKE_GATEWAY_NAME: autoworld-awg-static-smoke
+
+jobs:
+  cutover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Build current frontend
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run build
+
+      - name: Request GitHub OIDC token
+        uses: actions/github-script@v7
+        id: oidc
+        with:
+          script: |
+            const token = await core.getIDToken('https://github.com/mirozdanie6v')
+            core.setSecret(token)
+            core.setOutput('token', token)
+
+      - name: Exchange OIDC token for Yandex IAM token
+        env:
+          GITHUB_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        run: |
+          set -euo pipefail
+          RESPONSE=$(curl -sS -w '\n%{http_code}' -H 'Content-Type: application/x-www-form-urlencoded' \
+            --data-urlencode 'grant_type=urn:ietf:params:oauth:grant-type:token-exchange' \
+            --data-urlencode 'requested_token_type=urn:ietf:params:oauth:token-type:access_token' \
+            --data-urlencode "audience=${YC_DEPLOY_SA_ID}" \
+            --data-urlencode "subject_token=${GITHUB_OIDC_TOKEN}" \
+            --data-urlencode 'subject_token_type=urn:ietf:params:oauth:token-type:id_token' \
+            https://auth.yandex.cloud/oauth/token)
+          HTTP_CODE=$(printf '%s' "$RESPONSE" | tail -n1)
+          BODY=$(printf '%s' "$RESPONSE" | sed '$d')
+          test "$HTTP_CODE" = "200"
+          IAM_TOKEN=$(printf '%s' "$BODY" | jq -r '.access_token')
+          test -n "$IAM_TOKEN" && test "$IAM_TOKEN" != "null"
+          echo "::add-mask::$IAM_TOKEN"
+          echo "YC_IAM_TOKEN=$IAM_TOKEN" >> "$GITHUB_ENV"
+
+      - name: Install and configure Yandex Cloud CLI
+        run: |
+          set -euo pipefail
+          curl --connect-timeout 10 --max-time 120 --retry 3 --retry-all-errors -fsSL \
+            https://storage.yandexcloud.net/yandexcloud-yc/install.sh -o /tmp/yc-install.sh
+          bash /tmp/yc-install.sh -n
+          echo "$HOME/yandex-cloud/bin" >> "$GITHUB_PATH"
+          export PATH="$HOME/yandex-cloud/bin:$PATH"
+          yc config set endpoint api.cloud.yandex.net:443
+          yc config set token "$YC_IAM_TOKEN"
+          yc config set folder-id "$YC_FOLDER_ID"
+
+      - name: Publish browser-safe static build
+        run: |
+          set -euo pipefail
+          export PATH="$HOME/yandex-cloud/bin:$PATH"
+          if ! yc storage bucket list --folder-id "$YC_FOLDER_ID" --format json \
+            | jq -e --arg name "$AWG_STATIC_BUCKET" '.[] | select(.name == $name)' >/dev/null; then
+            yc storage bucket create --name "$AWG_STATIC_BUCKET" --folder-id "$YC_FOLDER_ID" --max-size 1073741824
+          fi
+          mime_for() {
+            case "$1" in
+              *.html) echo 'text/html; charset=utf-8' ;;
+              *.css) echo 'text/css; charset=utf-8' ;;
+              *.mjs|*.js) echo 'text/javascript; charset=utf-8' ;;
+              *.json) echo 'application/json; charset=utf-8' ;;
+              *.svg) echo 'image/svg+xml' ;;
+              *.webp) echo 'image/webp' ;;
+              *.png) echo 'image/png' ;;
+              *.jpg|*.jpeg) echo 'image/jpeg' ;;
+              *.woff2) echo 'font/woff2' ;;
+              *) echo 'application/octet-stream' ;;
+            esac
+          }
+          while IFS= read -r -d '' file; do
+            key="${file#dist/}"
+            [ "$key" = "index.html" ] && continue
+            yc storage s3 cp "$file" "s3://$AWG_STATIC_BUCKET/$key" \
+              --cache-control 'public, max-age=300, stale-while-revalidate=86400' \
+              --content-type "$(mime_for "$file")" \
+              --only-show-errors
+          done < <(find dist -type f -print0)
+          yc storage s3 cp dist/index.html "s3://$AWG_STATIC_BUCKET/index.html" \
+            --cache-control 'no-cache, no-store, must-revalidate' \
+            --content-type 'text/html; charset=utf-8' \
+            --only-show-errors
+
+      - name: Build staging gateway spec
+        run: |
+          set -euo pipefail
+          export PATH="$HOME/yandex-cloud/bin:$PATH"
+          CONTAINER_ID=$(yc serverless container get --name "$YC_CONTAINER_NAME" --folder-id "$YC_FOLDER_ID" --format json | jq -r '.id')
+          test -n "$CONTAINER_ID" && test "$CONTAINER_ID" != "null"
+          cat > "$RUNNER_TEMP/static-gateway.yaml" <<YAML
+          openapi: 3.0.0
+          info:
+            title: AutoWorld Georgia static smoke
+            version: 1.0.0
+          paths:
+            /api/{proxy+}:
+              x-yc-apigateway-any-method:
+                x-yc-apigateway-integration:
+                  type: serverless_containers
+                  container_id: $CONTAINER_ID
+                  service_account_id: $YC_DEPLOY_SA_ID
+                parameters:
+                  - explode: false
+                    in: path
+                    name: proxy
+                    required: true
+                    schema:
+                      type: string
+                    style: simple
+            /:
+              get:
+                x-yc-apigateway-integration:
+                  type: object_storage
+                  bucket: $AWG_STATIC_BUCKET
+                  object: index.html
+                  service_account_id: $YC_DEPLOY_SA_ID
+            /{proxy+}:
+              get:
+                parameters:
+                  - explode: false
+                    in: path
+                    name: proxy
+                    required: true
+                    schema:
+                      type: string
+                    style: simple
+                x-yc-apigateway-integration:
+                  type: object_storage
+                  bucket: $AWG_STATIC_BUCKET
+                  object: '{proxy}'
+                  error_object:
+                    object: index.html
+                    statusCode: 200
+                  service_account_id: $YC_DEPLOY_SA_ID
+          YAML
+
+      - name: Create or update isolated static smoke gateway
+        run: |
+          set -euo pipefail
+          export PATH="$HOME/yandex-cloud/bin:$PATH"
+          if yc serverless api-gateway get --name "$SMOKE_GATEWAY_NAME" --folder-id "$YC_FOLDER_ID" >/dev/null 2>&1; then
+            yc serverless api-gateway update --name "$SMOKE_GATEWAY_NAME" --folder-id "$YC_FOLDER_ID" --spec="$RUNNER_TEMP/static-gateway.yaml"
+          else
+            yc serverless api-gateway create --name "$SMOKE_GATEWAY_NAME" --folder-id "$YC_FOLDER_ID" --spec="$RUNNER_TEMP/static-gateway.yaml"
+          fi
+          DOMAIN=$(yc serverless api-gateway get --name "$SMOKE_GATEWAY_NAME" --folder-id "$YC_FOLDER_ID" --format json | jq -r '.domain')
+          test -n "$DOMAIN" && test "$DOMAIN" != "null"
+          echo "SMOKE_URL=https://$DOMAIN" >> "$GITHUB_ENV"
+
+      - name: Browser-test isolated static gateway
+        run: |
+          set -euo pipefail
+          probe_type() {
+            url="$1"; expected="$2"; out="$3"
+            code=$(curl -L -sS --connect-timeout 5 --max-time 20 -D "$out.headers" -o "$out.body" -w '%{http_code}' "$url")
+            type=$(awk 'BEGIN{IGNORECASE=1} /^content-type:/{gsub("\r","");print tolower($0)}' "$out.headers" | tail -1)
+            echo "$url -> $code [$type]"
+            test "$code" = "200"
+            [[ "$type" == *"$expected"* ]]
+          }
+          probe_type "$SMOKE_URL/" "text/html" /tmp/index
+          probe_type "$SMOKE_URL/auto-sale-bootstrap.mjs" "javascript" /tmp/bootstrap
+          probe_type "$SMOKE_URL/auto-sale.css" "text/css" /tmp/css
+          grep -q 'pullInitialState' /tmp/bootstrap.body
+          CHROME=$(command -v google-chrome || command -v chromium || command -v chromium-browser)
+          test -n "$CHROME"
+          "$CHROME" --headless=new --no-sandbox --disable-gpu \
+            --virtual-time-budget=20000 --dump-dom "$SMOKE_URL/" > /tmp/dom.html
+          grep -q 'Автомобили' /tmp/dom.html
+          if grep -q 'Загружаем приложение…' /tmp/dom.html; then
+            echo "Browser remained on startup shell"
+            exit 1
+          fi
+
+      - name: Cut production gateway to verified static frontend
+        run: |
+          set -euo pipefail
+          export PATH="$HOME/yandex-cloud/bin:$PATH"
+          yc serverless api-gateway get-spec --name "$AWG_GATEWAY_NAME" --folder-id "$YC_FOLDER_ID" > "$RUNNER_TEMP/prod-before.yaml"
+          rollback() {
+            echo "Production browser smoke failed; restoring previous gateway."
+            yc serverless api-gateway update --name "$AWG_GATEWAY_NAME" --folder-id "$YC_FOLDER_ID" --spec="$RUNNER_TEMP/prod-before.yaml" || true
+          }
+          trap rollback ERR
+          yc serverless api-gateway update --name "$AWG_GATEWAY_NAME" --folder-id "$YC_FOLDER_ID" --spec="$RUNNER_TEMP/static-gateway.yaml"
+          for attempt in $(seq 1 20); do
+            code=$(curl -L -sS --connect-timeout 5 --max-time 15 -D /tmp/prod-bootstrap.headers -o /tmp/prod-bootstrap.body -w '%{http_code}' https://awgcars.ru/auto-sale-bootstrap.mjs || true)
+            type=$(awk 'BEGIN{IGNORECASE=1} /^content-type:/{gsub("\r","");print tolower($0)}' /tmp/prod-bootstrap.headers | tail -1)
+            if [ "$code" = "200" ] && [[ "$type" == *"javascript"* ]] && grep -q 'pullInitialState' /tmp/prod-bootstrap.body; then break; fi
+            test "$attempt" -lt 20
+            sleep 3
+          done
+          CHROME=$(command -v google-chrome || command -v chromium || command -v chromium-browser)
+          "$CHROME" --headless=new --no-sandbox --disable-gpu \
+            --virtual-time-budget=20000 --dump-dom https://awgcars.ru/ > /tmp/prod-dom.html
+          grep -q 'Автомобили' /tmp/prod-dom.html
+          if grep -q 'Загружаем приложение…' /tmp/prod-dom.html; then
+            echo "Production remained on startup shell"
+            false
+          fi
+          trap - ERR
+
+      - name: Report recovered production timing
+        run: |
+          set -euo pipefail
+          for url in https://awgcars.ru/ https://awgcars.ru/auto-sale-bootstrap.mjs https://awgcars.ru/auto-sale-app-v3.mjs; do
+            curl -L -sS --connect-timeout 5 --max-time 15 -o /dev/null \
+              -w "$url code=%{http_code} ttfb=%{time_starttransfer}s total=%{time_total}s\n" "$url"
+          done
+          curl -L -fsS --connect-timeout 5 --max-time 20 https://awgcars.ru/api/health \
+            | jq '{ok,buildSha,vkAuth,vkMessaging,telegramRoutableManagers}'
