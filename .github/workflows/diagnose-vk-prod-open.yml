@@ -1,0 +1,39 @@
+name: Diagnose VK Production Open
+
+on:
+  push:
+    branches: [diag-vk-prod-open]
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Probe AWG site, gateway and VK shell dependencies
+        run: |
+          set -euo pipefail
+          probe() {
+            name="$1"; url="$2"
+            code=$(curl -L -sS --connect-timeout 10 --max-time 25 -o "/tmp/$name.body" -w '%{http_code}' "$url" || true)
+            bytes=$(wc -c <"/tmp/$name.body" 2>/dev/null || echo 0)
+            ctype=$(curl -L -sSI --connect-timeout 10 --max-time 25 "$url" 2>/dev/null | awk 'BEGIN{IGNORECASE=1}/^content-type:/{print $0}' | tail -n1 | tr -d '\r' || true)
+            echo "PROBE $name code=$code bytes=$bytes $ctype"
+          }
+          probe awg https://awgcars.ru/
+          probe health https://d5dbgio6limv03usvipl.s183zexc.apigw.yandexcloud.net/api/health
+          probe vkmodule https://awgcars.ru/auto-sale-vk.mjs
+          probe appmodule https://awgcars.ru/auto-sale-app-v3.mjs
+          probe bootstrap https://awgcars.ru/auto-sale-bootstrap.mjs
+          probe bridge https://unpkg.com/@vkontakte/vk-bridge@3.0.2/dist/browser.min.js
+          probe vkapp https://vk.com/app54810434
+          echo "HEALTH_JSON"
+          cat /tmp/health.body | jq '{ok,persistence,buildSha,vkAuth,vkMessaging,telegramRoutableManagers}' || cat /tmp/health.body | head -c 1200
+          echo
+          echo "AWG_HEAD"
+          head -c 2500 /tmp/awg.body
+          echo
+          echo "VK_MODULE_HEAD"
+          head -c 1200 /tmp/vkmodule.body
+          echo
+          test "$(curl -L -sS -o /dev/null -w '%{http_code}' https://awgcars.ru/)" = "200"
+          test "$(curl -L -sS -o /dev/null -w '%{http_code}' https://d5dbgio6limv03usvipl.s183zexc.apigw.yandexcloud.net/api/health)" = "200"
