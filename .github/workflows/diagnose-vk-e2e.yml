@@ -15,7 +15,7 @@ env:
   YC_DEPLOY_SA_ID: ${{ vars.AWG_YC_DEPLOY_SA_ID || 'aje775bcl6hgp40eu8of' }}
   YDB_CONNECTION_STRING: ${{ vars.AWG_YDB_CONNECTION_STRING || 'grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1ggsmuiq7tb2d27f89q/etn00ojk5iv1u7dgpdar' }}
   AWG_GATEWAY_URL: https://d5dbgio6limv03usvipl.s183zexc.apigw.yandexcloud.net
-  EXPECTED_BUILD_SHA: 391f19ff5e042e05c05b06548b277721b0804272
+  EXPECTED_BUILD_SHA: 45d376b2510ecae2914bb29764ec4e98fa2dfb85
 
 jobs:
   diagnose:
@@ -76,6 +76,7 @@ jobs:
           import {AccessTokenCredentialsProvider} from '@ydbjs/auth/access-token';
           import {createYdbDomainStore} from './server/ydb-domain-store.mjs';
           import {createYdbStateStore} from './server/ydb-state.mjs';
+          import {managerTelegramIdentity,managerTelegramUsername} from './shared/auto-sale-manager-directory.mjs';
 
           const token=String(process.env.YC_IAM_TOKEN||process.env.YDB_ACCESS_TOKEN_CREDENTIALS||'').trim();
           const connectionString=String(process.env.YDB_CONNECTION_STRING||'').trim();
@@ -90,17 +91,28 @@ jobs:
               .sort((a,b)=>String(b?.createdAt||'').localeCompare(String(a?.createdAt||'')));
             const lead=leads[0];
             if(!lead)throw new Error('no_vk_lead_found');
+            const manager=String(lead.manager||'').trim();
+            const managerIdentity=managerTelegramIdentity(manager,state.team||[]);
+            const teamMember=(state.team||[]).find(item=>String(item?.name||'').trim()===manager);
             console.log('VK_LEAD',JSON.stringify({
               id:String(lead.id||''),
               createdAt:String(lead.createdAt||''),
               status:String(lead.status||''),
-              manager:String(lead.manager||''),
+              manager,
               source:String(lead.source||''),
               model:String(lead.model||''),
               clientProvider:String(lead.clientProvider||''),
               hasProviderUserId:Boolean(String(lead.clientProviderUserId||'')),
               hasIdentityKey:String(lead.clientIdentityKey||'').startsWith('vk:'),
-              contactLooksVk:/^https:\/\/vk\.com\//.test(String(lead.contact||''))
+              contactLooksVk:/^https:\/\/vk\.com\//.test(String(lead.contact||'')),
+              managerCanonicalUsername:managerTelegramUsername(manager),
+              managerIdentityUsername:String(managerIdentity.username||''),
+              managerIdentityHasNumericId:Boolean(String(managerIdentity.id||'')),
+              teamMemberFound:Boolean(teamMember),
+              teamMemberHasUsername:Boolean(String(teamMember?.telegramUsername||teamMember?.telegram||'')),
+              teamMemberHasNumericId:/^\\d+$/.test(String(teamMember?.telegramUserId||'')),
+              leadHasManagerTelegramUsername:Boolean(String(lead.managerTelegramUsername||'')),
+              leadHasManagerTelegramUserId:/^\\d+$/.test(String(lead.managerTelegramUserId||''))
             }));
             const current=Number(state.revision)||0;
             const start=Math.max(1,current-10);
