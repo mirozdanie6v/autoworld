@@ -72,7 +72,15 @@ await yc('storage', 'bucket', 'update', '--name', bucket,
 
 // Probe actual CORS and MIME from the app origin before touching the entrypoint.
 for (const [file, type] of [['auto-sale-bootstrap.mjs', 'javascript'], ['auto-sale-app-v3.mjs', 'javascript'], ['auto-sale.css', 'text/css']]) {
-  const response = await request(base + file, appUrl.slice(0, -1));
+  let response;
+  for (let attempt = 0; attempt < 12; attempt++) {
+    response = await request(base + file, appUrl.slice(0, -1));
+    if (response.status === 200 && response.headers.get('access-control-allow-origin') === '*') break;
+    if (attempt < 11) {
+      console.log(JSON.stringify({waitingForStaticCors: file, attempt: attempt + 1}));
+      await new Promise(resolve => setTimeout(resolve, 5000));
+    }
+  }
   assert.equal(response.status, 200, file);
   assert.ok(response.headers.get('content-type')?.includes(type), file + ' MIME');
   assert.equal(response.headers.get('access-control-allow-origin'), '*', file + ' CORS');
