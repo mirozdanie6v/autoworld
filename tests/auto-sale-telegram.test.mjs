@@ -70,3 +70,10 @@ test('manager Telegram field is readonly and follows selected assignee',()=>{
   assert.ok(source.includes("select[name=\"manager\"]"));
   assert.ok(source.includes('Подставляется автоматически по выбранному ответственному'));
 });
+
+test('open client detail refreshes after server or entity sync',()=>{
+  assert.ok(source.includes('refreshOpenClientDetail'));
+  assert.ok(source.includes("window.addEventListener('auto-sale-server-synced'"));
+  assert.ok(source.includes("window.addEventListener('auto-sale-entity-synced'"));
+  assert.ok(source.includes("queueMicrotask(refreshOpenClientDetail)"));
+});
