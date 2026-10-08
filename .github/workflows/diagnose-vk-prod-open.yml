@@ -27,3 +27,5 @@ jobs:
           echo HEALTH_JSON
           curl -L -fsS --connect-timeout 5 --max-time 20 https://awgcars.ru/api/health \
             | jq '{ok,buildSha,vkAuth,vkMessaging,telegramRoutableManagers}'
+
+# probe: verify-known-good-rollback-20261008
