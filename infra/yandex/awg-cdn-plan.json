@@ -43,7 +43,7 @@
       "hostOptions": {"host": {"enabled": true, "value": "d5dbgio6limv03usvipl.s183zexc.apigw.yandexcloud.net"}},
       "customServerName": {"enabled": true, "value": "d5dbgio6limv03usvipl.s183zexc.apigw.yandexcloud.net"},
       "staticHeaders": {"enabled": true, "value": {"Cache-Control": "private, no-store"}},
-      "stale": {"enabled": true, "value": []}
+      "stale": {"enabled": false}
     }
   },
   "htmlRule": {
