@@ -9,19 +9,21 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
-      - name: Probe current production
+      - name: Verify deployed client order details fix
         run: |
           set -euo pipefail
-          for pair in             "awg|https://awgcars.ru/"             "health|https://d5dbgio6limv03usvipl.s183zexc.apigw.yandexcloud.net/api/health"             "vkmodule|https://awgcars.ru/auto-sale-vk.mjs"             "appmodule|https://awgcars.ru/auto-sale-app-v3.mjs"
-          do
-            name="${pair%%|*}"; url="${pair#*|}"
-            code=$(curl -L -sS --connect-timeout 5 --max-time 10 -o "/tmp/$name.body" -w '%{http_code}' "$url" || true)
-            bytes=$(wc -c <"/tmp/$name.body" 2>/dev/null || echo 0)
-            echo "PROBE $name code=$code bytes=$bytes"
-          done
-          echo "HEALTH_JSON"
-          cat /tmp/health.body | jq '{ok,persistence,buildSha,vkAuth,vkMessaging,telegramRoutableManagers}' || true
-          test "$(grep -c 'auto-sale' /tmp/awg.body || true)" -gt 0
-          test "$(wc -c </tmp/vkmodule.body)" -gt 100
-          test "$(wc -c </tmp/appmodule.body)" -gt 1000
-          test "$(jq -r '.ok' /tmp/health.body)" = "true"
+          APP=https://awgcars.ru/auto-sale-app-v3.mjs
+          HEALTH=https://d5dbgio6limv03usvipl.s183zexc.apigw.yandexcloud.net/api/health
+          curl -L -fsS --connect-timeout 5 --max-time 15 "$APP" -o /tmp/app.mjs
+          curl -L -fsS --connect-timeout 5 --max-time 15 "$HEALTH" -o /tmp/health.json
+          echo "HEALTH"
+          jq '{ok,persistence,buildSha,vkAuth,vkMessaging,telegramRoutableManagers}' /tmp/health.json
+          echo "APP_BYTES $(wc -c </tmp/app.mjs)"
+          if grep -Fq 'data-client-lead="${esc(lead.id)}"' /tmp/app.mjs; then echo "CORE_CLIENT_LEAD_MARKER=true"; else echo "CORE_CLIENT_LEAD_MARKER=false"; fi
+          if grep -Fq '<span>Открыть подробности</span><strong>→</strong>' /tmp/app.mjs; then echo "IMMEDIATE_DETAILS_HINT=true"; else echo "IMMEDIATE_DETAILS_HINT=false"; fi
+          grep -Fq 'data-client-lead="${esc(lead.id)}"' /tmp/app.mjs
+          grep -Fq '<span>Открыть подробности</span><strong>→</strong>' /tmp/app.mjs
+          test "$(jq -r '.ok' /tmp/health.json)" = "true"
+          test "$(jq -r '.buildSha' /tmp/health.json)" = "45d376b2510ecae2914bb29764ec4e98fa2dfb85"
+          test "$(jq -r '.vkAuth' /tmp/health.json)" = "enabled"
+          test "$(jq -r '.vkMessaging' /tmp/health.json)" = "enabled"
