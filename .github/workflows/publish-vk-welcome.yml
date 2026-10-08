@@ -1,0 +1,37 @@
+name: Publish AUTO MIR VK Welcome
+on:
+  push:
+    branches: [feat/vk-community-branding-20261008]
+    paths:
+      - .github/workflows/publish-vk-welcome.yml
+permissions:
+  contents: read
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      VK_GROUP_ID: "242103542"
+      VK_TOKEN: ${{ secrets.AWG_VK_COMMUNITY_TOKEN }}
+    steps:
+      - name: Publish one introductory post
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          const group=process.env.VK_GROUP_ID,token=process.env.VK_TOKEN,v='5.199';
+          if(!token)throw new Error('missing_community_token');
+          const message="Добро пожаловать в AUTO МИР | AutoWorld Georgia.\n\nЗдесь мы рассказываем об автомобилях из США и Грузии, показываем предложения из каталога и объясняем путь от выбора машины до покупки и доставки.\n\nС чего начать:\n\n1. Откройте каталог и посмотрите доступные автомобили.\n2. Выберите подходящий вариант или отправьте заявку на индивидуальный подбор.\n3. Получите предварительный расчёт стоимости.\n4. Обсудите с менеджером детали автомобиля, покупки и поставки.\n\nНаша задача — сделать каждый этап понятным: автомобиль, стоимость, условия и связь с командой.\n\nСмотреть каталог и оставить заявку:\nhttps://www.awgcars.ru/";
+          const params=new URLSearchParams({
+            owner_id:'-'+group,
+            from_group:'1',
+            message,
+            guid:'awg-vk-welcome-2026-10-08',
+            v,access_token:token
+          });
+          const response=await fetch('https://api.vk.com/method/wall.post',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:params,signal:AbortSignal.timeout(15000)});
+          const data=await response.json();
+          if(data.error)throw new Error('wall.post error_code='+data.error.error_code+' '+String(data.error.error_msg||''));
+          const postId=data.response?.post_id;
+          if(!Number.isInteger(postId))throw new Error('VK wall.post returned no post_id');
+          console.log(JSON.stringify({published:true,post_id:postId,url:'https://vk.com/wall-'+group+'_'+postId}));
+          NODE
