@@ -1,4 +1,5 @@
 name: Inspect AWG Static Infrastructure
+# Include read-only route probes after unexpected public health timeouts.
 
 on:
   workflow_dispatch:
