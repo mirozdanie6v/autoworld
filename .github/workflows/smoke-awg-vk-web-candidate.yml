@@ -1,0 +1,50 @@
+name: Smoke AWG VK Web candidate locally
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/smoke-awg-vk-web-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+jobs:
+  isolated-smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build candidate runtime
+        run: docker build -f Dockerfile.yandex -t awg-vk-web-local-smoke .
+      - name: Start without production secrets or YDB access
+        run: |
+          set -euo pipefail
+          docker run -d --name awg-vk-web-smoke -p 127.0.0.1:18888:8080 \
+            -e YDB_CONNECTION_STRING='grpcs://127.0.0.1:2135/?database=/isolated-smoke' \
+            -e AUTO_SALE_API_KEY='isolated-test-key-not-production' \
+            -e AUTO_SALE_VK_WEB_ENABLED=false \
+            -e AUTO_SALE_VK_WEB_CLIENT_ID=54811927 \
+            -e AUTO_SALE_VK_WEB_ORIGIN=https://awgcars.ru \
+            awg-vk-web-local-smoke
+      - name: Verify startup and disabled login
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:18888/api/auto-sale/vk/web/config >/tmp/vk-web-config.json; then break; fi
+            sleep 1
+          done
+          jq -e '.enabled == false and .authenticated == false' /tmp/vk-web-config.json
+          code=$(curl -sS -o /tmp/vk-web-start.json -w '%{http_code}' \
+            http://127.0.0.1:18888/api/auto-sale/vk/web/start)
+          test "$code" = "503"
+          jq -e '.error == "vk_web_not_configured"' /tmp/vk-web-start.json
+          code=$(curl -sS -o /tmp/vk-web-callback.json -w '%{http_code}' \
+            'http://127.0.0.1:18888/api/auto-sale/vk/web/callback?code=invalid')
+          test "$code" = "503"
+          echo 'Isolated VK web startup passed. No production services were accessed.'
+      - name: Capture container logs on failure
+        if: failure()
+        run: docker logs awg-vk-web-smoke || true
+      - name: Remove isolated container
+        if: always()
+        run: docker rm -f awg-vk-web-smoke || true
