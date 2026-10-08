@@ -1,9 +1,9 @@
 openapi: 3.0.0
 info:
   title: AutoWorld Georgia production
-  version: 1.0.0
+  version: 1.1.0
 paths:
-  /{proxy+}:
+  /api/{proxy+}:
     x-yc-apigateway-any-method:
       x-yc-apigateway-integration:
         type: serverless_containers
@@ -13,8 +13,34 @@ paths:
         - explode: false
           in: path
           name: proxy
-          required: false
+          required: true
           schema:
-            default: '-'
             type: string
           style: simple
+
+  /:
+    get:
+      x-yc-apigateway-integration:
+        type: object_storage
+        bucket: viiversion-autoworld-awg-static-b1g8u8vqkgehvtbj8n13
+        object: index.html
+        service_account_id: aje775bcl6hgp40eu8of
+
+  /{proxy+}:
+    get:
+      parameters:
+        - explode: false
+          in: path
+          name: proxy
+          required: true
+          schema:
+            type: string
+          style: simple
+      x-yc-apigateway-integration:
+        type: object_storage
+        bucket: viiversion-autoworld-awg-static-b1g8u8vqkgehvtbj8n13
+        object: '{proxy}'
+        error_object:
+          object: index.html
+          statusCode: 200
+        service_account_id: aje775bcl6hgp40eu8of
