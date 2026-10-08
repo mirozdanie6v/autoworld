@@ -66,11 +66,12 @@ jobs:
           echo "::add-mask::$IAM_TOKEN"
           echo "YC_IAM_TOKEN=$IAM_TOKEN" >> "$GITHUB_ENV"
 
-      - name: Retry original confirmation and move latest VK lead to In Progress
+      - name: Create and send VK test quote
         run: |
           set -euo pipefail
           node --input-type=module <<'NODE'
           import {AccessTokenCredentialsProvider} from '@ydbjs/auth/access-token';
+          import {randomUUID} from 'node:crypto';
           import {createYdbDomainStore} from './server/ydb-domain-store.mjs';
           import {createYdbStateStore} from './server/ydb-state.mjs';
           import {mutateAutoSaleEntity} from './server/ydb-entity-commands.mjs';
@@ -86,9 +87,9 @@ jobs:
           const runtime=await createYdbStateStore({connectionString,credentialsProvider,ensureSchema:false,domainDualWrite:false});
           const telegram=createTelegramService();
           const vk=createVkService();
-
           const clean=v=>String(v??'').trim();
           const normalize=v=>clean(v).replace(/^@/,'').toLowerCase();
+
           const enrich=async state=>{
             const pins=(await runtime.adminAccessList()).filter(x=>/^\d+$/.test(clean(x.telegramUserId)));
             const map=new Map(pins.map(x=>[normalize(x.username),x]));
@@ -112,60 +113,105 @@ jobs:
                   :await telegram.send(item.chatId,item.message,{replyMarkup:item.replyMarkup});
                 if(!sent?.message_id)throw new Error(channel==='vk'?'vk_message_id_missing':'telegram_message_id_missing');
                 await runtime.markNotification(item.id,{ok:true,messageId:String(sent.message_id),attempts:item.attempts});
-                results.push({id:item.id,event:item.event,target:item.target,channel,ok:true,hasMessageId:true});
+                results.push({event:item.event,target:item.target,channel,ok:true,hasMessageId:true});
               }catch(error){
                 const message=clean(error?.vkDescription||error?.telegramDescription||error?.message||'notification_send_failed');
                 await runtime.markNotification(item.id,{ok:false,error:message,attempts:item.attempts,permanent:Boolean(error?.permanent)});
-                results.push({id:item.id,event:item.event,target:item.target,channel:clean(item.channel)||'telegram',ok:false,error:message});
+                results.push({event:item.event,target:item.target,channel:clean(item.channel)||'telegram',ok:false,error:message});
               }
             }
             return results;
           }
 
+          async function patchLeadStatus(lead,status){
+            const rowVersion=await domain.entityRowVersion('lead',lead.id);
+            const result=await mutateAutoSaleEntity({
+              legacyStore:runtime,domainStore:domain,resource:'lead',operation:'patch',id:lead.id,
+              input:{id:lead.id,status,nextAction:new Date(Date.now()+86400000).toISOString().slice(0,10)},
+              expectedRowVersion:rowVersion,prepareNotifications:collect
+            });
+            if(result.status!==200)throw new Error('lead_patch_failed:'+JSON.stringify(result.data));
+            const items=Array.isArray(result.data?._notificationItems)?result.data._notificationItems:[];
+            const delivery=await deliver(items);
+            console.log('LEAD_STATUS',JSON.stringify({status,revision:result.data.revision,delivery}));
+          }
+
           try{
             let state=await domain.loadState();
-            const leads=(Array.isArray(state.leads)?state.leads:[])
+            let lead=(state.leads||[])
               .filter(x=>clean(x.clientProvider)==='vk')
-              .sort((a,b)=>clean(b.createdAt).localeCompare(clean(a.createdAt)));
-            const lead=leads[0];
+              .sort((a,b)=>clean(b.createdAt).localeCompare(clean(a.createdAt)))[0];
             if(!lead)throw new Error('no_vk_lead_found');
-            console.log('VK_TEST_LEAD',JSON.stringify({id:lead.id,status:lead.status,model:lead.model,source:lead.source}));
+            console.log('VK_TEST_LEAD',JSON.stringify({id:lead.id,status:lead.status,model:lead.model,origin:lead.origin,budget:lead.budget}));
 
-            const currentRev=Number(state.revision)||0;
-            let confirmation=null;
-            for(let revision=Math.max(1,currentRev-10);revision<=currentRev;revision++){
-              const rows=await runtime.notificationStatusByRevision(revision);
-              confirmation=(rows||[]).find(x=>clean(x.leadId)===clean(lead.id)&&clean(x.event)==='lead_created_confirmation'&&clean(x.target)==='client')||confirmation;
-            }
-            if(confirmation&&clean(confirmation.status)!=='sent'){
-              const pending=await runtime.pendingNotificationsByIds([confirmation.id]);
-              const retry=await deliver(pending);
-              console.log('ORIGINAL_CONFIRMATION_RETRY',JSON.stringify(retry));
-            }else{
-              console.log('ORIGINAL_CONFIRMATION',JSON.stringify(confirmation?{status:confirmation.status,attempts:confirmation.attempts,hasMessageId:Boolean(clean(confirmation.messageId))}:{status:'not-found'}));
+            if(clean(lead.status)==='В работе'){
+              await patchLeadStatus(lead,'Расчёт');
+              state=await domain.loadState();
+              lead=(state.leads||[]).find(x=>clean(x.id)===clean(lead.id));
             }
 
-            state=await domain.loadState();
-            const current=(state.leads||[]).find(x=>clean(x.id)===clean(lead.id));
-            if(clean(current?.status)==='Новый'){
-              const rowVersion=await domain.entityRowVersion('lead',lead.id);
-              const result=await mutateAutoSaleEntity({
-                legacyStore:runtime,
-                domainStore:domain,
-                resource:'lead',
-                operation:'patch',
-                id:lead.id,
-                input:{id:lead.id,status:'В работе',nextAction:new Date(Date.now()+86400000).toISOString().slice(0,10)},
-                expectedRowVersion:rowVersion,
-                prepareNotifications:collect
+            let quote=(state.quotes||[])
+              .filter(x=>clean(x.leadId)===clean(lead.id))
+              .sort((a,b)=>(Number(b.version)||0)-(Number(a.version)||0))[0];
+
+            if(!quote){
+              const origin=clean(lead.origin)==='США'?'США':'Грузия';
+              const now=new Date().toISOString();
+              const validUntil=new Date(Date.now()+7*86400000).toISOString().slice(0,10);
+              const values=origin==='США'
+                ?{lot:20000,auction:800,inland:700,ocean:1800,customs:1500,repair:0,service:1200}
+                :{lot:20000,auction:0,inland:500,ocean:1000,customs:1000,repair:0,service:1000};
+              const total=Object.values(values).reduce((a,b)=>a+Number(b||0),0);
+              quote={
+                id:'Q-VK-'+randomUUID().slice(0,8).toUpperCase(),
+                leadId:lead.id,
+                model:clean(lead.model)||'Buick Encore',
+                origin,
+                transportMode:origin==='США'?'Море':'Автовоз',
+                ...values,total,status:'Отправлен',version:1,validUntil,
+                updatedAt:now,sentAt:now,
+                verification:origin==='США'?{
+                  lotNumber:'VK-E2E-LOT',
+                  vin:'VK-E2E-TEST-VIN',
+                  year:2022,
+                  mileage:1000,
+                  damage:'Тестовый сценарий E2E, видимых повреждений нет',
+                  photos:['https://awgcars.ru/auto-sale-logo-wide.webp'],
+                  history:'Тестовое досье для production E2E цикла',
+                  reportUrl:'',
+                  result:'Одобрен к покупке',
+                  checkedAt:now.slice(0,10)
+                }:{}
+              };
+              const created=await mutateAutoSaleEntity({
+                legacyStore:runtime,domainStore:domain,resource:'quote',operation:'create',id:quote.id,
+                input:quote,prepareNotifications:collect
               });
-              if(result.status!==200)throw new Error('lead_patch_failed:'+JSON.stringify(result.data));
-              const items=Array.isArray(result.data?._notificationItems)?result.data._notificationItems:[];
+              if(created.status!==200)throw new Error('quote_create_failed:'+JSON.stringify(created.data));
+              const items=Array.isArray(created.data?._notificationItems)?created.data._notificationItems:[];
               const delivery=await deliver(items);
-              console.log('LEAD_PATCH',JSON.stringify({id:lead.id,status:'В работе',revision:result.data.revision,delivery}));
+              console.log('QUOTE_CREATED',JSON.stringify({id:quote.id,status:quote.status,total:quote.total,origin:quote.origin,revision:created.data.revision,delivery}));
+              state=await domain.loadState();
+              lead=(state.leads||[]).find(x=>clean(x.id)===clean(lead.id));
             }else{
-              console.log('LEAD_PATCH_SKIPPED',JSON.stringify({id:lead.id,status:current?.status}));
+              console.log('QUOTE_REUSED',JSON.stringify({id:quote.id,status:quote.status,total:quote.total,origin:quote.origin}));
             }
+
+            if(clean(lead.status)==='Расчёт'){
+              await patchLeadStatus(lead,'Ожидает клиента');
+            }
+
+            const finalState=await domain.loadState();
+            const finalLead=(finalState.leads||[]).find(x=>clean(x.id)===clean(lead.id));
+            const finalQuote=(finalState.quotes||[]).filter(x=>clean(x.leadId)===clean(lead.id)).sort((a,b)=>(Number(b.version)||0)-(Number(a.version)||0))[0];
+            console.log('STEP2_RESULT',JSON.stringify({
+              leadId:lead.id,
+              leadStatus:finalLead?.status,
+              quoteId:finalQuote?.id,
+              quoteStatus:finalQuote?.status,
+              quoteTotal:finalQuote?.total,
+              origin:finalQuote?.origin
+            }));
           }finally{
             await Promise.allSettled([domain.close(),runtime.close()]);
           }
