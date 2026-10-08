@@ -1,0 +1,113 @@
+name: Emergency Restore AWG Gateway
+
+on:
+  push:
+    branches: [diag-vk-prod-open]
+    paths:
+      - .github/workflows/emergency-restore-awg-gateway.yml
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  YC_FOLDER_ID: b1g8u8vqkgehvtbj8n13
+  YC_DEPLOY_SA_ID: aje775bcl6hgp40eu8of
+  YC_CONTAINER_NAME: autoworld-awg-prod
+  AWG_GATEWAY_NAME: autoworld-awg-prod
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Request GitHub OIDC token
+        uses: actions/github-script@v7
+        id: oidc
+        with:
+          script: |
+            const token = await core.getIDToken('https://github.com/mirozdanie6v')
+            core.setSecret(token)
+            core.setOutput('token', token)
+
+      - name: Exchange OIDC token for Yandex IAM token
+        env:
+          GITHUB_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        run: |
+          set -euo pipefail
+          RESPONSE=$(curl -sS -w '\n%{http_code}' -H 'Content-Type: application/x-www-form-urlencoded' \
+            --data-urlencode 'grant_type=urn:ietf:params:oauth:grant-type:token-exchange' \
+            --data-urlencode 'requested_token_type=urn:ietf:params:oauth:token-type:access_token' \
+            --data-urlencode "audience=${YC_DEPLOY_SA_ID}" \
+            --data-urlencode "subject_token=${GITHUB_OIDC_TOKEN}" \
+            --data-urlencode 'subject_token_type=urn:ietf:params:oauth:token-type:id_token' \
+            https://auth.yandex.cloud/oauth/token)
+          HTTP_CODE=$(printf '%s' "$RESPONSE" | tail -n1)
+          BODY=$(printf '%s' "$RESPONSE" | sed '$d')
+          test "$HTTP_CODE" = "200"
+          IAM_TOKEN=$(printf '%s' "$BODY" | jq -r '.access_token')
+          test -n "$IAM_TOKEN" && test "$IAM_TOKEN" != "null"
+          echo "::add-mask::$IAM_TOKEN"
+          echo "YC_IAM_TOKEN=$IAM_TOKEN" >> "$GITHUB_ENV"
+
+      - name: Install Yandex Cloud CLI
+        run: |
+          set -euo pipefail
+          curl --connect-timeout 10 --max-time 120 --retry 3 --retry-all-errors -fsSL \
+            https://storage.yandexcloud.net/yandexcloud-yc/install.sh -o /tmp/yc-install.sh
+          bash /tmp/yc-install.sh -n
+          echo "$HOME/yandex-cloud/bin" >> "$GITHUB_PATH"
+
+      - name: Restore all routes to production container
+        run: |
+          set -euo pipefail
+          yc config set endpoint api.cloud.yandex.net:443
+          yc config set token "$YC_IAM_TOKEN"
+          yc config set folder-id "$YC_FOLDER_ID"
+          CONTAINER_ID=$(yc serverless container get --name "$YC_CONTAINER_NAME" --folder-id "$YC_FOLDER_ID" --format json | jq -r '.id')
+          test -n "$CONTAINER_ID" && test "$CONTAINER_ID" != "null"
+          cat > /tmp/awg-gateway-restore.yaml <<YAML
+          openapi: 3.0.0
+          info:
+            title: AutoWorld Georgia production
+            version: 1.0.1
+          paths:
+            /{proxy+}:
+              x-yc-apigateway-any-method:
+                x-yc-apigateway-integration:
+                  type: serverless_containers
+                  container_id: $CONTAINER_ID
+                  service_account_id: $YC_DEPLOY_SA_ID
+                parameters:
+                  - explode: false
+                    in: path
+                    name: proxy
+                    required: false
+                    schema:
+                      default: '-'
+                      type: string
+                    style: simple
+          YAML
+          yc serverless api-gateway update \
+            --name "$AWG_GATEWAY_NAME" \
+            --folder-id "$YC_FOLDER_ID" \
+            --spec=/tmp/awg-gateway-restore.yaml
+
+      - name: Verify site and API recovered
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 20); do
+            INDEX=$(curl --connect-timeout 5 --max-time 15 -sS -o /tmp/index.html -w '%{http_code}' https://awgcars.ru/ || true)
+            BOOT=$(curl --connect-timeout 5 --max-time 15 -sS -o /tmp/boot.mjs -w '%{http_code}' https://awgcars.ru/auto-sale-bootstrap.mjs || true)
+            HEALTH=$(curl --connect-timeout 5 --max-time 15 -sS -o /tmp/health.json -w '%{http_code}' https://awgcars.ru/api/health || true)
+            if [ "$INDEX" = "200" ] && [ "$BOOT" = "200" ] && [ "$HEALTH" = "200" ] \
+              && grep -q 'auto-sale-bootstrap.mjs' /tmp/index.html \
+              && grep -q 'pullInitialState' /tmp/boot.mjs \
+              && jq -e '.ok == true' /tmp/health.json >/dev/null; then
+              break
+            fi
+            test "$attempt" -lt 20
+            sleep 3
+          done
+          curl -sS -o /dev/null -w 'RECOVERED index ttfb=%{time_starttransfer} total=%{time_total}\n' https://awgcars.ru/
+          jq '{ok,buildSha,vkAuth,vkMessaging,telegramRoutableManagers}' /tmp/health.json
