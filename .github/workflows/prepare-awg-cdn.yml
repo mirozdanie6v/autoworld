@@ -6,6 +6,8 @@ on:
     branches: [main]
     paths:
       - .github/workflows/prepare-awg-cdn.yml
+      - scripts/prepare-awg-cdn.mjs
+      - infra/yandex/awg-cdn-plan.json
 
 concurrency:
   group: awg-yandex-production-writer

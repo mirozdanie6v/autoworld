@@ -52,7 +52,7 @@ const cdn = 'https://cdn.api.cloud.yandex.net/cdn/v1';
 let resource = (await api(cdn + '/resources?folderId=' + folder)).resources?.find(x => x.cname === plan.resource.cname);
 if (resource) assert.equal(resource.labels?.managed_by, 'awg-direct-static', 'existing CDN resource must be reviewed before mutation');
 await operation(await api('https://storage.api.cloud.yandex.net/storage/v1/buckets/' + bucket, 'PATCH', {
-  updateMask: 'website_settings', websiteSettings: {index: 'index.html'},
+  updateMask: 'websiteSettings', websiteSettings: {index: 'index.html'},
 }));
 if (!resource) {
   resource = await operation(await api(cdn + '/resources', 'POST', {
