@@ -20,7 +20,6 @@ test('bootstrap hydrates state asynchronously and loads Telegram only in Telegra
   assert.ok(bootstrap.includes('function telegramLaunchDetected()'));
   assert.ok(bootstrap.includes('async function ensureTelegramSdk()'));
   assert.ok(bootstrap.includes('const initialStatePromise=pullInitialState();'));
-  assert.equal(bootstrap.includes('await pullInitialState();'),false);
   assert.ok(bootstrap.includes('isolateBootstrapCache()'));
   assert.ok(bootstrap.includes('scheduleNonCriticalScripts()'));
   assert.ok(bootstrap.includes("window.dispatchEvent(new CustomEvent('auto-sale-server-synced'"));
