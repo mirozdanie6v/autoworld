@@ -14,6 +14,58 @@ function vkLaunchParams(){
   for(const [key,value] of params.entries())if(key==='sign'||key.startsWith('vk_'))signed.append(key,value);
   return signed.toString();
 }
+function telegramLaunchDetected(){
+  return /(?:[?#&])tgWebApp(?:Data|Version|Platform|ThemeParams)=/i.test(String(window.location.href||''));
+}
+async function ensureTelegramSdk(){
+  if(!telegramLaunchDetected()||window.Telegram?.WebApp)return;
+  await new Promise((resolve,reject)=>{
+    const existing=document.querySelector('script[data-auto-sale-telegram-sdk]');
+    if(existing){
+      existing.addEventListener('load',resolve,{once:true});
+      existing.addEventListener('error',()=>reject(new Error('telegram_sdk_load_failed')),{once:true});
+      return;
+    }
+    const script=document.createElement('script');
+    script.src='https://telegram.org/js/telegram-web-app.js?63';
+    script.dataset.autoSaleTelegramSdk='1';
+    script.onload=resolve;
+    script.onerror=()=>reject(new Error('telegram_sdk_load_failed'));
+    document.head.appendChild(script);
+  }).catch(error=>console.warn('AUTO SALE Telegram SDK unavailable',error));
+}
+function bootstrapIdentityScope(){
+  const vk=new URLSearchParams(window.location.search||'').get('vk_user_id');
+  if(/^\d+$/.test(String(vk||''))&&vkLaunchParams())return 'vk:'+vk;
+  const tg=String(window.Telegram?.WebApp?.initDataUnsafe?.user?.id||'');
+  if(/^\d+$/.test(tg))return 'telegram:'+tg;
+  return 'public';
+}
+function isolateBootstrapCache(){
+  const scopeKey='auto-sale-cache-scope-v1',next=bootstrapIdentityScope(),previous=String(localStorage.getItem(scopeKey)||'');
+  const sensitive=[DATA_KEYS.leads,DATA_KEYS.quotes,DATA_KEYS.orders,DATA_KEYS.notes,DATA_KEYS.team];
+  if(next==='public'||!previous||previous!==next)for(const key of sensitive)localStorage.removeItem(key);
+  localStorage.setItem(scopeKey,next);
+}
+function appendScript(src,attrs={}){
+  if(document.querySelector('script[src="'+src+'"]'))return;
+  const script=document.createElement('script');
+  script.src=src;
+  script.async=true;
+  for(const [key,value] of Object.entries(attrs))script.setAttribute(key,value);
+  document.head.appendChild(script);
+}
+function scheduleNonCriticalScripts(){
+  const run=()=>{
+    appendScript('https://dashboard.viiversion.com/tracker.js',{'data-project':'AUTO SALE'});
+    if(new URLSearchParams(window.location.search||'').get('debug')==='1'){
+      appendScript('./auto-sale-layout-audit.js?v=20260921-live-values-1');
+      appendScript('./auto-sale-api-audit.js?v=20260921-live-values-1');
+    }
+  };
+  if('requestIdleCallback'in window)window.requestIdleCallback(run,{timeout:2500});
+  else setTimeout(run,1500);
+}
 function authHeaders(extra={}){
   const headers={...extra},initData=telegramInitData(),vkParams=vkLaunchParams();
   if(initData)headers['x-telegram-init-data']=initData;
@@ -86,6 +138,7 @@ async function pullInitialState(){
         window.__AUTO_SALE_ACCESS__=state._access||{role:'public',authenticated:false,member:null};
         applyServerState(state);
         window.__AUTO_SALE_SERVER__={online:true,revision,initialized:Boolean(state.initialized),access:window.__AUTO_SALE_ACCESS__};
+        window.dispatchEvent(new CustomEvent('auto-sale-server-synced',{detail:{revision,access:window.__AUTO_SALE_ACCESS__}}));
         return state;
       }
       if(![500,502,503,504].includes(response.status))return null;
@@ -283,9 +336,11 @@ function normalizeSettledPaymentField(){
   amount.max=String(remaining);
 }
 
+await ensureTelegramSdk();
+isolateBootstrapCache();
 const vkModule=await import('./auto-sale-vk.mjs?v=20261008-vk-v3');
-if(vkLaunchParams())await vkModule.initVkMiniAppShell();
-await pullInitialState();
+const vkShellPromise=vkLaunchParams()?vkModule.initVkMiniAppShell():Promise.resolve({ok:true,skipped:'not-vk'});
+const initialStatePromise=pullInitialState();
 await import('./auto-sale-submit-bridge.mjs?v=20260921-live-values-1');
 await import('./auto-sale-app-v3.mjs?v=20260929-entity-cutover-1');
 await import('./auto-sale-ui-business-guard.mjs?v=20260929-entity-cutover-1');
@@ -301,3 +356,6 @@ normalizeSettledPaymentField();
 const appRoot=document.querySelector('#app');
 if(appRoot)new MutationObserver(()=>queueMicrotask(normalizeSettledPaymentField)).observe(appRoot,{childList:true,subtree:true});
 document.addEventListener('input',event=>{if(event.target?.closest?.('#orderForm'))queueMicrotask(normalizeSettledPaymentField)},true);
+void vkShellPromise;
+void initialStatePromise;
+scheduleNonCriticalScripts();
