@@ -4,3 +4,4 @@ preserve_backend=true
 vk_auth=enabled
 vk_messaging=enabled
 probe_transport=curl-ipv4-retry
+stage_assets_before_health=true

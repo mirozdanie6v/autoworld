@@ -52,7 +52,6 @@ async function health() {
   assert.equal(json.vkMessaging, 'enabled', 'VK notifications must remain enabled');
   return {buildSha: json.buildSha, vkAuth: json.vkAuth, vkMessaging: json.vkMessaging};
 }
-const before = await health();
 await yc('storage', 's3', 'cp', `s3://${bucket}/index.html`, backup, '--only-show-errors');
 await copy(backup, `rollbacks/${release}/index.html`, 'no-cache, no-store, must-revalidate');
 const files = (await readdir(dist, {recursive: true, withFileTypes: true})).filter(x => x.isFile()).map(x => path.join(x.parentPath, x.name));
@@ -89,6 +88,9 @@ async function smoke(entryFile) {
   if (stderr) process.stderr.write(stderr);
 }
 await smoke(stagedEntry);
+// Static staging is independently reviewable even if the old gateway is down.
+// Require live API health immediately before moving the production pointer.
+const before = await health();
 let switched = false;
 try {
   // The root HTML is the sole mutable pointer; assets are already immutable.
