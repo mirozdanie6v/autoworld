@@ -11,10 +11,17 @@ permissions:
   id-token: write
 
 env:
-  YC_FOLDER_ID: ${{ vars.AWG_YC_FOLDER_ID || 'b1g8u8vqkgehvtbj8n13' }}
   YC_DEPLOY_SA_ID: ${{ vars.AWG_YC_DEPLOY_SA_ID || 'aje775bcl6hgp40eu8of' }}
-  TARGET_REVISION_ID: bba13foieugcgmu9n72r
-  AWG_GATEWAY_URL: https://d5dbgio6limv03usvipl.s183zexc.apigw.yandexcloud.net
+  YDB_CONNECTION_STRING: ${{ vars.AWG_YDB_CONNECTION_STRING || 'grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1ggsmuiq7tb2d27f89q/etn00ojk5iv1u7dgpdar' }}
+  AUTO_SALE_TELEGRAM_BOT_TOKEN: ${{ secrets.AWG_TELEGRAM_BOT_TOKEN }}
+  AUTO_SALE_MANAGER_CHAT_IDS: ${{ vars.AWG_MANAGER_CHAT_IDS || '' }}
+  AUTO_SALE_ADMIN_TELEGRAM_USERNAMES: Flyer_Flyer,smit44744,Ivan_AWG
+  AUTO_SALE_TELEGRAM_APP_URL: https://awgcars.ru/
+  AUTO_SALE_VK_ENABLED: "true"
+  AUTO_SALE_VK_APP_ID: ${{ vars.AWG_VK_APP_ID || '54810434' }}
+  AUTO_SALE_VK_APP_SECRET: ${{ secrets.AWG_VK_APP_SECRET }}
+  AUTO_SALE_VK_GROUP_ID: ${{ vars.AWG_VK_GROUP_ID || '242103542' }}
+  AUTO_SALE_VK_COMMUNITY_TOKEN: ${{ secrets.AWG_VK_COMMUNITY_TOKEN }}
 
 jobs:
   step:
@@ -22,6 +29,13 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Install locked dependencies
+        run: npm ci
 
       - name: Request GitHub OIDC token
         uses: actions/github-script@v7
@@ -52,79 +66,107 @@ jobs:
           echo "::add-mask::$IAM_TOKEN"
           echo "YC_IAM_TOKEN=$IAM_TOKEN" >> "$GITHUB_ENV"
 
-      - name: Install Yandex CLI
+      - name: Retry original confirmation and move latest VK lead to In Progress
         run: |
           set -euo pipefail
-          curl -fsSL --retry 3 --retry-delay 3 https://storage.yandexcloud.net/yandexcloud-yc/install.sh -o /tmp/yc-install.sh
-          bash /tmp/yc-install.sh -n
-          echo "$HOME/yandex-cloud/bin" >> "$GITHUB_PATH"
-          "$HOME/yandex-cloud/bin/yc" config set endpoint api.cloud.yandex.net:443
-          "$HOME/yandex-cloud/bin/yc" config set token "$YC_IAM_TOKEN"
-          "$HOME/yandex-cloud/bin/yc" config set folder-id "$YC_FOLDER_ID"
+          node --input-type=module <<'NODE'
+          import {AccessTokenCredentialsProvider} from '@ydbjs/auth/access-token';
+          import {createYdbDomainStore} from './server/ydb-domain-store.mjs';
+          import {createYdbStateStore} from './server/ydb-state.mjs';
+          import {mutateAutoSaleEntity} from './server/ydb-entity-commands.mjs';
+          import {createTelegramService} from './server/telegram-bot.mjs';
+          import {createVkService} from './server/vk.mjs';
+          import {managerTelegramUsername} from './shared/auto-sale-manager-directory.mjs';
 
-      - name: Resolve production API credential
-        run: |
-          set -euo pipefail
-          yc serverless container revision get "$TARGET_REVISION_ID" --folder-id "$YC_FOLDER_ID" --format json > /tmp/revision.json
-          VK_ENABLED=$(jq -r '.environment.AUTO_SALE_VK_ENABLED // ""' /tmp/revision.json)
-          BUILD_SHA=$(jq -r '.environment.AUTO_SALE_BUILD_SHA // ""' /tmp/revision.json)
-          API_KEY=$(jq -r '.environment.AUTO_SALE_API_KEY // empty' /tmp/revision.json)
-          echo "REVISION_CHECK vk=$VK_ENABLED build=$BUILD_SHA apiKeyPresent=$([ -n "$API_KEY" ] && echo true || echo false)"
-          test "$VK_ENABLED" = "true"
-          test -n "$API_KEY"
-          echo "::add-mask::$API_KEY"
-          echo "AUTO_SALE_API_KEY=$API_KEY" >> "$GITHUB_ENV"
+          const token=String(process.env.YC_IAM_TOKEN||'').trim();
+          const connectionString=String(process.env.YDB_CONNECTION_STRING||'').trim();
+          if(!token||!connectionString)throw new Error('ydb_credentials_missing');
+          const credentialsProvider=new AccessTokenCredentialsProvider({token});
+          const domain=await createYdbDomainStore({connectionString,credentialsProvider,ensureSchema:false});
+          const runtime=await createYdbStateStore({connectionString,credentialsProvider,ensureSchema:false,domainDualWrite:false});
+          const telegram=createTelegramService();
+          const vk=createVkService();
 
-      - name: Retry VK confirmation and move latest VK lead to In Progress
-        run: |
-          set -euo pipefail
-          URL="${AWG_GATEWAY_URL%/}"
-          H=(-H "x-auto-sale-key: $AUTO_SALE_API_KEY")
-          STATE=$(curl -fsS "${H[@]}" "$URL/api/auto-sale/state")
-          LEAD=$(printf '%s' "$STATE" | jq -c '[.leads[]? | select(.clientProvider=="vk")] | sort_by(.createdAt // "") | reverse | .[0] // {}')
-          LEAD_ID=$(printf '%s' "$LEAD" | jq -r '.id // empty')
-          STATUS=$(printf '%s' "$LEAD" | jq -r '.status // empty')
-          MODEL=$(printf '%s' "$LEAD" | jq -r '.model // empty')
-          test -n "$LEAD_ID" || { echo "No VK lead found"; exit 2; }
-          echo "VK_TEST_LEAD id=$LEAD_ID status=$STATUS model=$MODEL"
+          const clean=v=>String(v??'').trim();
+          const normalize=v=>clean(v).replace(/^@/,'').toLowerCase();
+          const enrich=async state=>{
+            const pins=(await runtime.adminAccessList()).filter(x=>/^\d+$/.test(clean(x.telegramUserId)));
+            const map=new Map(pins.map(x=>[normalize(x.username),x]));
+            const team=(Array.isArray(state.team)?state.team:[]).map(member=>{
+              if(/^\d+$/.test(clean(member?.telegramUserId)))return member;
+              const username=normalize(member?.telegramUsername||member?.telegram||managerTelegramUsername(member?.name));
+              const pin=map.get(username);
+              return pin?{...member,telegramUserId:clean(pin.telegramUserId),telegramUsername:username,telegramLinkedAt:clean(pin.linkedAt)}:member;
+            });
+            return{...state,team};
+          };
+          const collect=async(previous,next)=>telegram.collectStateChanges(await enrich(previous),await enrich(next));
 
-          CURRENT_REV=$(printf '%s' "$STATE" | jq -r '.revision // 0')
-          START_REV=$(( CURRENT_REV > 8 ? CURRENT_REV - 8 : 1 ))
-          CONFIRM_ID=""
-          for REV in $(seq "$START_REV" "$CURRENT_REV"); do
-            DATA=$(curl -fsS "${H[@]}" "$URL/api/auto-sale/notifications/revision?revision=$REV")
-            ID=$(printf '%s' "$DATA" | jq -r --arg id "$LEAD_ID" '.deliveries[]? | select(.leadId==$id and .event=="lead_created_confirmation" and .target=="client") | .id' | head -n1)
-            if [ -n "$ID" ]; then CONFIRM_ID="$ID"; break; fi
-          done
+          async function deliver(items){
+            const results=[];
+            for(const item of items||[]){
+              try{
+                const channel=clean(item.channel)||'telegram';
+                const sent=channel==='vk'
+                  ?await vk.send(item.vkUserId,item.message,{idempotencyKey:item.id})
+                  :await telegram.send(item.chatId,item.message,{replyMarkup:item.replyMarkup});
+                if(!sent?.message_id)throw new Error(channel==='vk'?'vk_message_id_missing':'telegram_message_id_missing');
+                await runtime.markNotification(item.id,{ok:true,messageId:String(sent.message_id),attempts:item.attempts});
+                results.push({id:item.id,event:item.event,target:item.target,channel,ok:true,hasMessageId:true});
+              }catch(error){
+                const message=clean(error?.vkDescription||error?.telegramDescription||error?.message||'notification_send_failed');
+                await runtime.markNotification(item.id,{ok:false,error:message,attempts:item.attempts,permanent:Boolean(error?.permanent)});
+                results.push({id:item.id,event:item.event,target:item.target,channel:clean(item.channel)||'telegram',ok:false,error:message});
+              }
+            }
+            return results;
+          }
 
-          if [ -n "$CONFIRM_ID" ]; then
-            echo "Retrying original VK confirmation"
-            curl -fsS -X POST "${H[@]}" "$URL/api/auto-sale/notifications/process?id=$(python3 -c 'import os,urllib.parse; print(urllib.parse.quote(os.environ["CONFIRM_ID"]))' 2>/dev/null || printf '%s' "$CONFIRM_ID")" >/tmp/confirm.json || true
-            cat /tmp/confirm.json | jq '{processed,results:[.results[]? | {ok,channel,error,hasMessageId:(.messageId!=null)}]}'
-          fi
+          try{
+            let state=await domain.loadState();
+            const leads=(Array.isArray(state.leads)?state.leads:[])
+              .filter(x=>clean(x.clientProvider)==='vk')
+              .sort((a,b)=>clean(b.createdAt).localeCompare(clean(a.createdAt)));
+            const lead=leads[0];
+            if(!lead)throw new Error('no_vk_lead_found');
+            console.log('VK_TEST_LEAD',JSON.stringify({id:lead.id,status:lead.status,model:lead.model,source:lead.source}));
 
-          if [ "$STATUS" = "Новый" ]; then
-            ROW_VERSION=$(printf '%s' "$STATE" | jq -r --arg id "$LEAD_ID" '._rowVersions.lead[$id] // empty')
-            test -n "$ROW_VERSION"
-            NEXT_ACTION=$(date -u -d '+1 day' +%F)
-            BODY=$(jq -nc --argjson rv "$ROW_VERSION" --arg next "$NEXT_ACTION" '{baseRowVersion:$rv,status:"В работе",nextAction:$next}')
-            PATCH=$(curl -fsS -X PATCH "${H[@]}" -H 'content-type: application/json' --data "$BODY" "$URL/api/auto-sale/leads/$LEAD_ID")
-            NEW_REV=$(printf '%s' "$PATCH" | jq -r '.revision // empty')
-            test -n "$NEW_REV"
-            echo "LEAD_PATCH status=В работе revision=$NEW_REV"
-            sleep 1
-            PROC=$(curl -fsS -X POST "${H[@]}" "$URL/api/auto-sale/notifications/process")
-            printf '%s' "$PROC" | jq '{processed,results:[.results[]? | {ok,channel,error,hasMessageId:(.messageId!=null)}]}'
-            DELIVERY=$(curl -fsS "${H[@]}" "$URL/api/auto-sale/notifications/revision?revision=$NEW_REV")
-            printf '%s' "$DELIVERY" | jq --arg id "$LEAD_ID" '{
-              leadStatus:[
-                .deliveries[]? |
-                select(.leadId==$id and .event=="lead_status") |
-                {target,channel,status,error,attempts,hasMessageId:((.messageId // "")|length>0)}
-              ]
-            }'
-          else
-            echo "Lead is already past Новый; no status mutation performed."
-          fi
-        env:
-          CONFIRM_ID: ""
+            const currentRev=Number(state.revision)||0;
+            let confirmation=null;
+            for(let revision=Math.max(1,currentRev-10);revision<=currentRev;revision++){
+              const rows=await runtime.notificationStatusByRevision(revision);
+              confirmation=(rows||[]).find(x=>clean(x.leadId)===clean(lead.id)&&clean(x.event)==='lead_created_confirmation'&&clean(x.target)==='client')||confirmation;
+            }
+            if(confirmation&&clean(confirmation.status)!=='sent'){
+              const pending=await runtime.pendingNotificationsByIds([confirmation.id]);
+              const retry=await deliver(pending);
+              console.log('ORIGINAL_CONFIRMATION_RETRY',JSON.stringify(retry));
+            }else{
+              console.log('ORIGINAL_CONFIRMATION',JSON.stringify(confirmation?{status:confirmation.status,attempts:confirmation.attempts,hasMessageId:Boolean(clean(confirmation.messageId))}:{status:'not-found'}));
+            }
+
+            state=await domain.loadState();
+            const current=(state.leads||[]).find(x=>clean(x.id)===clean(lead.id));
+            if(clean(current?.status)==='Новый'){
+              const rowVersion=await domain.entityRowVersion('lead',lead.id);
+              const result=await mutateAutoSaleEntity({
+                legacyStore:runtime,
+                domainStore:domain,
+                resource:'lead',
+                operation:'patch',
+                id:lead.id,
+                input:{id:lead.id,status:'В работе',nextAction:new Date(Date.now()+86400000).toISOString().slice(0,10)},
+                expectedRowVersion:rowVersion,
+                prepareNotifications:collect
+              });
+              if(result.status!==200)throw new Error('lead_patch_failed:'+JSON.stringify(result.data));
+              const items=Array.isArray(result.data?._notificationItems)?result.data._notificationItems:[];
+              const delivery=await deliver(items);
+              console.log('LEAD_PATCH',JSON.stringify({id:lead.id,status:'В работе',revision:result.data.revision,delivery}));
+            }else{
+              console.log('LEAD_PATCH_SKIPPED',JSON.stringify({id:lead.id,status:current?.status}));
+            }
+          }finally{
+            await Promise.allSettled([domain.close(),runtime.close()]);
+          }
+          NODE
