@@ -42,8 +42,7 @@
       "allowedHttpMethods": {"enabled": true, "value": ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]},
       "hostOptions": {"host": {"enabled": true, "value": "d5dbgio6limv03usvipl.s183zexc.apigw.yandexcloud.net"}},
       "customServerName": {"enabled": true, "value": "d5dbgio6limv03usvipl.s183zexc.apigw.yandexcloud.net"},
-      "staticHeaders": {"enabled": true, "value": {"Cache-Control": "private, no-store"}},
-      "stale": {"enabled": false}
+      "staticHeaders": {"enabled": true, "value": {"Cache-Control": "private, no-store"}}
     }
   },
   "htmlRule": {

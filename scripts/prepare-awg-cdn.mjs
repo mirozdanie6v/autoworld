@@ -72,17 +72,34 @@ const rules = (await api(cdn + '/rules?resourceId=' + resource.id)).rules || [];
 // The CDN candidate uses a versioned HTML object, leaving the live gateway's
 // index pointer intact until API and browser checks prove this route works.
 const desiredRules = [
-  {...plan.apiRule, resourceId: resource.id, originsGroupId: group.id},
   {...plan.htmlRule, resourceId: resource.id, options: {
     ...plan.htmlRule.options,
     rewrite: {enabled: true, body: '^/(index\\.html)?$ /releases/' + release + '/index.html', flag: 'BREAK'},
   }},
+  {...plan.apiRule, resourceId: resource.id, originsGroupId: group.id},
 ];
+let apiReady = false;
 for (const rule of desiredRules) {
   const existing = rules.find(x => x.name === rule.name);
-  await operation(await api(cdn + '/rules' + (existing ? '/' + existing.id : ''), existing ? 'PATCH' : 'POST', rule));
-  console.log(JSON.stringify({cdnRule: rule.name, originGroup: rule.originsGroupId || resource.originGroupId}));
+  if (rule.name === plan.htmlRule.name) {
+    await operation(await api(cdn + '/rules' + (existing ? '/' + existing.id : ''), existing ? 'PATCH' : 'POST', rule));
+    console.log(JSON.stringify({cdnRule: rule.name, originGroup: resource.originGroupId}));
+    continue;
+  }
+  // Separate basic proxy routing from the provider's write-method entitlement.
+  // A provider failure must still leave static HTML independently reviewable.
+  try {
+    if (!existing) {
+      await operation(await api(cdn + '/rules', 'POST', {...rule, options: {
+        ...rule.options, allowedHttpMethods: {enabled: true, value: ['GET','HEAD','OPTIONS']},
+      }}));
+    }
+    const current = (await api(cdn + '/rules?resourceId=' + resource.id)).rules.find(x => x.name === rule.name);
+    await operation(await api(cdn + '/rules/' + current.id, 'PATCH', rule));
+    apiReady = true;
+    console.log(JSON.stringify({cdnRule: rule.name, originGroup: group.id, writeMethodsConfigured: true}));
+  } catch (error) { console.log(JSON.stringify({cdnApiSetup: 'blocked', error: error.message})); }
 }
 resource = await api(cdn + '/resources/' + resource.id);
-await writeFile(path.join(temp, 'awg-cdn-prepared.json'), JSON.stringify({resource, release, groupId: group.id}, null, 2));
-console.log(JSON.stringify({cdnPrepared: true, resourceId: resource.id, providerCname: resource.providerCname, release, publicDnsChanged: false}));
+await writeFile(path.join(temp, 'awg-cdn-prepared.json'), JSON.stringify({resource, release, groupId: group.id, apiReady}, null, 2));
+console.log(JSON.stringify({cdnPrepared: true, apiReady, resourceId: resource.id, providerCname: resource.providerCname, release, publicDnsChanged: false}));
