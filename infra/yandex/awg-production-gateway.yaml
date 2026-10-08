@@ -7,8 +7,8 @@ paths:
     x-yc-apigateway-any-method:
       x-yc-apigateway-integration:
         type: serverless_containers
-        container_id: bba691o7au7epjqvs77b
-        service_account_id: aje775bcl6hgp40eu8of
+        container_id: __YC_CONTAINER_ID__
+        service_account_id: __YC_DEPLOY_SA_ID__
       parameters:
         - explode: false
           in: path
@@ -22,9 +22,9 @@ paths:
     get:
       x-yc-apigateway-integration:
         type: object_storage
-        bucket: viiversion-autoworld-awg-static-b1g8u8vqkgehvtbj8n13
+        bucket: __AWG_STATIC_BUCKET__
         object: index.html
-        service_account_id: aje775bcl6hgp40eu8of
+        service_account_id: __YC_DEPLOY_SA_ID__
 
   /{proxy+}:
     get:
@@ -38,9 +38,9 @@ paths:
           style: simple
       x-yc-apigateway-integration:
         type: object_storage
-        bucket: viiversion-autoworld-awg-static-b1g8u8vqkgehvtbj8n13
+        bucket: __AWG_STATIC_BUCKET__
         object: '{proxy}'
         error_object:
           object: index.html
           statusCode: 200
-        service_account_id: aje775bcl6hgp40eu8of
+        service_account_id: __YC_DEPLOY_SA_ID__
