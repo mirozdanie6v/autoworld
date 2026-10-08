@@ -1,0 +1,38 @@
+name: Seed AUTO MIR VK Wall
+on:
+  push:
+    branches: [feat/vk-community-branding-20261008]
+    paths:
+      - .github/workflows/seed-vk-community-wall.yml
+permissions:
+  contents: read
+jobs:
+  seed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      VK_GROUP_ID: "242103542"
+      VK_TOKEN: ${{ secrets.AWG_VK_COMMUNITY_TOKEN }}
+    steps:
+      - name: Publish two informational posts and attempt welcome pin
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          const group=process.env.VK_GROUP_ID,token=process.env.VK_TOKEN,v='5.199';
+          if(!token)throw new Error('missing_community_token');
+          async function api(method,values){
+            const params=new URLSearchParams({...values,v,access_token:token});
+            const resp=await fetch('https://api.vk.com/method/'+method,{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:params,signal:AbortSignal.timeout(20000)});
+            return await resp.json();
+          }
+          for(const [i,msg] of ["Два способа начать покупку автомобиля с AUTO МИР.\n\n1. Выбрать из каталога.\nОткройте карточки автомобилей, изучите фотографии и характеристики, затем запросите расчёт по понравившемуся варианту.\n\n2. Оставить заявку на подбор.\nЕсли конкретной машины пока нет на примете, расскажите, какой автомобиль ищете и какой бюджет рассматриваете. Менеджер поможет уточнить параметры и дальнейшие шаги.\n\nОба пути начинаются здесь: https://www.awgcars.ru/\n\nВыбирайте удобный способ — и обсуждайте условия на основе конкретного автомобиля и расчёта.","Из чего складывается стоимость автомобиля при поставке?\n\nЦена в объявлении — только начало расчёта. При оценке бюджета важно учитывать условия покупки, доставку, оформление и возможные обязательные платежи. Их состав зависит от конкретного автомобиля, маршрута и страны назначения.\n\nПоэтому мы рекомендуем:\n— сначала выбрать интересующий автомобиль;\n— запросить расчёт по выбранному варианту;\n— уточнить с менеджером, какие расходы включены;\n— согласовать условия и этапы поставки до решения о покупке.\n\nОткройте каталог и начните с расчёта: https://www.awgcars.ru/\n\nAUTO МИР | AutoWorld Georgia"].entries()){
+            const data=await api('wall.post',{owner_id:'-'+group,from_group:1,message:msg,guid:'awg-community-seed-v1-'+(i+2)});
+            if(data.error)throw new Error('post_'+(i+2)+' error_code='+data.error.error_code+' '+String(data.error.error_msg||''));
+            const postId=data.response?.post_id;
+            if(!postId)throw new Error('post_'+(i+2)+' missing_id');
+            console.log(JSON.stringify({published:true,post_number:i+2,url:'https://vk.com/wall-'+group+'_'+postId}));
+          }
+          const pinned=await api('wall.pin',{owner_id:'-'+group,post_id:1});
+          if(pinned.error){console.log(JSON.stringify({pinned:false,error_code:pinned.error.error_code}))}
+          else console.log(JSON.stringify({pinned:true,post_id:1}));
+          NODE
