@@ -208,6 +208,13 @@ function clientDetail(lead){
 }
 function showClientDetail(id){const lead=leads().find(item=>item.id===id);if(!lead)return;document.querySelector('[data-client-detail-bg]')?.remove();document.body.insertAdjacentHTML('beforeend',clientDetail(lead))}
 function closeClientDetail(){document.querySelector('[data-client-detail-bg]')?.remove()}
+function refreshOpenClientDetail(){
+  const modal=document.querySelector('[data-client-detail-bg]');if(!modal)return;
+  const id=modal.querySelector('[data-tg-manager]')?.dataset.tgManager||modal.querySelector('[data-tg-send][data-tg-target="manager"]')?.dataset.tgSend;
+  if(id)showClientDetail(id);
+}
+window.addEventListener('auto-sale-server-synced',()=>queueMicrotask(refreshOpenClientDetail));
+window.addEventListener('auto-sale-entity-synced',()=>queueMicrotask(refreshOpenClientDetail));
 
 let pendingClient=null;let pendingManager=null;
 document.addEventListener('submit',event=>{
