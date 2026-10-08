@@ -7,7 +7,12 @@ const require = createRequire(path.join(process.env.AWG_PLAYWRIGHT_DIR, 'package
 const {chromium} = require('playwright');
 const url = process.env.AWG_SMOKE_URL || 'https://awgcars.ru/';
 const stagedHtml = process.env.AWG_SMOKE_ENTRY_FILE ? await readFile(process.env.AWG_SMOKE_ENTRY_FILE, 'utf8') : null;
-const browser = await chromium.launch({executablePath: process.env.AWG_CHROME_BIN, args: ['--no-sandbox'], headless: true});
+const args = ['--no-sandbox'];
+if (process.env.AWG_CDN_IP) {
+  assert.match(process.env.AWG_CDN_IP, /^\d{1,3}(?:\.\d{1,3}){3}$/);
+  args.push('--host-resolver-rules=MAP awgcars.ru ' + process.env.AWG_CDN_IP + ', MAP www.awgcars.ru ' + process.env.AWG_CDN_IP);
+}
+const browser = await chromium.launch({executablePath: process.env.AWG_CHROME_BIN, args, headless: true});
 try {
   for (const [name, viewport] of [['desktop', {width: 1280, height: 800}], ['mobile', {width: 390, height: 844}]]) {
     const context = await browser.newContext({viewport});

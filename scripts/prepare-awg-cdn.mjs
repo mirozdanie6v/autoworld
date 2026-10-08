@@ -16,7 +16,7 @@ assert.equal(plan.resource.cname, 'awgcars.ru');
 assert.equal(plan.resource.folderId, folder);
 assert.equal(plan.resource.origin.originSourceParams.meta.website.name, bucket);
 let sequence = 0;
-async function api(url, method = 'GET', body) {
+async function api(url, method = 'GET', body, attempt = 0) {
   const file = path.join(temp, 'awg-cloud-' + sequence++);
   const args = ['-4', '-sS', '--connect-timeout', '10', '--max-time', '60', '-X', method,
     '-H', 'Authorization: Bearer ' + process.env.YC_IAM_TOKEN, '-H', 'Content-Type: application/json',
@@ -30,6 +30,11 @@ async function api(url, method = 'GET', body) {
   try { result = await exec('curl', args, {timeout: 65000, maxBuffer: 100000}); }
   catch (error) { throw new Error('Cloud request transport failed: ' + (error.stderr || 'curl error')); }
   const json = JSON.parse(await readFile(file + '.response', 'utf8'));
+  if (method === 'GET' && [429, 499, 500, 502, 503, 504].includes(Number(result.stdout)) && attempt < 3) {
+    console.log(JSON.stringify({retryCloudRead: new URL(url).pathname, status: Number(result.stdout), attempt: attempt + 1}));
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    return api(url, method, body, attempt + 1);
+  }
   if (Number(result.stdout) >= 300) throw new Error(`${method} ${new URL(url).pathname}: HTTP ${result.stdout}: ${json.message || JSON.stringify(json)}`);
   return json;
 }
@@ -70,7 +75,7 @@ const desiredRules = [
   {...plan.apiRule, resourceId: resource.id, originsGroupId: group.id},
   {...plan.htmlRule, resourceId: resource.id, options: {
     ...plan.htmlRule.options,
-    rewrite: {enabled: true, body: '^/(?:index\\.html)?$ /releases/' + release + '/index.html', flag: 'LAST'},
+    rewrite: {enabled: true, body: '^/(index\\.html)?$ /releases/' + release + '/index.html', flag: 'BREAK'},
   }},
 ];
 for (const rule of desiredRules) {

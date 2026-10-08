@@ -8,6 +8,7 @@ on:
       - .github/workflows/prepare-awg-cdn.yml
       - scripts/prepare-awg-cdn.mjs
       - infra/yandex/awg-cdn-plan.json
+      - scripts/verify-awg-cdn.mjs
 
 concurrency:
   group: awg-yandex-production-writer
@@ -28,7 +29,7 @@ env:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
 
@@ -79,3 +80,15 @@ jobs:
 
       - name: Prepare CDN without changing production DNS
         run: node scripts/prepare-awg-cdn.mjs
+
+      - name: Prepare browser verification
+        run: |
+          set -euo pipefail
+          npm install --prefix "$RUNNER_TEMP/awg-browser-smoke" --no-package-lock playwright@1.58.2
+          CHROME=$(command -v google-chrome || command -v chromium || command -v chromium-browser)
+          test -n "$CHROME"
+          echo "AWG_PLAYWRIGHT_DIR=$RUNNER_TEMP/awg-browser-smoke" >> "$GITHUB_ENV"
+          echo "AWG_CHROME_BIN=$CHROME" >> "$GITHUB_ENV"
+
+      - name: Verify CDN HTML, browser and API before DNS cutover
+        run: node scripts/verify-awg-cdn.mjs
