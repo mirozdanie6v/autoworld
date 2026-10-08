@@ -47,7 +47,7 @@ jobs:
           GITHUB_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
         run: |
           set -euo pipefail
-          RESPONSE=$(curl --fail-with-body -fsS --connect-timeout 15 --max-time 30 \
+          RESPONSE=$(curl --fail-with-body -sS --connect-timeout 15 --max-time 30 \
             -H 'Content-Type: application/x-www-form-urlencoded' \
             --data-urlencode 'grant_type=urn:ietf:params:oauth:grant-type:token-exchange' \
             --data-urlencode 'requested_token_type=urn:ietf:params:oauth:token-type:access_token' \
