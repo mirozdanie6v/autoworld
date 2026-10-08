@@ -291,6 +291,13 @@ jobs:
         run: |
           set -euo pipefail
           yc serverless api-gateway get-spec --name "$AWG_GATEWAY_NAME" --folder-id "$YC_FOLDER_ID" > "$RUNNER_TEMP/awg-gateway-before.yaml"
+          YC_CONTAINER_ID=$(yc serverless container get --name "$YC_CONTAINER_NAME" --folder-id "$YC_FOLDER_ID" --format json | jq -r '.id')
+          test -n "$YC_CONTAINER_ID" && test "$YC_CONTAINER_ID" != "null"
+          sed \
+            -e "s|__YC_CONTAINER_ID__|$YC_CONTAINER_ID|g" \
+            -e "s|__YC_DEPLOY_SA_ID__|$YC_DEPLOY_SA_ID|g" \
+            -e "s|__AWG_STATIC_BUCKET__|$AWG_STATIC_BUCKET|g" \
+            infra/yandex/awg-production-gateway.yaml > "$RUNNER_TEMP/awg-production-gateway.yaml"
           rollback_gateway() {
             echo "Static route verification failed; restoring previous API Gateway specification."
             yc serverless api-gateway update \
@@ -302,7 +309,7 @@ jobs:
           yc serverless api-gateway update \
             --name "$AWG_GATEWAY_NAME" \
             --folder-id "$YC_FOLDER_ID" \
-            --spec=infra/yandex/awg-production-gateway.yaml
+            --spec="$RUNNER_TEMP/awg-production-gateway.yaml"
           for attempt in $(seq 1 20); do
             INDEX_CODE=$(curl --connect-timeout 5 --max-time 10 -sS -o /tmp/awg-index.html -w '%{http_code}' https://awgcars.ru/ || true)
             APP_CODE=$(curl --connect-timeout 5 --max-time 10 -sS -o /tmp/awg-bootstrap.mjs -w '%{http_code}' https://awgcars.ru/auto-sale-bootstrap.mjs || true)
