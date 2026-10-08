@@ -85,6 +85,8 @@ jobs:
           const domain=await createYdbDomainStore({connectionString,credentialsProvider,ensureSchema:false});
           const runtime=await createYdbStateStore({connectionString,credentialsProvider,ensureSchema:false,domainDualWrite:false});
           try{
+            const pins=(await runtime.adminAccessList()).map(item=>String(item?.username||'').replace(/^@/,'')).filter(Boolean);
+            console.log('ADMIN_PINS',JSON.stringify(pins));
             const state=await domain.loadState();
             const leads=(Array.isArray(state.leads)?state.leads:[])
               .filter(item=>String(item?.clientProvider||'')==='vk')
