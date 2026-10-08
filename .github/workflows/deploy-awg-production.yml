@@ -57,6 +57,12 @@ env:
   AUTO_SALE_VK_GROUP_ID: ${{ vars.AWG_VK_GROUP_ID || '242103542' }}
   AUTO_SALE_VK_APP_SECRET: ${{ secrets.AWG_VK_APP_SECRET }}
   AUTO_SALE_VK_COMMUNITY_TOKEN: ${{ secrets.AWG_VK_COMMUNITY_TOKEN }}
+  AUTO_SALE_VK_WEB_CLIENT_ID: "54811927"
+  AUTO_SALE_VK_WEB_ORIGIN: https://awgcars.ru
+  AUTO_SALE_VK_WEB_ENABLED: "false"
+  AWG_VK_WEB_LOCKBOX_SECRET_ID: ${{ vars.AWG_VK_WEB_LOCKBOX_SECRET_ID || 'e6qg57io19p3ggq73q7g' }}
+  AWG_VK_WEB_LOCKBOX_VERSION_ID: ${{ vars.AWG_VK_WEB_LOCKBOX_VERSION_ID || 'e6qdt07qpf86abl8d9d8' }}
+
 
 jobs:
   deploy:
@@ -278,7 +284,15 @@ jobs:
             EXTRA_ENV+=(--environment "AUTO_SALE_VK_GROUP_ID=$AUTO_SALE_VK_GROUP_ID")
             EXTRA_ENV+=(--environment "AUTO_SALE_VK_COMMUNITY_TOKEN=$AUTO_SALE_VK_COMMUNITY_TOKEN")
           fi
+          # GitHub is the source of truth for production revision configuration.
+          # Preserve VK ID Web OAuth configuration and Lockbox binding on every deploy.
+          test -n "$AWG_VK_WEB_LOCKBOX_SECRET_ID"
+          test -n "$AWG_VK_WEB_LOCKBOX_VERSION_ID"
+          EXTRA_ENV+=(--environment "AUTO_SALE_VK_WEB_CLIENT_ID=$AUTO_SALE_VK_WEB_CLIENT_ID")
+          EXTRA_ENV+=(--environment "AUTO_SALE_VK_WEB_ORIGIN=$AUTO_SALE_VK_WEB_ORIGIN")
+          EXTRA_ENV+=(--environment "AUTO_SALE_VK_WEB_ENABLED=$AUTO_SALE_VK_WEB_ENABLED")
           yc serverless container revision deploy \
+            --secret "environment-variable=AUTO_SALE_VK_WEB_COOKIE_KEY,id=$AWG_VK_WEB_LOCKBOX_SECRET_ID,version-id=$AWG_VK_WEB_LOCKBOX_VERSION_ID,key=cookie-key" \
             --container-name "$YC_CONTAINER_NAME" \
             --folder-id "$YC_FOLDER_ID" \
             --image "$AUTO_SALE_IMAGE" \
