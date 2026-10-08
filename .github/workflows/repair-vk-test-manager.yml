@@ -1,0 +1,111 @@
+name: Repair VK Test Manager
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .diagnostics/vk-manager-repair-trigger
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  YC_DEPLOY_SA_ID: ${{ vars.AWG_YC_DEPLOY_SA_ID || 'aje775bcl6hgp40eu8of' }}
+  YDB_CONNECTION_STRING: ${{ vars.AWG_YDB_CONNECTION_STRING || 'grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1ggsmuiq7tb2d27f89q/etn00ojk5iv1u7dgpdar' }}
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - run: npm ci
+      - uses: actions/github-script@v7
+        id: oidc
+        with:
+          script: |
+            const token = await core.getIDToken('https://github.com/mirozdanie6v')
+            core.setSecret(token)
+            core.setOutput('token', token)
+      - name: Exchange OIDC token
+        env:
+          GITHUB_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        run: |
+          set -euo pipefail
+          RESPONSE=$(curl -sS -w '\n%{http_code}' -H 'Content-Type: application/x-www-form-urlencoded' \
+            --data-urlencode 'grant_type=urn:ietf:params:oauth:grant-type:token-exchange' \
+            --data-urlencode 'requested_token_type=urn:ietf:params:oauth:token-type:access_token' \
+            --data-urlencode "audience=${YC_DEPLOY_SA_ID}" \
+            --data-urlencode "subject_token=${GITHUB_OIDC_TOKEN}" \
+            --data-urlencode 'subject_token_type=urn:ietf:params:oauth:token-type:id_token' \
+            https://auth.yandex.cloud/oauth/token)
+          HTTP_CODE=$(printf '%s' "$RESPONSE" | tail -n1)
+          BODY=$(printf '%s' "$RESPONSE" | sed '$d')
+          test "$HTTP_CODE" = "200"
+          IAM_TOKEN=$(printf '%s' "$BODY" | jq -r '.access_token')
+          test -n "$IAM_TOKEN" && test "$IAM_TOKEN" != "null"
+          echo "::add-mask::$IAM_TOKEN"
+          echo "YC_IAM_TOKEN=$IAM_TOKEN" >> "$GITHUB_ENV"
+      - name: Bind latest VK test lead to linked manager
+        run: |
+          node --input-type=module <<'NODE'
+          import {AccessTokenCredentialsProvider} from '@ydbjs/auth/access-token';
+          import {createYdbDomainStore} from './server/ydb-domain-store.mjs';
+          import {createYdbStateStore} from './server/ydb-state.mjs';
+          import {mutateAutoSaleEntity} from './server/ydb-entity-commands.mjs';
+
+          const credentialsProvider=new AccessTokenCredentialsProvider({token:String(process.env.YC_IAM_TOKEN||'')});
+          const connectionString=String(process.env.YDB_CONNECTION_STRING||'');
+          const domain=await createYdbDomainStore({connectionString,credentialsProvider,ensureSchema:false});
+          const runtime=await createYdbStateStore({connectionString,credentialsProvider,ensureSchema:false,domainDualWrite:false});
+          try{
+            const state=await domain.loadState();
+            const lead=(state.leads||[])
+              .filter(x=>String(x?.clientProvider||'')==='vk')
+              .sort((a,b)=>String(b?.createdAt||'').localeCompare(String(a?.createdAt||'')))[0];
+            if(!lead)throw new Error('no_vk_lead');
+            if(String(lead.manager||'').trim()&&String(lead.manager||'').trim()!=='Дмитрий')throw new Error('vk_lead_already_owned_by_other_manager');
+
+            const pins=await runtime.adminAccessList();
+            const pin=pins.find(x=>String(x?.username||'').replace(/^@/,'').toLowerCase()==='flyer_flyer'&&/^\d+$/.test(String(x?.telegramUserId||'')));
+            if(!pin)throw new Error('dmitry_telegram_pin_missing');
+
+            const rowVersion=await domain.entityRowVersion('lead',lead.id);
+            const now=new Date().toISOString();
+            const input={
+              id:lead.id,
+              manager:'Дмитрий',
+              managerClaimedAt:String(lead.managerClaimedAt||'').trim()||now,
+              managerClaimedByTelegramUserId:String(pin.telegramUserId),
+              managerClaimedByTelegramUsername:'Flyer_Flyer',
+              managerTelegramUserId:String(pin.telegramUserId),
+              managerTelegramUsername:'Flyer_Flyer',
+              managerTelegramName:'Дмитрий'
+            };
+            const result=await mutateAutoSaleEntity({
+              legacyStore:runtime,
+              domainStore:domain,
+              resource:'lead',
+              operation:'patch',
+              id:lead.id,
+              input,
+              expectedRowVersion:rowVersion
+            });
+            if(result.status!==200)throw new Error('manager_bind_failed:'+JSON.stringify(result.data));
+            const next=await domain.loadState();
+            const saved=(next.leads||[]).find(x=>String(x.id)===String(lead.id));
+            console.log('VK_MANAGER_REPAIR',JSON.stringify({
+              leadId:lead.id,
+              manager:String(saved?.manager||''),
+              managerTelegramUsername:String(saved?.managerTelegramUsername||''),
+              managerHasTelegramUserId:/^\d+$/.test(String(saved?.managerTelegramUserId||'')),
+              managerClaimed:Boolean(String(saved?.managerClaimedAt||''))
+            }));
+          }finally{
+            await Promise.allSettled([domain.close(),runtime.close()]);
+          }
+          NODE
