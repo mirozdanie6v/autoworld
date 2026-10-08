@@ -1,0 +1,37 @@
+name: Audit VK Community Autoworld
+on:
+  push:
+    branches: [feat/vk-community-branding-20261008]
+    paths:
+      - .github/workflows/audit-vk-community.yml
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GROUP_ID: "242103542"
+      TOKEN: ${{ secrets.AWG_VK_COMMUNITY_TOKEN }}
+    steps:
+      - name: Read only VK community audit
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          const token=process.env.TOKEN, group=process.env.GROUP_ID, version='5.199';
+          if(!token){console.log(JSON.stringify({error:'missing_repository_community_token'}));process.exitCode=1;}
+          else{
+            async function call(name,params){
+              const body=new URLSearchParams({...params,access_token:token,v:version});
+              const resp=await fetch('https://api.vk.com/method/'+name,{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body,signal:AbortSignal.timeout(10000)});
+              const result=await resp.json();
+              if(result.error)return {error_code:result.error.error_code,error_msg:result.error.error_msg};
+              return result.response;
+            }
+            const props=await call('groups.getById',{group_ids:group,fields:'description,site,status,cover,photo_200,links,members_count,screen_name'});
+            const wall=await call('wall.get',{owner_id:'-'+group,count:'5'});
+            const permissions=await call('groups.getTokenPermissions',{});
+            const items=(wall?.items||wall?.posts||[]).map(x=>({id:x.id,date:x.date,from_id:x.from_id,is_pinned:x.is_pinned,attachments:(x.attachments||[]).map(a=>a.type),text_preview:String(x.text||'').slice(0,140)}));
+            console.log(JSON.stringify({group:props,wall:{count:wall?.count,items,error:wall?.error_code},token_permissions:permissions?.permissions||permissions?.settings||permissions?.error_msg},null,2));
+          }
+          NODE
