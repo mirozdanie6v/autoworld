@@ -116,6 +116,7 @@ test('VK Mini App shell initializes once and does not require messaging config',
     vkBridge:{
       send:async method=>{
         calls.push(method);
+        if(method==='VKWebAppGetUserInfo')return{id:42,first_name:'Olga',last_name:'VK'};
         return{};
       }
     }
@@ -132,7 +133,10 @@ test('VK Mini App shell initializes once and does not require messaging config',
     const second=await module.initVkMiniAppShell();
     assert.equal(first.ok,true);
     assert.equal(second.ok,true);
-    assert.deepEqual(calls,['VKWebAppInit']);
+    await new Promise(resolve=>setTimeout(resolve,0));
+    assert.deepEqual(calls,['VKWebAppInit','VKWebAppGetUserInfo']);
+    assert.equal(globalThis.window.__AUTO_SALE_VK_USER__?.id,'42');
+    assert.equal(globalThis.window.__AUTO_SALE_VK_USER__?.displayName,'Olga VK');
   }finally{
     if(previousWindow===undefined)delete globalThis.window;
     else globalThis.window=previousWindow;
@@ -149,4 +153,13 @@ test('VK shell bootstrap is placed only at the application startup boundary',asy
   const pullIndex=source.lastIndexOf('await pullInitialState();');
   assert.ok(initIndex>0,'VK shell init must be present');
   assert.ok(pullIndex>initIndex,'VK shell init must happen before the startup state pull');
+});
+
+
+test('VK client profile hydration is wired to request-form autofill',async()=>{
+  const {readFile}=await import('node:fs/promises');
+  const source=await readFile(new URL('../public/auto-sale-vk.mjs',import.meta.url),'utf8');
+  for(const token of ['VKWebAppGetUserInfo','__AUTO_SALE_VK_USER__','autofillVkClientRequest','data-open-request','data-request-car','vkAutofilled']) assert.ok(source.includes(token),token);
+  const app=await readFile(new URL('../public/auto-sale-app-v3.mjs',import.meta.url),'utf8');
+  assert.ok(app.includes('placeholder=\"VK / Telegram / WhatsApp\"'));
 });
