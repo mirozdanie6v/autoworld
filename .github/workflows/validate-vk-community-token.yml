@@ -120,8 +120,7 @@ jobs:
                 errorCode:Number(data?.error?.error_code||0),
                 errorMsg:String(data?.error?.error_msg||('HTTP '+response.status))
               }));
-              process.exitCode=1;
-              return;
+              throw new Error('vk_message_probe_failed');
             }
             const messageId=typeof data.response==='number'||typeof data.response==='string'
               ?String(data.response)
