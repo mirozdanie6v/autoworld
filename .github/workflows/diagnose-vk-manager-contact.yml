@@ -1,0 +1,91 @@
+name: Diagnose VK Manager Contact
+
+on:
+  push:
+    branches: [diag-vk-prod-open]
+    paths:
+      - .diagnostics/vk-manager-contact-trigger
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  YC_DEPLOY_SA_ID: ${{ vars.AWG_YC_DEPLOY_SA_ID || 'aje775bcl6hgp40eu8of' }}
+  YDB_CONNECTION_STRING: ${{ vars.AWG_YDB_CONNECTION_STRING || 'grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1ggsmuiq7tb2d27f89q/etn00ojk5iv1u7dgpdar' }}
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - run: npm ci
+      - uses: actions/github-script@v7
+        id: oidc
+        with:
+          script: |
+            const token = await core.getIDToken('https://github.com/mirozdanie6v')
+            core.setSecret(token)
+            core.setOutput('token', token)
+      - name: Exchange OIDC token
+        env:
+          GITHUB_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        run: |
+          set -euo pipefail
+          RESPONSE=$(curl -sS -w '\n%{http_code}' -H 'Content-Type: application/x-www-form-urlencoded' \
+            --data-urlencode 'grant_type=urn:ietf:params:oauth:grant-type:token-exchange' \
+            --data-urlencode 'requested_token_type=urn:ietf:params:oauth:token-type:access_token' \
+            --data-urlencode "audience=${YC_DEPLOY_SA_ID}" \
+            --data-urlencode "subject_token=${GITHUB_OIDC_TOKEN}" \
+            --data-urlencode 'subject_token_type=urn:ietf:params:oauth:token-type:id_token' \
+            https://auth.yandex.cloud/oauth/token)
+          HTTP_CODE=$(printf '%s' "$RESPONSE" | tail -n1)
+          BODY=$(printf '%s' "$RESPONSE" | sed '$d')
+          test "$HTTP_CODE" = "200"
+          IAM_TOKEN=$(printf '%s' "$BODY" | jq -r '.access_token')
+          test -n "$IAM_TOKEN" && test "$IAM_TOKEN" != "null"
+          echo "::add-mask::$IAM_TOKEN"
+          echo "YC_IAM_TOKEN=$IAM_TOKEN" >> "$GITHUB_ENV"
+      - name: Inspect latest VK lead manager mapping
+        run: |
+          node --input-type=module <<'NODE'
+          import {AccessTokenCredentialsProvider} from '@ydbjs/auth/access-token';
+          import {createYdbDomainStore} from './server/ydb-domain-store.mjs';
+          import {managerTelegramIdentity,managerTelegramContact} from './shared/auto-sale-manager-directory.mjs';
+          const credentialsProvider=new AccessTokenCredentialsProvider({token:String(process.env.YC_IAM_TOKEN||'')});
+          const domain=await createYdbDomainStore({
+            connectionString:String(process.env.YDB_CONNECTION_STRING||''),
+            credentialsProvider,
+            ensureSchema:false
+          });
+          try{
+            const state=await domain.loadState();
+            const lead=(state.leads||[])
+              .filter(x=>String(x?.clientProvider||'')==='vk')
+              .sort((a,b)=>String(b?.createdAt||'').localeCompare(String(a?.createdAt||'')))[0];
+            if(!lead) throw new Error('no_vk_lead');
+            const team=(state.team||[]).map(x=>({
+              name:String(x?.name||''),
+              telegramUsername:String(x?.telegramUsername||x?.telegram||'').replace(/^@/,''),
+              active:x?.active!==false,
+              hasTelegramUserId:/^\d+$/.test(String(x?.telegramUserId||''))
+            }));
+            const identity=managerTelegramIdentity(String(lead.manager||''),state.team||[]);
+            console.log('VK_MANAGER_DIAG',JSON.stringify({
+              leadId:lead.id,
+              manager:String(lead.manager||''),
+              leadManagerTelegramUsername:String(lead.managerTelegramUsername||'').replace(/^@/,''),
+              leadHasManagerTelegramUserId:/^\d+$/.test(String(lead.managerTelegramUserId||'')),
+              directoryContact:managerTelegramContact(String(lead.manager||'')),
+              resolvedUsername:identity.username,
+              resolvedHasId:Boolean(identity.id),
+              team
+            }));
+          }finally{
+            await domain.close();
+          }
+          NODE
