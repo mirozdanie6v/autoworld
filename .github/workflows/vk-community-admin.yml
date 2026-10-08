@@ -1,0 +1,46 @@
+name: Verify and Apply VK Community Admin
+on:
+  push:
+    branches: [feat/vk-community-branding-20261008]
+    paths:
+      - scripts/vk-community-admin.mjs
+      - tests/vk-community-admin.test.mjs
+      - .github/workflows/vk-community-admin.yml
+      - .diagnostics/vk-admin-apply-trigger
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test tests/vk-community-admin.test.mjs
+
+  # This job NEVER runs on regular pushes. It runs only after an explicit
+  # trigger commit with prefix 'apply(vk-admin):' and an admin token secret.
+  apply:
+    needs: [tests]
+    if: github.event_name == 'push' && startsWith(github.event.head_commit.message, 'apply(vk-admin):')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      AWG_VK_ADMIN_TOKEN: ${{ secrets.AWG_VK_ADMIN_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check token availability
+        run: |
+          test -n "$AWG_VK_ADMIN_TOKEN" || { echo "Set AWG_VK_ADMIN_TOKEN in GitHub Actions repository secrets"; exit 1; }
+          echo "::add-mask::$AWG_VK_ADMIN_TOKEN"
+      - name: Preflight read-only check
+        run: node scripts/vk-community-admin.mjs
+      - name: Apply pinned welcome post and public catalog link
+        env:
+          AWG_VK_APPLY: YES_APPLY
+        run: node scripts/vk-community-admin.mjs
