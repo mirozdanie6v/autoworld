@@ -75,6 +75,19 @@ jobs:
         with:
           node-version: 22
 
+      - name: Guard existing VK Mini App during production release
+        run: |
+          set -euo pipefail
+          # A regular release must not silently turn off the existing VK channel.
+          if [ "${AUTO_SALE_VK_ENABLED}" != "true" ]; then
+            echo "::error::Production VK Mini App would be disabled by this workflow. Run a reviewed manual release with vk_enable=true only after verifying existing VK credentials and messages routing."
+            exit 1
+          fi
+          if [ "${AUTO_SALE_VK_WEB_ENABLED}" != "false" ]; then
+            echo "::error::Browser VK ID remains disabled until live OAuth staging smoke."
+            exit 1
+          fi
+
       - name: Validate Yandex configuration
         run: |
           set -euo pipefail
