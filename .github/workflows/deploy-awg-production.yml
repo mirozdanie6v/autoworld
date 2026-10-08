@@ -186,10 +186,11 @@ jobs:
             | jq -e --arg name "$AWG_STATIC_BUCKET" '.[] | select(.name == $name)' >/dev/null; then
             yc storage bucket create --name "$AWG_STATIC_BUCKET" --folder-id "$YC_FOLDER_ID" --max-size 1073741824
           fi
-          yc storage s3 rm "s3://$AWG_STATIC_BUCKET/" --recursive --quiet || true
           yc storage s3 cp dist/ "s3://$AWG_STATIC_BUCKET/" --recursive \
+            --exclude 'index.html' \
             --cache-control 'public, max-age=300, stale-while-revalidate=86400' \
             --only-show-errors
+          # Publish index last so an already-cut-over production never points at half-uploaded assets.
           yc storage s3 cp dist/index.html "s3://$AWG_STATIC_BUCKET/index.html" \
             --cache-control 'no-cache, no-store, must-revalidate' \
             --content-type 'text/html; charset=utf-8' \
@@ -289,6 +290,15 @@ jobs:
       - name: Route static frontend through Object Storage
         run: |
           set -euo pipefail
+          yc serverless api-gateway get-spec --name "$AWG_GATEWAY_NAME" --folder-id "$YC_FOLDER_ID" > "$RUNNER_TEMP/awg-gateway-before.yaml"
+          rollback_gateway() {
+            echo "Static route verification failed; restoring previous API Gateway specification."
+            yc serverless api-gateway update \
+              --name "$AWG_GATEWAY_NAME" \
+              --folder-id "$YC_FOLDER_ID" \
+              --spec="$RUNNER_TEMP/awg-gateway-before.yaml" || true
+          }
+          trap rollback_gateway ERR
           yc serverless api-gateway update \
             --name "$AWG_GATEWAY_NAME" \
             --folder-id "$YC_FOLDER_ID" \
@@ -301,9 +311,10 @@ jobs:
               && grep -q 'pullInitialState' /tmp/awg-bootstrap.mjs; then
               break
             fi
-            test "$attempt" -lt 20 || { echo "Static Object Storage route did not become healthy"; exit 1; }
+            test "$attempt" -lt 20 || false
             sleep 3
           done
+          trap - ERR
           curl --connect-timeout 5 --max-time 10 -sS -o /dev/null \
             -w 'Static index TTFB=%{time_starttransfer}s total=%{time_total}s\n' https://awgcars.ru/
           curl --connect-timeout 5 --max-time 10 -sS -o /dev/null \
