@@ -29,6 +29,23 @@ function beginLogin(form){
   location.assign('/api/auto-sale/vk/web/start');
 }
 if(plainWeb&&webEnabled&&!webAuthenticated){
+  const placeLogin=()=>{
+    const form=document.getElementById('requestForm');
+    if(!form||form.elements?.managerMode?.value!=='0'||form.querySelector('[data-vk-web-login]'))return;
+    const actions=form.querySelector('.auto-form-actions');
+    if(!actions)return;
+    const button=document.createElement('button');
+    button.type='button';
+    button.dataset.vkWebLogin='1';
+    button.textContent='Продолжить с VK ID';
+    button.className='auto-btn primary';
+    button.style.cssText='background:#0077ff;color:white;width:100%;margin-top:12px';
+    button.addEventListener('click',()=>beginLogin(form));
+    actions.before(button);
+  };
+  placeLogin();
+  new MutationObserver(placeLogin).observe(document.getElementById('app')||document.body,{childList:true,subtree:true});
+
   document.addEventListener('submit',event=>{
     const form=event.target;
     if(form?.id!=='requestForm'||form.elements?.managerMode?.value!=='0')return;
