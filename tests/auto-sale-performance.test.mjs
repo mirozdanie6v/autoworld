@@ -40,10 +40,16 @@ test('production gateway separates static frontend from API runtime',()=>{
   assert.ok(gateway.includes("object: '{proxy}'"));
 });
 
-test('production deploy uploads static build before updating gateway routing',()=>{
+test('production deploy uploads browser-safe static MIME types before gateway cutover',()=>{
   assert.ok(deploy.includes('Publish static frontend to Yandex Object Storage'));
-  assert.ok(deploy.includes('yc storage s3 cp dist/'));
+  assert.ok(deploy.includes('mime_for()'));
+  assert.ok(deploy.includes("*.mjs|*.js) echo 'text/javascript; charset=utf-8'"));
+  assert.ok(deploy.includes("*.css) echo 'text/css; charset=utf-8'"));
+  assert.ok(deploy.includes('--content-type "$(mime_for "$file")"'));
   assert.ok(deploy.includes('Route static frontend through Object Storage'));
+  assert.ok(deploy.includes('APP_TYPE'));
+  assert.ok(deploy.includes('CSS_TYPE'));
+  assert.ok(deploy.includes('Static route verification failed; restoring previous API Gateway specification.'));
   assert.ok(deploy.includes('yc serverless api-gateway update'));
   assert.ok(deploy.includes('AWG_STATIC_BUCKET'));
 });

@@ -186,10 +186,28 @@ jobs:
             | jq -e --arg name "$AWG_STATIC_BUCKET" '.[] | select(.name == $name)' >/dev/null; then
             yc storage bucket create --name "$AWG_STATIC_BUCKET" --folder-id "$YC_FOLDER_ID" --max-size 1073741824
           fi
-          yc storage s3 cp dist/ "s3://$AWG_STATIC_BUCKET/" --recursive \
-            --exclude 'index.html' \
-            --cache-control 'public, max-age=300, stale-while-revalidate=86400' \
-            --only-show-errors
+          mime_for() {
+            case "$1" in
+              *.html) echo 'text/html; charset=utf-8' ;;
+              *.css) echo 'text/css; charset=utf-8' ;;
+              *.mjs|*.js) echo 'text/javascript; charset=utf-8' ;;
+              *.json) echo 'application/json; charset=utf-8' ;;
+              *.svg) echo 'image/svg+xml' ;;
+              *.webp) echo 'image/webp' ;;
+              *.png) echo 'image/png' ;;
+              *.jpg|*.jpeg) echo 'image/jpeg' ;;
+              *.woff2) echo 'font/woff2' ;;
+              *) echo 'application/octet-stream' ;;
+            esac
+          }
+          while IFS= read -r -d '' file; do
+            key="${file#dist/}"
+            [ "$key" = "index.html" ] && continue
+            yc storage s3 cp "$file" "s3://$AWG_STATIC_BUCKET/$key" \
+              --cache-control 'public, max-age=300, stale-while-revalidate=86400' \
+              --content-type "$(mime_for "$file")" \
+              --only-show-errors
+          done < <(find dist -type f -print0)
           # Publish index last so an already-cut-over production never points at half-uploaded assets.
           yc storage s3 cp dist/index.html "s3://$AWG_STATIC_BUCKET/index.html" \
             --cache-control 'no-cache, no-store, must-revalidate' \
@@ -311,13 +329,21 @@ jobs:
             --folder-id "$YC_FOLDER_ID" \
             --spec="$RUNNER_TEMP/awg-production-gateway.yaml"
           for attempt in $(seq 1 20); do
-            INDEX_CODE=$(curl --connect-timeout 5 --max-time 10 -sS -o /tmp/awg-index.html -w '%{http_code}' https://awgcars.ru/ || true)
-            APP_CODE=$(curl --connect-timeout 5 --max-time 10 -sS -o /tmp/awg-bootstrap.mjs -w '%{http_code}' https://awgcars.ru/auto-sale-bootstrap.mjs || true)
-            if [ "$INDEX_CODE" = "200" ] && [ "$APP_CODE" = "200" ] \
+            INDEX_CODE=$(curl --connect-timeout 5 --max-time 10 -sS -D /tmp/index.headers -o /tmp/awg-index.html -w '%{http_code}' https://awgcars.ru/ || true)
+            APP_CODE=$(curl --connect-timeout 5 --max-time 10 -sS -D /tmp/app.headers -o /tmp/awg-bootstrap.mjs -w '%{http_code}' https://awgcars.ru/auto-sale-bootstrap.mjs || true)
+            CSS_CODE=$(curl --connect-timeout 5 --max-time 10 -sS -D /tmp/css.headers -o /tmp/awg.css -w '%{http_code}' https://awgcars.ru/auto-sale.css || true)
+            INDEX_TYPE=$(awk 'BEGIN{IGNORECASE=1} /^content-type:/{gsub("\r","");print tolower($0)}' /tmp/index.headers | tail -1)
+            APP_TYPE=$(awk 'BEGIN{IGNORECASE=1} /^content-type:/{gsub("\r","");print tolower($0)}' /tmp/app.headers | tail -1)
+            CSS_TYPE=$(awk 'BEGIN{IGNORECASE=1} /^content-type:/{gsub("\r","");print tolower($0)}' /tmp/css.headers | tail -1)
+            if [ "$INDEX_CODE" = "200" ] && [ "$APP_CODE" = "200" ] && [ "$CSS_CODE" = "200" ] \
+              && [[ "$INDEX_TYPE" == *"text/html"* ]] \
+              && [[ "$APP_TYPE" == *"javascript"* ]] \
+              && [[ "$CSS_TYPE" == *"text/css"* ]] \
               && grep -q 'auto-sale-bootstrap.mjs' /tmp/awg-index.html \
               && grep -q 'pullInitialState' /tmp/awg-bootstrap.mjs; then
               break
             fi
+            echo "Static probe attempt $attempt: index=$INDEX_CODE [$INDEX_TYPE], app=$APP_CODE [$APP_TYPE], css=$CSS_CODE [$CSS_TYPE]"
             test "$attempt" -lt 20 || false
             sleep 3
           done
