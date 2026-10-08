@@ -1,0 +1,56 @@
+{
+  "apiOriginGroup": {
+    "folderId": "b1g8u8vqkgehvtbj8n13",
+    "name": "awg-production-api",
+    "useNext": false,
+    "origins": [{
+      "source": "d5dbgio6limv03usvipl.s183zexc.apigw.yandexcloud.net",
+      "enabled": true,
+      "backup": false,
+      "meta": {"common": {"name": "AWG API Gateway"}}
+    }]
+  },
+  "resource": {
+    "folderId": "b1g8u8vqkgehvtbj8n13",
+    "cname": "awgcars.ru",
+    "secondaryHostnames": {"values": ["www.awgcars.ru"]},
+    "origin": {"originSourceParams": {
+      "source": "viiversion-autoworld-awg-static-b1g8u8vqkgehvtbj8n13.website.yandexcloud.net",
+      "meta": {"website": {"name": "viiversion-autoworld-awg-static-b1g8u8vqkgehvtbj8n13"}}
+    }},
+    "originProtocol": "HTTPS",
+    "active": true,
+    "providerType": "ourcdn",
+    "sslCertificate": {"type": "CM", "data": {"cm": {"id": "fpqnkrs2dkejric7sm2e"}}},
+    "options": {
+      "disableCache": {"enabled": true, "value": false},
+      "allowedHttpMethods": {"enabled": true, "value": ["GET", "HEAD", "OPTIONS"]},
+      "hostOptions": {"host": {"enabled": true, "value": "viiversion-autoworld-awg-static-b1g8u8vqkgehvtbj8n13.website.yandexcloud.net"}},
+      "customServerName": {"enabled": true, "value": "viiversion-autoworld-awg-static-b1g8u8vqkgehvtbj8n13.website.yandexcloud.net"},
+      "redirectOptions": {"redirectHttpToHttps": {"enabled": true, "value": true}}
+    }
+  },
+  "apiRule": {
+    "resourceId": "__CDN_RESOURCE_ID__",
+    "name": "api-never-cache",
+    "rulePattern": "^/api(?:/|$)",
+    "weight": "0",
+    "originsGroupId": "__API_ORIGIN_GROUP_ID__",
+    "originProtocol": "HTTPS",
+    "options": {
+      "disableCache": {"enabled": true, "value": true},
+      "allowedHttpMethods": {"enabled": true, "value": ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]},
+      "hostOptions": {"host": {"enabled": true, "value": "d5dbgio6limv03usvipl.s183zexc.apigw.yandexcloud.net"}},
+      "customServerName": {"enabled": true, "value": "d5dbgio6limv03usvipl.s183zexc.apigw.yandexcloud.net"},
+      "staticHeaders": {"enabled": true, "value": {"Cache-Control": "private, no-store"}},
+      "stale": {"enabled": true, "value": []}
+    }
+  },
+  "htmlRule": {
+    "resourceId": "__CDN_RESOURCE_ID__",
+    "name": "html-always-current",
+    "rulePattern": "^/(?:index\\.html)?$",
+    "weight": "1",
+    "options": {"disableCache": {"enabled": true, "value": true}}
+  }
+}
