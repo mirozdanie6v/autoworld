@@ -150,9 +150,12 @@ function clientLeadRows(){return leads().filter(item=>item.clientCreated)}
 function enhanceClientOrderCards(){
   const cards=[...document.querySelectorAll('.auto-order-card')];if(!cards.length)return;
   const rows=clientLeadRows();cards.forEach((card,index)=>{
-    const lead=rows[index];if(!lead||card.dataset.clientLead)return;
-    card.dataset.clientLead=lead.id;card.tabIndex=0;card.setAttribute('role','button');card.setAttribute('aria-label',`Открыть заказ ${lead.model||lead.id}`);
-    const hint=document.createElement('div');hint.className='auto-order-open-hint';hint.innerHTML='<span>Открыть подробности</span><strong>→</strong>';card.append(hint);
+    const lead=rows.find(item=>item.id===card.dataset.clientLead)||rows[index];if(!lead)return;
+    if(!card.dataset.clientLead)card.dataset.clientLead=lead.id;
+    card.tabIndex=0;card.setAttribute('role','button');card.setAttribute('aria-label',`Открыть заказ ${lead.model||lead.id}`);
+    if(!card.querySelector('.auto-order-open-hint')){
+      const hint=document.createElement('div');hint.className='auto-order-open-hint';hint.innerHTML='<span>Открыть подробности</span><strong>→</strong>';card.append(hint);
+    }
   });
 }
 
