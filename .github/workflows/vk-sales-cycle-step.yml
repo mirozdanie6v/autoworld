@@ -65,9 +65,12 @@ jobs:
       - name: Resolve production API credential
         run: |
           set -euo pipefail
-          REV=$(yc serverless container revision get "$TARGET_REVISION_ID" --folder-id "$YC_FOLDER_ID" --format json)
-          test "$(printf '%s' "$REV" | jq -r '.environment.AUTO_SALE_VK_ENABLED // ""')" = "true"
-          API_KEY=$(printf '%s' "$REV" | jq -r '.environment.AUTO_SALE_API_KEY // empty')
+          yc serverless container revision get "$TARGET_REVISION_ID" --folder-id "$YC_FOLDER_ID" --format json > /tmp/revision.json
+          VK_ENABLED=$(jq -r '.environment.AUTO_SALE_VK_ENABLED // ""' /tmp/revision.json)
+          BUILD_SHA=$(jq -r '.environment.AUTO_SALE_BUILD_SHA // ""' /tmp/revision.json)
+          API_KEY=$(jq -r '.environment.AUTO_SALE_API_KEY // empty' /tmp/revision.json)
+          echo "REVISION_CHECK vk=$VK_ENABLED build=$BUILD_SHA apiKeyPresent=$([ -n "$API_KEY" ] && echo true || echo false)"
+          test "$VK_ENABLED" = "true"
           test -n "$API_KEY"
           echo "::add-mask::$API_KEY"
           echo "AUTO_SALE_API_KEY=$API_KEY" >> "$GITHUB_ENV"
