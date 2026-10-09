@@ -47,7 +47,7 @@ export function createVkWebAuth({
    const challenge=createHash('sha256').update(verifier).digest('base64url');
    setCookie(res,COOKIE_TX,issue({type:'transaction',state,verifier,exp:now()+600000}),600);
    const q=new URLSearchParams({client_id:String(clientId),response_type:'code',redirect_uri:redirect,
-     state,code_challenge:challenge,code_challenge_method:'S256',scope:''});
+     state,code_challenge:challenge,code_challenge_method:'s256',scope:''});
    return {status:302,location:'https://id.vk.ru/authorize?'+q.toString()};
  }
  async function complete(req,res,url){
