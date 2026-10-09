@@ -207,14 +207,15 @@ async function requestAccess(req,state=null){
   const hasTelegram=Boolean(String(req.headers['x-telegram-init-data']||'').trim());
   const hasVk=Boolean(String(req.headers['x-vk-launch-params']||'').trim());
   const webIdentity=vkWeb.auth(req);
-  if(webIdentity&&(hasTelegram||hasVk))return{state:current,access:{role:'public',authenticated:false,authType:'public',apiKey:false,user:null,identity:null,admin:null,error:'multiple_auth_providers'}};
+  // Signed VK Mini App or Telegram launch data takes precedence over an unrelated
+  // browser VK ID cookie. Never mix identities or block valid mini-app sessions.
   if(hasTelegram&&hasVk)return{state:current,access:{role:'public',authenticated:false,authType:'public',apiKey:false,user:null,identity:null,admin:null,error:'multiple_auth_providers'}};
   if(hasVk){
     const auth=vkAuth(req);
     if(!auth.ok)return{state:current,access:{role:'public',authenticated:false,authType:'public',apiKey:false,user:null,identity:null,admin:null,error:auth.error}};
     return{state:current,access:{role:'client',authenticated:true,authType:'vk',apiKey:false,user:auth.user,identity:auth.identity,admin:null}};
   }
-  if(webIdentity)return{state:current,access:{role:'client',authenticated:true,authType:'vk-web',apiKey:false,user:webIdentity.user,identity:webIdentity.identity,admin:null}};
+  if(webIdentity&&!hasTelegram)return{state:current,access:{role:'client',authenticated:true,authType:'vk-web',apiKey:false,user:webIdentity.user,identity:webIdentity.identity,admin:null}};
   const auth=telegramAuth(req);
   if(!auth.ok)return{state:current,access:{role:'public',authenticated:false,authType:'public',apiKey:false,user:null,identity:null,admin:null,error:auth.error}};
   const user=auth.user;
