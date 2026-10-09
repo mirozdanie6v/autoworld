@@ -1,10 +1,7 @@
 name: Roll out VK web profile autofill to isolated staging
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - .github/workflows/rollout-awg-vk-profile-staging.yml
+  workflow_dispatch: {}
 
 permissions:
   contents: read
@@ -143,11 +140,14 @@ jobs:
             CMD+=(--secret "id=$id,version-id=$version,key=$key,environment-variable=$envvar")
           done < <(jq -r '.secrets[] | [.id, (.version_id // .versionId), .key, (.environment_variable // .environmentVariable)] | @tsv' "$REV")
 
+          rollout_ok=false
           rollback() {
-            echo "::warning::Staging rollout failed; restoring the prior active revision $OLD_REV."
-            yc serverless container rollback --id "$STAGING_CONTAINER_ID" --revision-id "$OLD_REV" --folder-id "$YC_FOLDER_ID" || true
+            if [ "$rollout_ok" != true ]; then
+              echo "::warning::Staging rollout failed; restoring the prior active revision $OLD_REV."
+              yc serverless container rollback --id "$STAGING_CONTAINER_ID" --revision-id "$OLD_REV" --folder-id "$YC_FOLDER_ID" || true
+            fi
           }
-          trap rollback ERR
+          trap rollback EXIT
           "${CMD[@]}"
           echo "New revision requested for ONLY $STAGING_CONTAINER_NAME; starting smoke."
 
@@ -176,7 +176,8 @@ jobs:
             echo "::error::Staging profile route or JS smoke failed"
             exit 1
           fi
-          trap - ERR
+          rollout_ok=true
+          trap - EXIT
           echo "### VK browser profile autofill: staging READY" >> "$GITHUB_STEP_SUMMARY"
           echo "Staging-only revision deployed; profile anonymous access denied; correct JS module and VK login config served." >> "$GITHUB_STEP_SUMMARY"
           echo "Authenticated user's real name cannot be verified without their browser session; live browser form smoke remains." >> "$GITHUB_STEP_SUMMARY"
