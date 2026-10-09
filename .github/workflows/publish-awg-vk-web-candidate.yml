@@ -8,6 +8,8 @@ on:
       - server/vk-web-auth.mjs
       - tests/auto-sale-vk-web.test.mjs
       - server/yandex-server.mjs
+      - server/auto-sale-access.mjs
+      - tests/auto-sale-manager-claim.test.mjs
       - public/auto-sale-vk-web.mjs
       - public/auto-sale-vk-web-profile.mjs
       - tests/auto-sale-vk-web-profile.test.mjs
