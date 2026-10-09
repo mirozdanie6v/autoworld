@@ -1,0 +1,200 @@
+name: Roll out VK web request submit fix to isolated staging
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/rollout-awg-vk-request-submit-staging.yml
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: awg-vk-staging-container-writer
+  cancel-in-progress: false
+
+env:
+  YC_FOLDER_ID: b1g8u8vqkgehvtbj8n13
+  YC_DEPLOY_SA_ID: ${{ vars.AWG_YC_DEPLOY_SA_ID || 'aje775bcl6hgp40eu8of' }}
+  STAGING_CONTAINER_NAME: autoworld-vk-web-staging
+  STAGING_CONTAINER_ID: bbag75c5g7vup8sfbmop
+  STAGING_RUNTIME_SA_ID: ajeqbteofv8negiuhdae
+  STAGING_IMAGE: cr.yandex/crptu0l7jn0iui8b8laa/autoworld-awg:vk-web-candidate-3fd5ad37498d98c2d85410856cde2abf7daf4bf3
+  STAGING_DOMAIN: https://vk-test.awgcars.ru
+
+jobs:
+  roll-out:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v5
+      - name: Verify exact isolated target
+        run: |
+          set -euo pipefail
+          test "$YC_FOLDER_ID" = b1g8u8vqkgehvtbj8n13
+          test "$STAGING_CONTAINER_ID" = bbag75c5g7vup8sfbmop
+          test "$STAGING_CONTAINER_NAME" = autoworld-vk-web-staging
+          test "$STAGING_RUNTIME_SA_ID" = ajeqbteofv8negiuhdae
+          test "$STAGING_DOMAIN" = https://vk-test.awgcars.ru
+          test "$STAGING_IMAGE" = cr.yandex/crptu0l7jn0iui8b8laa/autoworld-awg:vk-web-candidate-3fd5ad37498d98c2d85410856cde2abf7daf4bf3
+      - name: Request GitHub OIDC token
+        uses: actions/github-script@v7
+        id: oidc
+        with:
+          script: |
+            const token = await core.getIDToken('https://github.com/mirozdanie6v')
+            core.setSecret(token)
+            core.setOutput('token', token)
+      - name: Exchange OIDC for Yandex IAM
+        env:
+          GITHUB_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        run: |
+          set -euo pipefail
+          RESPONSE=$(curl -sS --connect-timeout 10 --max-time 30 -w '\n%{http_code}' \
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            --data-urlencode 'grant_type=urn:ietf:params:oauth:grant-type:token-exchange' \
+            --data-urlencode 'requested_token_type=urn:ietf:params:oauth:token-type:access_token' \
+            --data-urlencode "audience=$YC_DEPLOY_SA_ID" \
+            --data-urlencode "subject_token=$GITHUB_OIDC_TOKEN" \
+            --data-urlencode 'subject_token_type=urn:ietf:params:oauth:token-type:id_token' \
+            https://auth.yandex.cloud/oauth/token)
+          CODE=$(printf '%s' "$RESPONSE" | tail -n1)
+          test "$CODE" = 200 || { echo "::error::Yandex IAM exchange failed (HTTP $CODE)"; exit 1; }
+          TOKEN=$(printf '%s' "$RESPONSE" | sed '$d' | jq -r '.access_token // empty')
+          test -n "$TOKEN"
+          echo "::add-mask::$TOKEN"
+          echo "YC_IAM_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+      - name: Install Yandex Cloud CLI
+        run: |
+          set -euo pipefail
+          curl -fsSL --connect-timeout 15 --max-time 120 \
+            https://storage.yandexcloud.net/yandexcloud-yc/release/yc_linux_amd64.tar.gz \
+            -o "$RUNNER_TEMP/yc_linux_amd64.tar.gz"
+          mkdir -p "$RUNNER_TEMP/yc-dist" "$HOME/yandex-cloud/bin"
+          tar -xzf "$RUNNER_TEMP/yc_linux_amd64.tar.gz" -C "$RUNNER_TEMP/yc-dist"
+          BIN=$(find "$RUNNER_TEMP/yc-dist" -type f -name yc -print -quit)
+          test -n "$BIN"
+          install -m 0755 "$BIN" "$HOME/yandex-cloud/bin/yc"
+          echo "$HOME/yandex-cloud/bin" >> "$GITHUB_PATH"
+      - name: Read staging revision, preserve environment and secrets, deploy guarded update
+        run: |
+          set -euo pipefail
+          yc config set endpoint api.cloud.yandex.net:443
+          yc config set token "$YC_IAM_TOKEN"
+          yc config set folder-id "$YC_FOLDER_ID"
+
+          CONTAINER=$(yc serverless container get --name "$STAGING_CONTAINER_NAME" --folder-id "$YC_FOLDER_ID" --format json)
+          test "$(printf '%s' "$CONTAINER" | jq -r '.id')" = "$STAGING_CONTAINER_ID"
+
+          yc serverless container revision list --container-id "$STAGING_CONTAINER_ID" --folder-id "$YC_FOLDER_ID" --format json > "$RUNNER_TEMP/revisions.json"
+          OLD_REV=$(jq -er '(if type=="array" then . else .revisions end) | sort_by(.created_at // .createdAt) | last | .id' "$RUNNER_TEMP/revisions.json")
+          yc serverless container revision get "$OLD_REV" --folder-id "$YC_FOLDER_ID" --format json > "$RUNNER_TEMP/revision.json"
+
+          REV="$RUNNER_TEMP/revision.json"
+          test "$(jq -r '.container_id // .containerId' "$REV")" = "$STAGING_CONTAINER_ID"
+          test "$(jq -r '.service_account_id // .serviceAccountId' "$REV")" = "$STAGING_RUNTIME_SA_ID"
+          test "$(jq -r '.status' "$REV")" = "ACTIVE"
+          test "$(jq -r '.resources.memory' "$REV")" = "536870912"
+          test "$(jq -r '.resources.cores' "$REV")" = "1"
+          test "$(jq -r '.resources.core_fraction // .resources.coreFraction' "$REV")" = "100"
+          test "$(jq -r '.image.image_url // .image.imageUrl' "$REV" | grep -E '^cr.yandex/crptu0l7jn0iui8b8laa/autoworld-awg:vk-web-candidate-[a-f0-9]+$' | wc -l)" = 1
+
+          jq -e '
+            .image.environment as $e |
+            ($e | keys | sort) == (["YDB_CONNECTION_STRING","AUTO_SALE_VK_WEB_ENABLED","AUTO_SALE_VK_WEB_CLIENT_ID","AUTO_SALE_VK_WEB_ORIGIN","AUTO_SALE_PUBLIC_DEMO_WRITE","AUTO_SALE_YDB_READ_MODE","AUTO_SALE_YDB_DUAL_WRITE","AUTO_SALE_LEGACY_STATE_WRITE"] | sort) and
+            ($e.YDB_CONNECTION_STRING | endswith("/etnhujtu1t6f89tdtohs")) and
+            $e.AUTO_SALE_VK_WEB_ENABLED == "true" and
+            $e.AUTO_SALE_VK_WEB_CLIENT_ID == "54811927" and
+            $e.AUTO_SALE_VK_WEB_ORIGIN == "https://vk-test.awgcars.ru" and
+            $e.AUTO_SALE_PUBLIC_DEMO_WRITE == "false" and
+            $e.AUTO_SALE_YDB_READ_MODE == "normalized" and
+            $e.AUTO_SALE_YDB_DUAL_WRITE == "false" and
+            $e.AUTO_SALE_LEGACY_STATE_WRITE == "false"
+          ' "$REV" >/dev/null
+          jq -e '
+            (.secrets | length) == 2 and
+            ([.secrets[] | .environment_variable // .environmentVariable] | sort) ==
+              (["AUTO_SALE_API_KEY","AUTO_SALE_VK_WEB_COOKIE_KEY"] | sort) and
+            all(.secrets[]; (.id|length) > 5 and (.version_id // .versionId | length) > 5 and (.key == "api-key" or .key == "cookie-key"))
+          ' "$REV" >/dev/null
+          test "$(jq -r '.secrets[] | select((.environment_variable // .environmentVariable)=="AUTO_SALE_API_KEY") | .key' "$REV")" = "api-key"
+          test "$(jq -r '.secrets[] | select((.environment_variable // .environmentVariable)=="AUTO_SALE_VK_WEB_COOKIE_KEY") | .key' "$REV")" = "cookie-key"
+
+          ENV_CSV=$(jq -r '.image.environment | to_entries | map("\(.key)=\(.value)") | join(",")' "$REV")
+          test -n "$ENV_CSV"
+          echo "Validated isolated staging config: 8 flags, 2 Lockbox bindings, 512 MB. No secret payload read."
+          CMD=(yc serverless container revision deploy
+            --container-id "$STAGING_CONTAINER_ID"
+            --folder-id "$YC_FOLDER_ID"
+            --image "$STAGING_IMAGE"
+            --cores 1
+            --core-fraction 100
+            --memory 512MB
+            --execution-timeout 60s
+            --concurrency 1
+            --service-account-id "$STAGING_RUNTIME_SA_ID"
+            --runtime http
+            --environment "$ENV_CSV"
+            --description 'VK Web request button and submit feedback — isolated staging only'
+          )
+          while IFS=$'\t' read -r id version key envvar; do
+            test -n "$id" && test -n "$version" && test -n "$key" && test -n "$envvar"
+            CMD+=(--secret "id=$id,version-id=$version,key=$key,environment-variable=$envvar")
+          done < <(jq -r '.secrets[] | [.id, (.version_id // .versionId), .key, (.environment_variable // .environmentVariable)] | @tsv' "$REV")
+
+          rollout_ok=false
+          rollback() {
+            if [ "$rollout_ok" != true ]; then
+              echo "::warning::Staging rollout failed; restoring the prior active revision $OLD_REV."
+              # Restore previous image with the preserved, validated staging env and Lockbox bindings.
+              OLD_IMAGE=$(jq -r '.image.image_url // .image.imageUrl' "$REV")
+              for i in "${!CMD[@]}"; do
+                if [ "${CMD[i]}" = '--image' ]; then CMD[i+1]="$OLD_IMAGE"; break; fi
+              done
+              "${CMD[@]}" || echo "::error::Staging rollback failed: manual revision restore needed"
+            fi
+          }
+          trap rollback EXIT
+          "${CMD[@]}"
+          echo "New revision requested for ONLY $STAGING_CONTAINER_NAME; starting smoke."
+
+          success=false
+          for attempt in $(seq 1 18); do
+            profile_code=$(curl -sS --connect-timeout 8 --max-time 20 -D /tmp/profile.headers -o /tmp/profile.json -w '%{http_code}' "$STAGING_DOMAIN/api/auto-sale/vk/web/profile" || true)
+            js_code=$(curl -sS --connect-timeout 8 --max-time 20 -D /tmp/autofill.headers -o /tmp/autofill.mjs -w '%{http_code}' "$STAGING_DOMAIN/auto-sale-vk-web-profile.mjs" || true)
+            app_code=$(curl -sS --connect-timeout 8 --max-time 20 -o /tmp/app.mjs -w '%{http_code}' "$STAGING_DOMAIN/auto-sale-vk-web.mjs" || true)
+            config_code=$(curl -sS --connect-timeout 8 --max-time 20 -o /tmp/config.json -w '%{http_code}' "$STAGING_DOMAIN/api/auto-sale/vk/web/config" || true)
+            client_js_code=$(curl -sS --connect-timeout 8 --max-time 20 -o /tmp/client-js.mjs -w '%{http_code}' "$STAGING_DOMAIN/auto-sale-request-submit-feedback.mjs" || true)
+            bootstrap_code=$(curl -sS --connect-timeout 8 --max-time 20 -o /tmp/bootstrap.mjs -w '%{http_code}' "$STAGING_DOMAIN/auto-sale-bootstrap.mjs" || true)
+            app_core_code=$(curl -sS --connect-timeout 8 --max-time 20 -o /tmp/app-core.mjs -w '%{http_code}' "$STAGING_DOMAIN/auto-sale-app-v3.mjs" || true)
+            post_code=$(curl -sS --connect-timeout 8 --max-time 20 -o /tmp/post-body.json -w '%{http_code}' -X POST -H "Origin: $STAGING_DOMAIN" -H 'Content-Type: application/json' --data '{"operations":[]}' "$STAGING_DOMAIN/api/auto-sale/entities/batch" || true)
+            health_code=$(curl -sS --connect-timeout 8 --max-time 20 -o /tmp/health.json -w '%{http_code}' "$STAGING_DOMAIN/api/health" || true)
+            echo "Probe $attempt: anon-profile=$profile_code autofill-module=$js_code web-app=$app_code config=$config_code health=$health_code"
+            if [ "$profile_code" = 401 ] && [ "$js_code" = 200 ] && [ "$app_code" = 200 ] && [ "$config_code" = 200 ] && [ "$health_code" = 200 ] \
+              && jq -e '.authenticated == false' /tmp/profile.json >/dev/null \
+              && jq -e '.enabled == true and .authenticated == false' /tmp/config.json >/dev/null \
+              && jq -e '.ok == true' /tmp/health.json >/dev/null \
+              && grep -iq '^content-type: text/javascript' /tmp/autofill.headers \
+              && ! grep -Eiq '^access-control-allow-credentials: true' /tmp/profile.headers \
+              && grep -q 'applyVkWebProfileToRequestForm' /tmp/autofill.mjs \
+              && grep -q '/api/auto-sale/vk/web/profile' /tmp/app.mjs \
+              && [ "$client_js_code" = 200 ] && [ "$bootstrap_code" = 200 ] && [ "$app_core_code" = 200 ] && [ "$post_code" = 401 ] \
+              && grep -q 'highlightInvalidRequest' /tmp/client-js.mjs \
+              && grep -q 'auto-sale-request-submit-feedback.mjs' /tmp/bootstrap.mjs \
+              && grep -q 'Отправляем заявку' /tmp/app-core.mjs \
+              && jq -e '.error == "telegram_auth_required"' /tmp/post-body.json >/dev/null; then
+              success=true
+              break
+            fi
+            sleep 5
+          done
+          if [ "$success" != true ]; then
+            echo "::error::Staging profile route or JS smoke failed"
+            exit 1
+          fi
+          rollout_ok=true
+          trap - EXIT
+          echo "### VK browser request submission visible and staging API connected" >> "$GITHUB_STEP_SUMMARY"
+          echo "Staging-only candidate, validated request feedback module, client submit progress, and 401 for anonymous POST. Production unchanged." >> "$GITHUB_STEP_SUMMARY"
+          echo "Authenticated user's real name cannot be verified without their browser session; live browser form smoke remains." >> "$GITHUB_STEP_SUMMARY"
