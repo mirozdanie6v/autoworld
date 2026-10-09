@@ -122,7 +122,7 @@ jobs:
             --spec=infra/yandex/awg-vk-web-staging-app-gateway.yaml
           echo "Updated ONLY staging API Gateway $STAGING_GATEWAY_ID."
           success=false
-          for attempt in $(seq 1 15); do
+          for attempt in $(seq 1 4); do
             root_code=$(curl -sS --connect-timeout 10 --max-time 25 -D /tmp/awg-root.headers -o /tmp/awg-root.html -w '%{http_code}' "$STAGING_DOMAIN/" || true)
             js_code=$(curl -sS --connect-timeout 10 --max-time 25 -D /tmp/awg-js.headers -o /tmp/awg.js -w '%{http_code}' "$STAGING_DOMAIN/auto-sale-bootstrap.mjs" || true)
             css_code=$(curl -sS --connect-timeout 10 --max-time 25 -D /tmp/awg-css.headers -o /tmp/awg.css -w '%{http_code}' "$STAGING_DOMAIN/auto-sale.css" || true)
@@ -131,6 +131,27 @@ jobs:
             state_code=$(curl -sS --connect-timeout 10 --max-time 25 -o /tmp/awg-state.json -w '%{http_code}' "$STAGING_DOMAIN/api/auto-sale/state" || true)
             start_code=$(curl -sS --connect-timeout 10 --max-time 25 -D /tmp/awg-start.headers -o /dev/null -w '%{http_code}' "$STAGING_DOMAIN/api/auto-sale/vk/web/start" || true)
             echo "Probe $attempt: root=$root_code js=$js_code css=$css_code config=$config_code health=$health_code state=$state_code authStart=$start_code"
+            if [ "$attempt" -eq 1 ]; then
+              echo "=== SAFE DIAGNOSTICS (no cookies or tokens) ==="
+              report_check() {
+                local label="$1"
+                shift
+                if "$@" >/dev/null 2>&1; then echo "PASS: $label"; else echo "FAIL: $label"; fi
+              }
+              report_check rootMime grep -Eiq '^content-type: text/html' /tmp/awg-root.headers
+              report_check jsMime grep -Eiq '^content-type: text/javascript' /tmp/awg-js.headers
+              report_check cssMime grep -Eiq '^content-type: text/css' /tmp/awg-css.headers
+              report_check rootDoctype grep -qi '<!doctype html' /tmp/awg-root.html
+              report_check rootBootstrap grep -q auto-sale-bootstrap /tmp/awg-root.html
+              report_check webAuthImported grep -q auto-sale-vk-web.mjs /tmp/awg.js
+              report_check configAuth jq -e '.enabled == true and .authenticated == false' /tmp/awg-config.json
+              report_check health jq -e '.ok == true and .stateReadMode == "viewer-filtered"' /tmp/awg-health.json
+              report_check publicState jq -e '.initialized == true and ._access.role == "public" and (.leads|length) == 0 and (.catalog|type) == "array"' /tmp/awg-state.json
+              report_check vkRedirect grep -Eiq '^location: https://id.vk.ru/authorize[?]' /tmp/awg-start.headers
+              jq -c '{initialized, role: ._access.role, leadsType:(.leads|type), leadsCount:(.leads|length),catalogType:(.catalog|type)}' /tmp/awg-state.json || true
+              jq -c '{ok,stateReadMode}' /tmp/awg-health.json || true
+            fi
+
             if [ "$root_code" = 200 ] && [ "$js_code" = 200 ] && [ "$css_code" = 200 ] && [ "$config_code" = 200 ] && [ "$health_code" = 200 ] && [ "$state_code" = 200 ] && [ "$start_code" = 302 ] \
               && grep -Eiq '^content-type: text/html' /tmp/awg-root.headers \
               && grep -Eiq '^content-type: text/javascript' /tmp/awg-js.headers \
