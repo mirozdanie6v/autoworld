@@ -1,0 +1,20 @@
+name: Probe isolated VK staging POST route
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/probe-awg-vk-staging-post.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Probe unauthenticated batch route without creating records
+        run: node scripts/check-awg-vk-staging-post.mjs
