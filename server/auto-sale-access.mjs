@@ -199,34 +199,25 @@ export function applyManagerLeadClaims(state,operations,access,{now=()=>new Date
     const current=leads.get(id);
     if(!current){out.push(operation);continue}
     const input=operation.input&&typeof operation.input==='object'?{...operation.input}:{};
-    const assignedManager=clean(current.manager);
-    const isFirstTouchClaim=Boolean(clean(current.managerClaimedAt));
     const hasStatus=Object.prototype.hasOwnProperty.call(input,'status');
     const statusChanged=hasStatus&&clean(input.status)!==clean(current.status);
-
-    if(isFirstTouchClaim&&assignedManager){
-      if(!actorName||actorName!==assignedManager){
-        return{ok:false,status:409,error:'lead_claimed_by_other_manager',id,assignedManager};
+    const managerFields=['manager','managerClaimedAt','managerClaimedByTelegramUserId',
+      'managerClaimedByTelegramUsername','managerTelegramUserId','managerTelegramUsername'];
+    // All manager attribution is server-owned; incoming values cannot impersonate staff.
+    for(const key of managerFields)delete input[key];
+    if(statusChanged){
+      if(!actorName){
+        return{ok:false,status:403,error:'manager_identity_required',id};
       }
-      const requestedManager=clean(input.manager);
-      if(requestedManager&&requestedManager!==assignedManager){
-        return{ok:false,status:409,error:'lead_reassignment_requires_api_key',id,assignedManager};
-      }
-      input.manager=assignedManager;
-    }else if(!assignedManager){
-      if(statusChanged){
-        if(!actorName){
-          return{ok:false,status:403,error:'manager_identity_required',id};
-        }
-        input.manager=actorName;
-        input.managerClaimedAt=clean(input.managerClaimedAt)||now();
-        input.managerClaimedByTelegramUserId=actorTelegramId;
-        input.managerClaimedByTelegramUsername=actorTelegramUsername;
-        if(actorTelegramId)input.managerTelegramUserId=actorTelegramId;
-        if(actorTelegramUsername)input.managerTelegramUsername=actorTelegramUsername;
-      }else{
-        for(const key of ['manager','managerClaimedAt','managerClaimedByTelegramUserId','managerClaimedByTelegramUsername','managerTelegramUserId','managerTelegramUsername'])delete input[key];
-      }
+      // Most recent verified status editor owns this lead, including takeover
+      // from an earlier manager. Status concurrency is enforced by row version.
+      input.manager=actorName;
+      input.managerClaimedAt=now();
+      input.managerClaimedByTelegramUserId=actorTelegramId;
+      input.managerClaimedByTelegramUsername=actorTelegramUsername;
+      // Clearing an old Telegram route avoids notifying the former owner.
+      input.managerTelegramUserId=actorTelegramId;
+      input.managerTelegramUsername=actorTelegramUsername;
     }
 
     operation.input=input;
