@@ -1,0 +1,39 @@
+openapi: "3.0.0"
+info:
+  title: AutoWorld VK ID Isolated Staging Application
+  version: "1.0.3"
+paths:
+  /api/{proxy+}:
+    x-yc-apigateway-any-method:
+      parameters:
+        - explode: false
+          in: path
+          name: proxy
+          required: true
+          schema:
+            type: string
+          style: simple
+      x-yc-apigateway-integration:
+        type: serverless_containers
+        container_id: bbag75c5g7vup8sfbmop
+        service_account_id: aje775bcl6hgp40eu8of
+  /:
+    get:
+      x-yc-apigateway-integration:
+        type: serverless_containers
+        container_id: bbag75c5g7vup8sfbmop
+        service_account_id: aje775bcl6hgp40eu8of
+  /{proxy+}:
+    get:
+      parameters:
+        - explode: false
+          in: path
+          name: proxy
+          required: true
+          schema:
+            type: string
+          style: simple
+      x-yc-apigateway-integration:
+        type: serverless_containers
+        container_id: bbag75c5g7vup8sfbmop
+        service_account_id: aje775bcl6hgp40eu8of
