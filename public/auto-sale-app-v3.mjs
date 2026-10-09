@@ -291,8 +291,12 @@ quotes=quotes.map(x=>{const origin=String(x.origin||'').trim()||(Number(x.auctio
 orders=orders.map(x=>{const rawPayments=normalizePayments(x),origin=String(x.origin||'').trim()||(x.lot?'США':'Уточняется'),lead=leads.find(l=>l.id===x.leadId),quote=quotes.filter(q=>q.leadId===x.leadId).sort((a,b)=>(b.version||1)-(a.version||1))[0],riskType=x.riskType||(x.risk==='Нет'?'Нет':RISK_TYPES.includes(x.risk)?x.risk:'Другое'),riskNote=x.riskNote||(riskType==='Другое'?x.risk:'');let paymentPlan=Array.isArray(x.paymentPlan)?x.paymentPlan:[],paymentPlanNeedsReview=Boolean(x.paymentPlanNeedsReview);if(origin==='США'&&quote&&paymentPlan.length!==4){const range=auctionDepositRange(x.total||quote.total),knownDeposit=Number(lead?.deposit)||0,deposit=knownDeposit||Math.round((range.min+range.max)/2);paymentPlan=buildUsPaymentPlan({...quote,origin,total:Number(x.total)||Number(quote.total)||0},deposit,{needsReview:!knownDeposit});paymentPlanNeedsReview=!knownDeposit;}const payments=paymentPlan.length?migratePaymentsToPlan(rawPayments,paymentPlan):rawPayments;return{...x,origin,transportMode:x.transportMode||defaultTransportMode(origin),paymentPlan,paymentPlanNeedsReview,payments,paid:paymentsTotal(payments),riskType,riskNote}});
 const saveAll=()=>{persist(KEYS.leads,leads);persist(KEYS.quotes,quotes);persist(KEYS.orders,orders);persist(KEYS.notes,notes);persist(KEYS.catalog,cars)};
 const noteEntry=value=>({id:'NOTE-'+Date.now()+'-'+Math.random().toString(36).slice(2,8),at:new Date().toISOString(),text:value});
-const entityErrorText=error=>error?.code==='entity_conflict'
-  ?'Данные изменились в другом окне. Карточка обновлена с сервера — повторите действие.'
+const entityErrorText=error=>error?.code==='telegram_auth_required'
+  ?'Авторизация не подтверждена. Обновите страницу и войдите через VK ID ещё раз.'
+  :error?.code==='origin_forbidden'
+    ?'Запрос отклонён проверкой безопасности. Обновите страницу и попробуйте снова.'
+    :error?.code==='entity_conflict'
+      ?'Данные изменились в другом окне. Карточка обновлена с сервера — повторите действие.'
   :Array.isArray(error?.data?.details)&&error.data.details.length?error.data.details.join(' ')
   :'Не удалось сохранить изменения. Проверьте данные и повторите.';
 const leadDeleteErrorText=error=>error?.code==='entity_conflict'
@@ -537,9 +541,25 @@ async function submitRequest(form){
   }
   const lead={id:managerMode?nextId('L',leads):distributedId('L'),name:data.name.trim(),contact:data.contact.trim(),model:data.model.trim(),origin:String(data.origin||''),budget:Number(data.budget)||0,source:managerMode?data.source:'Mini App',manager:managerMode?data.manager:activeManagers()[0]||'',status:'Новый',priority:managerMode?data.priority:'Средний',createdAt:new Date().toISOString(),nextAction:managerMode?data.nextAction:today,note:data.note||'',clientCreated:!managerMode,yearFrom:managerMode?'':data.yearFrom||'',yearTo:managerMode?'':data.yearTo||'',mileageMax:managerMode?'':data.mileageMax||'',engine:managerMode?'Не важно':data.engine||'Не важно',drive:managerMode?'Не важно':data.drive||'Не важно',damage:managerMode?'Минимальные':data.damage||'Минимальные',deliveryCity:managerMode?'':data.deliveryCity||'',deposit:0,depositDate:'',paymentMethod:'',managerTelegramUsername:managerMode?String(managerIdentity?.username||''):String(data.managerTelegram||'').trim().replace(/^@/,''),managerTelegramUserId:managerMode?String(managerIdentity?.id||''):'',managerTelegramName:managerMode?String(managerIdentity?.name||data.manager||''):''};
   const note=noteEntry('Лид создан.');
-  const saved=window.__AUTO_SALE_ENTITY_BATCH__?await commitEntities([{resource:'lead',operation:'create',id:lead.id,input:lead},{resource:'note',operation:'create',leadId:lead.id,input:note}],form):{ok:true,localOnly:true};if(!saved)return;
-  leads.push(lead);notes[lead.id]=[note];saveAll();
-  state.modal=null;state.role=managerMode?'manager':'client';state.route=managerMode?'leads':'orders';sessionStorage.setItem(KEYS.role,state.role);render();
+  const submitButton=form.querySelector('button[type="submit"]');
+  if(submitButton?.disabled)return;
+  const originalText=submitButton?.textContent||'Отправить запрос';
+  if(submitButton){submitButton.disabled=true;submitButton.textContent='Отправляем заявку…';submitButton.setAttribute('aria-busy','true')}
+  try{
+    const saved=window.__AUTO_SALE_ENTITY_BATCH__?await commitEntities([{resource:'lead',operation:'create',id:lead.id,input:lead},{resource:'note',operation:'create',leadId:lead.id,input:note}],form):{ok:true,localOnly:true};
+    if(!saved){
+      const problem=form.querySelector('.auto-form-error');
+      if(problem){
+        problem.setAttribute('role','alert');
+        problem.scrollIntoView?.({block:'center',behavior:'smooth'});
+      }
+      return;
+    }
+    leads.push(lead);notes[lead.id]=[note];saveAll();
+    state.modal=null;state.role=managerMode?'manager':'client';state.route=managerMode?'leads':'orders';sessionStorage.setItem(KEYS.role,state.role);render();
+  }finally{
+    if(submitButton?.isConnected){submitButton.disabled=false;submitButton.textContent=originalText;submitButton.removeAttribute('aria-busy')}
+  }
 }
 async function submitLead(form){
   const data=Object.fromEntries(new FormData(form).entries()),lead=leads.find(x=>x.id===data.id);if(!lead)return;
