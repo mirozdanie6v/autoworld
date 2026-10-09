@@ -1,0 +1,157 @@
+name: Route isolated AWG VK staging application
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/route-awg-vk-staging-app.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: awg-vk-staging-gateway-only
+  cancel-in-progress: false
+
+env:
+  YC_FOLDER_ID: b1g8u8vqkgehvtbj8n13
+  YC_DEPLOY_SA_ID: ${{ vars.AWG_YC_DEPLOY_SA_ID || 'aje775bcl6hgp40eu8of' }}
+  STAGING_GATEWAY_NAME: autoworld-vk-web-staging
+  STAGING_GATEWAY_ID: d5dnul4co6hv5qjpnbq6
+  STAGING_CONTAINER_ID: bbag75c5g7vup8sfbmop
+  STAGING_DOMAIN: https://vk-test.awgcars.ru
+
+jobs:
+  update-staging-gateway-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - name: Verify exact staging gateway and target
+        run: |
+          set -euo pipefail
+          test "$YC_FOLDER_ID" = b1g8u8vqkgehvtbj8n13
+          test "$STAGING_GATEWAY_NAME" = autoworld-vk-web-staging
+          test "$STAGING_GATEWAY_ID" = d5dnul4co6hv5qjpnbq6
+          test "$STAGING_CONTAINER_ID" = bbag75c5g7vup8sfbmop
+          test "$STAGING_DOMAIN" = https://vk-test.awgcars.ru
+          SPEC=infra/yandex/awg-vk-web-staging-app-gateway.yaml
+          test -s "$SPEC"
+          grep -Fq 'container_id: bbag75c5g7vup8sfbmop' "$SPEC"
+          grep -Fq 'service_account_id: aje775bcl6hgp40eu8of' "$SPEC"
+          if grep -Eq 'autoworld-awg-prod|https://awgcars.ru|__YC_CONTAINER_ID__' "$SPEC"; then
+            echo "::error::Production target detected in staging spec"
+            exit 1
+          fi
+          ruby -r yaml -e '
+            s=YAML.load_file(ARGV[0])
+            abort("invalid staging OpenAPI") unless s["openapi"]=="3.0.0"
+            routes=s.fetch("paths")
+            abort("unexpected paths") unless routes.keys.sort==["/","/api/{proxy+}","/{proxy+}"].sort
+            routes.each do |route, methods|
+              methods.each do |_method, operation|
+                i=operation.fetch("x-yc-apigateway-integration")
+                abort("wrong container in "+route) unless i["type"]=="serverless_containers" &&
+                  i["container_id"]=="bbag75c5g7vup8sfbmop" &&
+                  i["service_account_id"]=="aje775bcl6hgp40eu8of"
+              end
+            end
+          ' "$SPEC"
+      - name: Request GitHub OIDC token
+        uses: actions/github-script@v7
+        id: oidc
+        with:
+          script: |
+            const token = await core.getIDToken('https://github.com/mirozdanie6v')
+            core.setSecret(token)
+            core.setOutput('token', token)
+      - name: Exchange OIDC for Yandex IAM
+        env:
+          GITHUB_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        run: |
+          set -euo pipefail
+          RESPONSE=$(curl -sS --connect-timeout 10 --max-time 30 -w '\n%{http_code}' \
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            --data-urlencode 'grant_type=urn:ietf:params:oauth:grant-type:token-exchange' \
+            --data-urlencode 'requested_token_type=urn:ietf:params:oauth:token-type:access_token' \
+            --data-urlencode "audience=$YC_DEPLOY_SA_ID" \
+            --data-urlencode "subject_token=$GITHUB_OIDC_TOKEN" \
+            --data-urlencode 'subject_token_type=urn:ietf:params:oauth:token-type:id_token' \
+            https://auth.yandex.cloud/oauth/token)
+          CODE=$(printf '%s' "$RESPONSE" | tail -n1)
+          test "$CODE" = 200 || { echo "::error::Yandex IAM exchange failed (HTTP $CODE)"; exit 1; }
+          TOKEN=$(printf '%s' "$RESPONSE" | sed '$d' | jq -r '.access_token // empty')
+          test -n "$TOKEN"
+          echo "::add-mask::$TOKEN"
+          echo "YC_IAM_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+      - name: Install Yandex Cloud CLI
+        run: |
+          set -euo pipefail
+          curl -fsSL --connect-timeout 15 --max-time 120 \
+            https://storage.yandexcloud.net/yandexcloud-yc/release/yc_linux_amd64.tar.gz \
+            -o "$RUNNER_TEMP/yc_linux_amd64.tar.gz"
+          mkdir -p "$RUNNER_TEMP/yc-dist" "$HOME/yandex-cloud/bin"
+          tar -xzf "$RUNNER_TEMP/yc_linux_amd64.tar.gz" -C "$RUNNER_TEMP/yc-dist"
+          BIN=$(find "$RUNNER_TEMP/yc-dist" -type f -name yc -print -quit)
+          test -n "$BIN"
+          install -m 0755 "$BIN" "$HOME/yandex-cloud/bin/yc"
+          echo "$HOME/yandex-cloud/bin" >> "$GITHUB_PATH"
+      - name: Backup and update staging API Gateway only
+        run: |
+          set -euo pipefail
+          yc config set endpoint api.cloud.yandex.net:443
+          yc config set token "$YC_IAM_TOKEN"
+          yc config set folder-id "$YC_FOLDER_ID"
+          INFO=$(yc serverless api-gateway get --name "$STAGING_GATEWAY_NAME" --folder-id "$YC_FOLDER_ID" --format json)
+          test "$(printf '%s' "$INFO" | jq -r '.id')" = "$STAGING_GATEWAY_ID"
+          yc serverless api-gateway get-spec \
+            --name "$STAGING_GATEWAY_NAME" --folder-id "$YC_FOLDER_ID" \
+            > "$RUNNER_TEMP/vk-staging-gateway-before.yaml"
+          test -s "$RUNNER_TEMP/vk-staging-gateway-before.yaml"
+          rollback() {
+            echo "::warning::Staging diagnostics failed. Restoring prior staging gateway spec."
+            yc serverless api-gateway update \
+              --name "$STAGING_GATEWAY_NAME" --folder-id "$YC_FOLDER_ID" \
+              --spec="$RUNNER_TEMP/vk-staging-gateway-before.yaml" || true
+          }
+          trap rollback ERR
+          yc serverless api-gateway update \
+            --name "$STAGING_GATEWAY_NAME" --folder-id "$YC_FOLDER_ID" \
+            --spec=infra/yandex/awg-vk-web-staging-app-gateway.yaml
+          echo "Updated ONLY staging API Gateway $STAGING_GATEWAY_ID."
+          success=false
+          for attempt in $(seq 1 15); do
+            root_code=$(curl -sS --connect-timeout 10 --max-time 25 -D /tmp/awg-root.headers -o /tmp/awg-root.html -w '%{http_code}' "$STAGING_DOMAIN/" || true)
+            js_code=$(curl -sS --connect-timeout 10 --max-time 25 -D /tmp/awg-js.headers -o /tmp/awg.js -w '%{http_code}' "$STAGING_DOMAIN/auto-sale-bootstrap.mjs" || true)
+            css_code=$(curl -sS --connect-timeout 10 --max-time 25 -D /tmp/awg-css.headers -o /tmp/awg.css -w '%{http_code}' "$STAGING_DOMAIN/auto-sale.css" || true)
+            config_code=$(curl -sS --connect-timeout 10 --max-time 25 -o /tmp/awg-config.json -w '%{http_code}' "$STAGING_DOMAIN/api/auto-sale/vk/web/config" || true)
+            health_code=$(curl -sS --connect-timeout 10 --max-time 25 -o /tmp/awg-health.json -w '%{http_code}' "$STAGING_DOMAIN/api/health" || true)
+            state_code=$(curl -sS --connect-timeout 10 --max-time 25 -o /tmp/awg-state.json -w '%{http_code}' "$STAGING_DOMAIN/api/auto-sale/state" || true)
+            start_code=$(curl -sS --connect-timeout 10 --max-time 25 -D /tmp/awg-start.headers -o /dev/null -w '%{http_code}' "$STAGING_DOMAIN/api/auto-sale/vk/web/start" || true)
+            echo "Probe $attempt: root=$root_code js=$js_code css=$css_code config=$config_code health=$health_code state=$state_code authStart=$start_code"
+            if [ "$root_code" = 200 ] && [ "$js_code" = 200 ] && [ "$css_code" = 200 ] && [ "$config_code" = 200 ] && [ "$health_code" = 200 ] && [ "$state_code" = 200 ] && [ "$start_code" = 302 ] \
+              && grep -Eiq '^content-type: text/html' /tmp/awg-root.headers \
+              && grep -Eiq '^content-type: text/javascript' /tmp/awg-js.headers \
+              && grep -Eiq '^content-type: text/css' /tmp/awg-css.headers \
+              && grep -qi '<!doctype html' /tmp/awg-root.html \
+              && grep -q 'auto-sale-bootstrap' /tmp/awg-root.html \
+              && grep -q 'VK ID browser login' /tmp/awg.js \
+              && jq -e '.enabled == true and .authenticated == false' /tmp/awg-config.json >/dev/null \
+              && jq -e '.ok == true and .stateReadMode == "viewer-filtered"' /tmp/awg-health.json >/dev/null \
+              && jq -e '.initialized == true and ._access.role == "public" and (.leads|length) == 0 and (.catalog|type) == "array"' /tmp/awg-state.json >/dev/null \
+              && grep -Eiq '^location: https://id.vk.ru/authorize[?]' /tmp/awg-start.headers; then
+              success=true
+              break
+            fi
+            sleep 5
+          done
+          if [ "$success" != true ]; then
+            echo "::error::Staging UI and API smoke failed; restoring staging diagnostic gateway"
+            exit 1
+          fi
+          trap - ERR
+          echo "### Isolated staging app UI + VK API gateway verified" >> "$GITHUB_STEP_SUMMARY"
+          echo "HTML, JS, CSS, isolated YDB state, VK ID config and auth start verified at $STAGING_DOMAIN." >> "$GITHUB_STEP_SUMMARY"
+          echo "Production API Gateway and containers were not modified." >> "$GITHUB_STEP_SUMMARY"
