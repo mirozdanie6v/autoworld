@@ -1,3 +1,5 @@
+import {normalizeVkWebProfile,applyVkWebProfileToRequestForm} from './auto-sale-vk-web-profile.mjs';
+
 // VK ID browser login at request submission. Mini Apps retain their existing authentication.
 const DRAFT_KEY='awg-vk-web-request-draft-v1';
 const query=new URLSearchParams(location.search);
@@ -76,4 +78,28 @@ if(plainWeb&&webEnabled&&webAuthenticated){
       setTimeout(()=>watcher.disconnect(),8000);
     }
   }
+}
+
+
+// Autofill only after the server validates our HttpOnly signed VK session.
+// The profile never comes from query parameters or browser local storage.
+if(plainWeb&&webEnabled&&webAuthenticated){
+  const controller=new AbortController();
+  const timeout=setTimeout(()=>controller.abort(),6000);
+  void fetch('/api/auto-sale/vk/web/profile',{
+    credentials:'same-origin',
+    cache:'no-store',
+    headers:{accept:'application/json'},
+    signal:controller.signal
+  })
+    .then(async response=>response.ok?response.json():null)
+    .then(payload=>{
+      const profile=normalizeVkWebProfile(payload);
+      if(!profile)return;
+      const apply=()=>applyVkWebProfileToRequestForm(document.getElementById('requestForm'),profile);
+      apply();
+      new MutationObserver(apply).observe(document.getElementById('app')||document.body,{childList:true,subtree:true});
+    })
+    .catch(()=>{}) // Never block the request form if the VK profile request fails.
+    .finally(()=>clearTimeout(timeout));
 }
