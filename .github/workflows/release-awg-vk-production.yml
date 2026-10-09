@@ -1,0 +1,83 @@
+name: Release VK ID on AWG production (guarded)
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .production/awg-vk-web-release
+
+concurrency:
+  group: awg-yandex-production-writer
+  cancel-in-progress: false
+permissions:
+  contents: read
+  id-token: write
+env:
+  YC_FOLDER_ID: b1g8u8vqkgehvtbj8n13
+  YC_DEPLOY_SA_ID: ${{ vars.AWG_YC_DEPLOY_SA_ID || 'aje775bcl6hgp40eu8of' }}
+  CONTAINER_NAME: autoworld-awg-prod
+  GATEWAY_NAME: autoworld-awg-prod
+  STATIC_BUCKET: viiversion-autoworld-awg-static-b1g8u8vqkgehvtbj8n13
+  TARGET_IMAGE: cr.yandex/crptu0l7jn0iui8b8laa/autoworld-awg:vk-web-candidate-201d760d62d3e065e27119ea18091db76f30ed1d
+  LOCKBOX_ID: ${{ vars.AWG_VK_WEB_LOCKBOX_SECRET_ID || 'e6qg57io19p3ggq73q7g' }}
+  LOCKBOX_VERSION: ${{ vars.AWG_VK_WEB_LOCKBOX_VERSION_ID || 'e6qdt07qpf86abl8d9d8' }}
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - name: Validate VK ID and legacy runtime before production deployment
+        run: |
+          set -euo pipefail
+          bash -n scripts/release-awg-vk-production.sh
+          npm ci
+          npm run check
+          npm run build
+          test -s dist/auto-sale-vk-status-widget.mjs
+          test -s dist/auto-sale-vk-status-widget.css
+      - name: Request GitHub OIDC token
+        uses: actions/github-script@v7
+        id: oidc
+        with:
+          script: |
+            const token = await core.getIDToken('https://github.com/mirozdanie6v')
+            core.setSecret(token)
+            core.setOutput('token', token)
+      - name: Exchange OIDC for Yandex IAM
+        env:
+          GITHUB_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        run: |
+          set -euo pipefail
+          RESPONSE=$(curl -sS --connect-timeout 10 --max-time 30 -w '\n%{http_code}' \
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            --data-urlencode 'grant_type=urn:ietf:params:oauth:grant-type:token-exchange' \
+            --data-urlencode 'requested_token_type=urn:ietf:params:oauth:token-type:access_token' \
+            --data-urlencode "audience=$YC_DEPLOY_SA_ID" \
+            --data-urlencode "subject_token=$GITHUB_OIDC_TOKEN" \
+            --data-urlencode 'subject_token_type=urn:ietf:params:oauth:token-type:id_token' \
+            https://auth.yandex.cloud/oauth/token)
+          CODE=$(printf '%s' "$RESPONSE" | tail -n1)
+          test "$CODE" = 200 || { echo "::error::Yandex IAM exchange failed (HTTP $CODE)"; exit 1; }
+          TOKEN=$(printf '%s' "$RESPONSE" | sed '$d' | jq -r '.access_token // empty')
+          test -n "$TOKEN"
+          echo "::add-mask::$TOKEN"
+          echo "YC_IAM_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+      - name: Install Yandex Cloud CLI
+        run: |
+          set -euo pipefail
+          curl -fsSL --connect-timeout 15 --max-time 120 \
+            https://storage.yandexcloud.net/yandexcloud-yc/release/yc_linux_amd64.tar.gz \
+            -o "$RUNNER_TEMP/yc_linux_amd64.tar.gz"
+          mkdir -p "$RUNNER_TEMP/yc-dist" "$HOME/yandex-cloud/bin"
+          tar -xzf "$RUNNER_TEMP/yc_linux_amd64.tar.gz" -C "$RUNNER_TEMP/yc-dist"
+          BIN=$(find "$RUNNER_TEMP/yc-dist" -type f -name yc -print -quit)
+          test -n "$BIN"
+          install -m 0755 "$BIN" "$HOME/yandex-cloud/bin/yc"
+          echo "$HOME/yandex-cloud/bin" >> "$GITHUB_PATH"
+      - name: Preserve production secrets, enable VK ID and update static with rollback
+        run: bash scripts/release-awg-vk-production.sh
