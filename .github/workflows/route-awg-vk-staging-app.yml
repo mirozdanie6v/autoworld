@@ -137,7 +137,7 @@ jobs:
               && grep -Eiq '^content-type: text/css' /tmp/awg-css.headers \
               && grep -qi '<!doctype html' /tmp/awg-root.html \
               && grep -q 'auto-sale-bootstrap' /tmp/awg-root.html \
-              && grep -q 'VK ID browser login' /tmp/awg.js \
+              && grep -q 'auto-sale-vk-web.mjs' /tmp/awg.js \
               && jq -e '.enabled == true and .authenticated == false' /tmp/awg-config.json >/dev/null \
               && jq -e '.ok == true and .stateReadMode == "viewer-filtered"' /tmp/awg-health.json >/dev/null \
               && jq -e '.initialized == true and ._access.role == "public" and (.leads|length) == 0 and (.catalog|type) == "array"' /tmp/awg-state.json >/dev/null \
