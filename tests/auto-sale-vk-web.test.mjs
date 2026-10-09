@@ -22,7 +22,7 @@ test('PKCE challenge, state, signed session and provider scope',async()=>{
  const fetchImpl=async(url,opts)=>{
   calls.push({url,opts});
   if(url.includes('/oauth2/auth'))return {ok:true,json:async()=>({state:tokenState,access_token:'trusted-token'})};
-  return {ok:true,json:async()=>({user:{user_id:42,first_name:'Иван'}})};
+  return {ok:true,json:async()=>({user:{user_id:42,first_name:'Иван',last_name:'Петров'}})};
  };
  const auth=createVkWebAuth({...base,fetchImpl});
  const res=response();
@@ -42,6 +42,7 @@ test('PKCE challenge, state, signed session and provider scope',async()=>{
  assert.equal(new URLSearchParams(calls[0].opts.body).get('code'),'test-code');
  const session=cookieFrom(done,'awg_vkid_session');
  assert.deepEqual(auth.auth(request(session)).identity,{provider:'vk',id:'42',key:'vk:42'});
+ assert.deepEqual(auth.auth(request(session)).user,{id:'42',provider:'vk',first_name:'Иван',last_name:'Петров'});
  assert.equal(auth.auth(request(session.replace(/.$/,'x'))),null);
  assert.equal(auth.isTrustedWrite(request(session,'https://evil.example')),false);
  assert.equal(auth.isTrustedWrite(request(session)),true);
