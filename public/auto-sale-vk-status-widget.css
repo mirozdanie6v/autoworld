@@ -9,7 +9,7 @@
   min-height:34px;min-width:88px;padding:6px 10px 6px 7px;
   border:1px solid rgba(120,161,215,.44);border-radius:11px;
   background:rgba(12,19,31,.94);box-shadow:0 3px 16px #0009;
-  color:#e8f1ff;font:700 11px/1.15 inherit;letter-spacing:.015em;
+  color:#e8f1ff;font-size:11px;font-weight:700;line-height:1.15;font-family:inherit;letter-spacing:.015em;
   cursor:pointer;white-space:nowrap;backdrop-filter:blur(14px);
 }
 .auto-vk-status-mark{
