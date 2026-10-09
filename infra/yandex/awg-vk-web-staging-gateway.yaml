@@ -1,0 +1,29 @@
+openapi: "3.0.0"
+info:
+  title: AutoWorld VK ID Staging
+  version: "1.0.2"
+
+paths:
+  /:
+    get:
+      x-yc-apigateway-integration:
+        type: dummy
+        http_code: 200
+        http_headers:
+          Content-Type: application/json
+        content:
+          "*": '{"status":"staging-gateway-ready"}'
+
+  /api/health:
+    get:
+      x-yc-apigateway-integration:
+        type: serverless_containers
+        container_id: bbag75c5g7vup8sfbmop
+        service_account_id: aje775bcl6hgp40eu8of
+
+  /api/auto-sale/vk/web/config:
+    get:
+      x-yc-apigateway-integration:
+        type: serverless_containers
+        container_id: bbag75c5g7vup8sfbmop
+        service_account_id: aje775bcl6hgp40eu8of
