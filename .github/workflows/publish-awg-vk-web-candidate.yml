@@ -17,6 +17,9 @@ on:
       - public/auto-sale-bootstrap.mjs
       - public/auto-sale-request-submit-feedback.mjs
       - tests/auto-sale-vk-web-submit.test.mjs
+      - public/auto-sale-vk-status-widget.mjs
+      - public/auto-sale-vk-status-widget.css
+      - tests/auto-sale-vk-status-widget.test.mjs
   workflow_dispatch:
 
 permissions:
