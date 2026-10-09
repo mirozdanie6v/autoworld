@@ -164,7 +164,7 @@ jobs:
               && jq -e '.enabled == true and .authenticated == false' /tmp/config.json >/dev/null \
               && jq -e '.ok == true' /tmp/health.json >/dev/null \
               && grep -iq '^content-type: text/javascript' /tmp/autofill.headers \
-              && ! grep -iq '^access-control-allow-origin: \*' /tmp/profile.headers \
+              && ! grep -Eiq '^access-control-allow-credentials: true' /tmp/profile.headers \
               && grep -q 'applyVkWebProfileToRequestForm' /tmp/autofill.mjs \
               && grep -q '/api/auto-sale/vk/web/profile' /tmp/app.mjs; then
               success=true
