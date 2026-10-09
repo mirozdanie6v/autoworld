@@ -1,0 +1,47 @@
+/* Isolated staging VK status indicator: small, accessible and header-anchored. */
+.auto-topbar{position:sticky}
+.auto-topbar .auto-vk-status{
+  position:absolute;right:max(2px,var(--safe-right,0px));top:calc(10px + var(--safe-top,0px));
+  z-index:55;font-family:inherit;color:#f0f6ff;
+}
+.auto-vk-status-trigger{
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  min-height:34px;min-width:88px;padding:6px 10px 6px 7px;
+  border:1px solid rgba(120,161,215,.44);border-radius:11px;
+  background:rgba(12,19,31,.94);box-shadow:0 3px 16px #0009;
+  color:#e8f1ff;font:700 11px/1.15 inherit;letter-spacing:.015em;
+  cursor:pointer;white-space:nowrap;backdrop-filter:blur(14px);
+}
+.auto-vk-status-mark{
+  display:grid;place-items:center;flex:none;width:23px;height:22px;
+  border-radius:7px;background:#0077ff;color:white;font:900 10px/1 system-ui,sans-serif;
+  letter-spacing:-.07em;
+}
+.auto-vk-status-dot{
+  width:7px;height:7px;border-radius:50%;background:#e0a84b;
+  box-shadow:0 0 0 2px rgba(224,168,75,.14);flex:none;
+}
+.auto-vk-status[data-vk-status="in"] .auto-vk-status-dot{background:#2ed88e;box-shadow:0 0 0 2px rgba(46,216,142,.18)}
+.auto-vk-status[data-vk-status="out"] .auto-vk-status-dot{background:#ee7f83;box-shadow:0 0 0 2px rgba(238,127,131,.12)}
+.auto-vk-status[data-vk-status="unavailable"] .auto-vk-status-dot{background:#8994a3}
+.auto-vk-status-trigger:focus-visible{outline:2px solid #7abaff;outline-offset:3px}
+.auto-vk-status-panel{
+  position:absolute;right:0;top:calc(100% + 8px);width:min(282px,calc(100vw - 24px));
+  padding:15px;border-radius:15px;background:#111924;
+  border:1px solid rgba(100,143,194,.48);box-shadow:0 14px 48px #000b;
+  text-align:left;white-space:normal;
+}
+.auto-vk-status-panel[hidden]{display:none!important}
+.auto-vk-status-panel strong{display:block;color:#f0f6ff;font-size:14px;font-weight:800}
+.auto-vk-status-panel p{font-size:12px;line-height:1.5;color:#bfcce0;margin:8px 0;overflow-wrap:anywhere}
+.auto-vk-status-panel-actions button{
+  border:1px solid rgba(100,143,194,.5);border-radius:9px;
+  background:#1d2b3f;color:#e8f4ff;min-height:35px;padding:6px 11px;
+  cursor:pointer;font:600 12px/1.2 system-ui,sans-serif;
+}
+@media(max-width:720px){
+  .auto-topbar .auto-vk-status{right:calc(6px + var(--safe-right,0px));top:calc(10px + var(--safe-top,0px))}
+  .auto-vk-status-trigger{min-width:85px;max-width:108px;height:34px;padding:5px 8px 5px 6px;gap:5px}
+  .auto-vk-status-mark{width:22px;height:21px}
+  .auto-vk-status-caption{overflow:hidden;text-overflow:ellipsis}
+}
