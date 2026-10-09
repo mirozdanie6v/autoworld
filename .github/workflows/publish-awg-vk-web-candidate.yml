@@ -11,6 +11,10 @@ on:
       - public/auto-sale-vk-web.mjs
       - public/auto-sale-vk-web-profile.mjs
       - tests/auto-sale-vk-web-profile.test.mjs
+      - public/auto-sale-app-v3.mjs
+      - public/auto-sale-bootstrap.mjs
+      - public/auto-sale-request-submit-feedback.mjs
+      - tests/auto-sale-vk-web-submit.test.mjs
   workflow_dispatch:
 
 permissions:
