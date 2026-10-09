@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - .github/workflows/verify-awg-vk-profile-staging.yml
+      - scripts/check-awg-vk-profile-staging.mjs
   workflow_dispatch:
 permissions:
   contents: read
