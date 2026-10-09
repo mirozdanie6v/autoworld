@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - .github/workflows/route-awg-vk-staging-diagnostics.yml
+      - infra/yandex/awg-vk-web-staging-gateway.yaml
   workflow_dispatch:
 
 permissions:
@@ -41,6 +42,9 @@ jobs:
           test -s "$SPEC"
           grep -Fq 'container_id: bbag75c5g7vup8sfbmop' "$SPEC"
           grep -Fq 'service_account_id: aje775bcl6hgp40eu8of' "$SPEC"
+          for route in /api/health /api/auto-sale/vk/web/config /api/auto-sale/vk/web/start /api/auto-sale/vk/web/callback /api/auto-sale/vk/web/logout; do
+            grep -Fq "  $route:" "$SPEC"
+          done
           if grep -Eq 'autoworld-awg-prod|https://awgcars.ru|__YC_CONTAINER_ID__' "$SPEC"; then
             echo "::error::Production target detected in staging spec"
             exit 1
@@ -108,6 +112,14 @@ jobs:
             --name "$STAGING_GATEWAY_NAME" --folder-id "$YC_FOLDER_ID" \
             --spec=infra/yandex/awg-vk-web-staging-gateway.yaml
           echo "Updated ONLY staging API Gateway $STAGING_GATEWAY_ID."
+          # Before VK ID is enabled, public login/callback endpoints must fail closed.
+          start_code=$(curl -sS --connect-timeout 10 --max-time 25 -o /tmp/start.json -w '%{http_code}' "$STAGING_DOMAIN/api/auto-sale/vk/web/start" || true)
+          callback_code=$(curl -sS --connect-timeout 10 --max-time 25 -o /tmp/callback.json -w '%{http_code}' "$STAGING_DOMAIN/api/auto-sale/vk/web/callback" || true)
+          if [ "$start_code" != 503 ] || [ "$callback_code" != 503 ]; then
+            echo "::error::Disabled staging VK login endpoints did not fail closed: start=$start_code callback=$callback_code"
+            exit 1
+          fi
+
           success=false
           for attempt in $(seq 1 15); do
             root_code=$(curl -sS --connect-timeout 10 --max-time 25 -o /tmp/root.json -w '%{http_code}' "$STAGING_DOMAIN/" || true)
