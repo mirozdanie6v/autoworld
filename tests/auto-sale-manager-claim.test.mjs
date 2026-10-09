@@ -36,28 +36,82 @@ test('first manager status transition claims an unassigned lead',()=>{
   assert.equal(input.managerClaimedAt,'2026-10-08T00:00:00.000Z');
 });
 
-test('claimed lead rejects takeover by another Telegram manager',()=>{
+test('latest status-changing manager takes over an already assigned lead',()=>{
   const state={team:TEAM,leads:[{
     id:'L-1',status:'В работе',manager:'Иван',
-    managerClaimedAt:'2026-10-08T00:00:00.000Z'
+    managerClaimedAt:'2026-10-08T00:00:00.000Z',
+    managerTelegramUserId:'802',managerTelegramUsername:'ivan_awg'
   }]};
   const access={role:'admin',apiKey:false,user:{id:'801',username:'smit44744'}};
   const result=applyManagerLeadClaims(state,[{
-    resource:'lead',operation:'patch',id:'L-1',input:{status:'Расчёт'}
-  }],access);
-  assert.equal(result.ok,false);
-  assert.equal(result.status,409);
-  assert.equal(result.error,'lead_claimed_by_other_manager');
-  assert.equal(result.assignedManager,'Иван');
+    resource:'lead',operation:'patch',id:'L-1',input:{
+      status:'Расчёт',manager:'Иван',managerTelegramUserId:'802',managerClaimedAt:'spoofed'
+    }
+  }],access,{now:()=> '2026-10-10T00:00:00.000Z'});
+  assert.equal(result.ok,true);
+  const input=result.operations[0].input;
+  assert.equal(input.manager,'Алексей');
+  assert.equal(input.managerTelegramUserId,'801');
+  assert.equal(input.managerTelegramUsername,'smit44744');
+  assert.equal(input.managerClaimedAt,'2026-10-10T00:00:00.000Z');
+  assert.equal(input.managerClaimedByTelegramUserId,'801');
 });
 
-test('Telegram routing fans out before claim and narrows to owner after claim',()=>{
+test('sequential status transitions reassign from Ivan to Alexey to Dmitry, no first-touch lock',()=>{
+  const timeline=[
+    [{id:'801',username:'smit44744'},'Расчёт','Алексей'],
+    [{id:'800',username:'Flyer_Flyer'},'Ожидает клиента','Дмитрий']
+  ];
+  let lead={id:'L-1',status:'В работе',manager:'Иван',
+    managerTelegramUserId:'802',managerClaimedAt:'2026-10-08T00:00:00.000Z'};
+  for(const [user,status,name] of timeline){
+    const result=applyManagerLeadClaims({team:TEAM,leads:[lead]},[{
+      resource:'lead',operation:'patch',id:lead.id,input:{status}
+    }],{role:'admin',apiKey:false,user});
+    assert.equal(result.ok,true);
+    lead={...lead,...result.operations[0].input};
+    assert.equal(lead.status,status);
+    assert.equal(lead.manager,name);
+  }
+  assert.equal(lead.managerTelegramUserId,'800');
+});
+
+test('same-status and non-status updates cannot reassign lead or spoof another manager',()=>{
+  const state={team:TEAM,leads:[{id:'L-1',status:'В работе',manager:'Иван',
+    managerTelegramUserId:'802',managerTelegramUsername:'ivan_awg'}]};
+  const access={role:'admin',apiKey:false,user:{id:'801',username:'smit44744'}};
+  for(const input of [
+    {status:'В работе',manager:'Алексей',managerTelegramUserId:'801'},
+    {nextAction:'2026-10-20',manager:'Алексей',managerClaimedByTelegramUsername:'smit44744'}
+  ]){
+    const result=applyManagerLeadClaims(state,[{resource:'lead',operation:'patch',id:'L-1',input}],access);
+    assert.equal(result.ok,true);
+    assert.equal('manager' in result.operations[0].input,false);
+    assert.equal('managerTelegramUserId' in result.operations[0].input,false);
+  }
+});
+
+test('unknown user and non-manager cannot change status or forge manager attribution',()=>{
+  const state={team:TEAM,leads:[{id:'L-1',status:'Новый',manager:''}]};
+  for(const user of [{id:'999',username:'not_a_manager'},{id:'',username:'smit44744'}]){
+    const result=applyManagerLeadClaims(state,[{
+      resource:'lead',operation:'patch',id:'L-1',input:{status:'В работе',manager:'Алексей'}
+    }],{role:'admin',apiKey:false,user});
+    assert.equal(result.ok,false);
+    assert.equal(result.status,403);
+    assert.equal(result.error,'manager_identity_required');
+  }
+});
+
+test('Telegram routing fans out before first status edit and follows last status editor',()=>{
   const service=createTelegramService({token:'123456:TEST_TOKEN',fetchImpl:async()=>{throw new Error('not used')},managerChatIds:''});
   const state={team:TEAM};
   const unassigned={id:'L-1',status:'Новый',manager:''};
   const claimed={...unassigned,status:'В работе',manager:'Иван',managerClaimedAt:'2026-10-08T00:00:00.000Z'};
   assert.deepEqual(service.managerIds(unassigned,state),['800','801','802']);
   assert.deepEqual(service.managerIds(claimed,state),['802']);
+  const reassigned={...claimed,status:'Расчёт',manager:'Алексей',managerTelegramUserId:'801',managerTelegramUsername:'smit44744'};
+  assert.deepEqual(service.managerIds(reassigned,state),['801']);
 });
 
 test('API-key repair path can bypass Telegram ownership policy',()=>{
