@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {JSDOM} from 'jsdom';
-import {deriveVkStatus,isVkStatusStagingHost,initializeVkStatusWidget} from '../public/auto-sale-vk-status-widget.mjs';
+import {deriveVkStatus,isVkStatusSupportedHost,initializeVkStatusWidget} from '../public/auto-sale-vk-status-widget.mjs';
 
 const tick=()=>new Promise(resolve=>setTimeout(resolve,20));
 const fakeBrowser=(url='https://vk-test.awgcars.ru/')=>{
@@ -20,14 +20,30 @@ const fakeBrowser=(url='https://vk-test.awgcars.ru/')=>{
 const config=(enabled,authenticated)=>({ok:true,json:async()=>({enabled,authenticated})});
 const profile=(id='42',firstName='Иван',lastName='Петров')=>({ok:true,json:async()=>({authenticated:true,user:{id,firstName,lastName}})});
 
-test('widget is explicitly staging-only, never imported into production UI',async()=>{
-  assert.equal(isVkStatusStagingHost('vk-test.awgcars.ru'),true);
-  assert.equal(isVkStatusStagingHost('awgcars.ru'),false);
-  assert.equal(isVkStatusStagingHost('www.awgcars.ru'),false);
-  const {dom,win}=fakeBrowser('https://awgcars.ru/');
+test('widget is available on AWG production + staging, excluded on unrelated sites',async()=>{
+  assert.equal(isVkStatusSupportedHost('vk-test.awgcars.ru'),true);
+  assert.equal(isVkStatusSupportedHost('awgcars.ru'),true);
+  assert.equal(isVkStatusSupportedHost('www.awgcars.ru'),true);
+  assert.equal(isVkStatusSupportedHost('evil-awgcars.ru'),false);
+  assert.equal(isVkStatusSupportedHost('example.net'),false);
+  const {dom,win}=fakeBrowser('https://evil-awgcars.ru/');
   assert.equal(initializeVkStatusWidget({win,doc:dom.window.document}),null);
   assert.equal(dom.window.document.querySelector('[data-vk-status-widget]'),null);
   dom.window.close();
+});
+
+test('production site shows VK login status without credentialed access when anonymous',async()=>{
+  const {dom,win,routes}=fakeBrowser('https://awgcars.ru/');
+  const controller=initializeVkStatusWidget({win,doc:dom.window.document,fetchImpl:async path=>{
+    assert.equal(path,'/api/auto-sale/vk/web/config');
+    return config(true,false);
+  }});
+  await tick();
+  const badge=dom.window.document.querySelector('[data-vk-status-widget]');
+  assert.equal(badge.dataset.vkStatus,'out');
+  badge.querySelector('[data-vk-status-trigger]').click();
+  assert.deepEqual(routes,['/api/auto-sale/vk/web/start']);
+  controller.destroy();dom.window.close();
 });
 
 test('plain web signed cookie logged out shows small red VK Войти badge; click starts VK login',async()=>{
