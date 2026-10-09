@@ -30,7 +30,7 @@ try{
     engine:'2.5',
     active:true,
     tag:'ТЕСТ · Не продаётся',
-    image:'/favicon-64.webp',
+    image:'https://vk-test.awgcars.ru/favicon-64.webp',
     description:'Тестовый автомобиль для проверки авторизации VK ID и оформления заявки. Не является предложением о продаже.',
     source:'isolated-staging-fixture'
   };
