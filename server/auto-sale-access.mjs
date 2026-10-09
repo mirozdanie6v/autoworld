@@ -176,7 +176,10 @@ function managerActor(state,access){
     if(clean(item?.role)!=='Менеджер')return false;
     const memberId=telegramId(item?.telegramUserId);
     const memberUsername=username(item?.telegramUsername||item?.telegram);
-    return Boolean((userId&&memberId===userId)||(userName&&memberUsername===userName));
+    // A linked Telegram user ID is authoritative: matching only a mutable username
+    // must never override a different or missing immutable staff identity.
+    if(memberId)return Boolean(userId&&memberId===userId);
+    return Boolean(userName&&memberUsername===userName);
   })||null;
 }
 
