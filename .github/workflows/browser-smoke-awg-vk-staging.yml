@@ -1,9 +1,10 @@
-name: Browser smoke VK staging real site
+name: VK status widget live mobile browser smoke
 on:
   push:
     branches: [main]
     paths:
       - .github/workflows/browser-smoke-awg-vk-staging.yml
+      - scripts/test-awg-vk-staging-browser.mjs
   workflow_dispatch:
 permissions:
   contents: read
@@ -28,6 +29,8 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: awg-vk-staging-mobile-browser
-          path: vk-staging-mobile-form.png
+          name: awg-vk-staging-login-widget-mobile
+          path: |
+            vk-staging-mobile-form.png
+            vk-staging-login-badge.png
           if-no-files-found: ignore
