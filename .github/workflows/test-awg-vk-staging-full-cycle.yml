@@ -4,6 +4,8 @@ on:
     branches: [main]
     paths:
       - .github/workflows/test-awg-vk-staging-full-cycle.yml
+      - server/auto-sale-access.mjs
+      - scripts/test-awg-vk-staging-full-cycle.mjs
 permissions:
   contents: read
   id-token: write
