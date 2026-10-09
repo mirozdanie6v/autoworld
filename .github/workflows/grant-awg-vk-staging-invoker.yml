@@ -1,0 +1,100 @@
+name: Grant isolated AWG VK staging container invoke
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/grant-awg-vk-staging-invoker.yml
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: awg-vk-staging-container-access
+  cancel-in-progress: false
+env:
+  YC_FOLDER_ID: b1g8u8vqkgehvtbj8n13
+  YC_DEPLOY_SA_ID: ${{ vars.AWG_YC_DEPLOY_SA_ID || 'aje775bcl6hgp40eu8of' }}
+  STAGING_CONTAINER_NAME: autoworld-vk-web-staging
+  STAGING_INVOKER_SERVICE_ACCOUNT_ID: ajeqbteofv8negiuhdae
+
+jobs:
+  grant-invoker:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v5
+      - name: Request short-lived GitHub OIDC token
+        uses: actions/github-script@v7
+        id: oidc
+        with:
+          script: |
+            const token = await core.getIDToken('https://github.com/mirozdanie6v')
+            core.setSecret(token)
+            core.setOutput('token', token)
+      - name: Exchange OIDC for Yandex IAM
+        env:
+          GITHUB_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        run: |
+          set -euo pipefail
+          RESPONSE=$(curl -sS --connect-timeout 10 --max-time 30 -w '\n%{http_code}' \
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            --data-urlencode 'grant_type=urn:ietf:params:oauth:grant-type:token-exchange' \
+            --data-urlencode 'requested_token_type=urn:ietf:params:oauth:token-type:access_token' \
+            --data-urlencode "audience=$YC_DEPLOY_SA_ID" \
+            --data-urlencode "subject_token=$GITHUB_OIDC_TOKEN" \
+            --data-urlencode 'subject_token_type=urn:ietf:params:oauth:token-type:id_token' \
+            https://auth.yandex.cloud/oauth/token)
+          CODE=$(printf '%s' "$RESPONSE" | tail -n1)
+          test "$CODE" = 200 || { echo "::error::Yandex IAM exchange failed (HTTP $CODE)"; exit 1; }
+          TOKEN=$(printf '%s' "$RESPONSE" | sed '$d' | jq -r '.access_token // empty')
+          test -n "$TOKEN"
+          echo "::add-mask::$TOKEN"
+          echo "YC_IAM_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+      - name: Grant ONLY staging containerInvoker and verify
+        run: |
+          set -euo pipefail
+          ROOT='https://serverless-containers.api.cloud.yandex.net/containers/v1/containers'
+          AUTH=(-H "Authorization: Bearer $YC_IAM_TOKEN")
+          test "$YC_FOLDER_ID" = b1g8u8vqkgehvtbj8n13
+          test "$STAGING_CONTAINER_NAME" = autoworld-vk-web-staging
+          test "$STAGING_INVOKER_SERVICE_ACCOUNT_ID" = ajeqbteofv8negiuhdae
+
+          curl -fsS --connect-timeout 10 --max-time 30 "${AUTH[@]}" \
+            "$ROOT?folderId=$YC_FOLDER_ID&pageSize=100" > /tmp/awg-staging-containers.json
+          ID=$(jq -er --arg name "$STAGING_CONTAINER_NAME" \
+            '[.containers[] | select(.name == $name)] | if length == 1 then .[0].id else error("staging container not unique") end' \
+            /tmp/awg-staging-containers.json)
+          test "${ID#bba}" != "$ID"
+          echo "Resolved isolated container by exact name: $ID"
+          URL="$ROOT/$ID:listAccessBindings"
+          curl -fsS --connect-timeout 10 --max-time 30 "${AUTH[@]}" "$URL" > /tmp/awg-vk-staging-acl-before.json
+          is_assigned() {
+            jq -e --arg id "$STAGING_INVOKER_SERVICE_ACCOUNT_ID" \
+              'any(.accessBindings[]?; .roleId == "serverless-containers.containerInvoker" and .subject.type == "serviceAccount" and .subject.id == $id)' "$1" >/dev/null
+          }
+          if is_assigned /tmp/awg-vk-staging-acl-before.json; then
+            echo "Targeted invoker role already assigned, no mutation required."
+          else
+            jq -n --arg id "$STAGING_INVOKER_SERVICE_ACCOUNT_ID" \
+              '{accessBindingDeltas: [{action: "ADD", accessBinding: {roleId: "serverless-containers.containerInvoker", subject: {id: $id, type: "serviceAccount"}}}]}' \
+              > /tmp/awg-vk-staging-binding.json
+            HTTP_CODE=$(curl -sS --connect-timeout 10 --max-time 30 -o /tmp/awg-vk-staging-binding-result.json \
+              -w '%{http_code}' -X POST "${AUTH[@]}" -H 'Content-Type: application/json' \
+              --data-binary @/tmp/awg-vk-staging-binding.json "$ROOT/$ID:updateAccessBindings")
+            if [ "$HTTP_CODE" != "200" ]; then
+              jq '{code,message,error}' /tmp/awg-vk-staging-binding-result.json || true
+              echo "::error::Container-specific role grant rejected (HTTP $HTTP_CODE)"
+              exit 1
+            fi
+            jq -e '(.error == null)' /tmp/awg-vk-staging-binding-result.json >/dev/null
+          fi
+          for attempt in $(seq 1 20); do
+            curl -fsS --connect-timeout 10 --max-time 30 "${AUTH[@]}" "$URL" > /tmp/awg-vk-staging-acl-after.json
+            if is_assigned /tmp/awg-vk-staging-acl-after.json; then
+              echo "Container-specific containerInvoker grant verified."
+              echo "Verified: $STAGING_CONTAINER_NAME ($ID); subject: $STAGING_INVOKER_SERVICE_ACCOUNT_ID; role: serverless-containers.containerInvoker" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "::error::Invoker role not visible after API update"
+          exit 1
