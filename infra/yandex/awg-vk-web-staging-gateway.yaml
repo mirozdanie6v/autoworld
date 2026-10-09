@@ -27,3 +27,24 @@ paths:
         type: serverless_containers
         container_id: bbag75c5g7vup8sfbmop
         service_account_id: aje775bcl6hgp40eu8of
+
+  /api/auto-sale/vk/web/start:
+    get:
+      x-yc-apigateway-integration:
+        type: serverless_containers
+        container_id: bbag75c5g7vup8sfbmop
+        service_account_id: aje775bcl6hgp40eu8of
+
+  /api/auto-sale/vk/web/callback:
+    get:
+      x-yc-apigateway-integration:
+        type: serverless_containers
+        container_id: bbag75c5g7vup8sfbmop
+        service_account_id: aje775bcl6hgp40eu8of
+
+  /api/auto-sale/vk/web/logout:
+    post:
+      x-yc-apigateway-integration:
+        type: serverless_containers
+        container_id: bbag75c5g7vup8sfbmop
+        service_account_id: aje775bcl6hgp40eu8of
