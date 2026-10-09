@@ -1,0 +1,40 @@
+name: Verify guarded AWG VK production release plan
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/verify-awg-vk-production-release.yml
+      - scripts/release-awg-vk-production.sh
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - name: Validate rollback workflow syntax and security guardrails
+        run: |
+          set -euo pipefail
+          bash -n scripts/release-awg-vk-production.sh
+          grep -q 'bbavmcegb6m6s1kvjqto' scripts/release-awg-vk-production.sh
+          grep -q 'etn00ojk5iv1u7dgpdar' scripts/release-awg-vk-production.sh
+          grep -q 'rollback_needed=true' scripts/release-awg-vk-production.sh
+          grep -q 'trap rollback EXIT' scripts/release-awg-vk-production.sh
+          ! grep -q 'vk-test.awgcars.ru/favicon' scripts/release-awg-vk-production.sh
+          echo 'Guarded production release script validates.'
+      - name: Verify source and distributable assets without touching production
+        run: |
+          npm ci
+          npm run check
+          npm run build
+          test -s dist/auto-sale-vk-status-widget.mjs
+          test -s dist/auto-sale-vk-status-widget.css
+          grep -q '20261010-vk-prod-v1' dist/index.html
+          grep -q 'auto-sale-vk-status-widget.mjs' dist/auto-sale-bootstrap.mjs
+          grep -q 'auto-sale-vk-web.mjs' dist/auto-sale-bootstrap.mjs
