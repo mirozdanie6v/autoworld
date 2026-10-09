@@ -1,0 +1,106 @@
+name: Inspect AWG VK production readiness
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/inspect-awg-vk-production.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: awg-vk-prod-audit-readonly
+  cancel-in-progress: false
+env:
+  YC_FOLDER_ID: b1g8u8vqkgehvtbj8n13
+  YC_DEPLOY_SA_ID: ${{ vars.AWG_YC_DEPLOY_SA_ID || 'aje775bcl6hgp40eu8of' }}
+  CONTAINER_NAME: autoworld-awg-prod
+  GATEWAY_NAME: autoworld-awg-prod
+  PROD_HOST: https://awgcars.ru
+  EXPECTED_YDB_SUFFIX: /etn00ojk5iv1u7dgpdar
+  EXPECTED_STATIC_BUCKET: viiversion-autoworld-awg-static-b1g8u8vqkgehvtbj8n13
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v5
+      - name: Request GitHub OIDC token
+        uses: actions/github-script@v7
+        id: oidc
+        with:
+          script: |
+            const token = await core.getIDToken('https://github.com/mirozdanie6v')
+            core.setSecret(token)
+            core.setOutput('token', token)
+      - name: Exchange OIDC for Yandex IAM
+        env:
+          GITHUB_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        run: |
+          set -euo pipefail
+          RESPONSE=$(curl -sS --connect-timeout 10 --max-time 30 -w '\n%{http_code}' \
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            --data-urlencode 'grant_type=urn:ietf:params:oauth:grant-type:token-exchange' \
+            --data-urlencode 'requested_token_type=urn:ietf:params:oauth:token-type:access_token' \
+            --data-urlencode "audience=$YC_DEPLOY_SA_ID" \
+            --data-urlencode "subject_token=$GITHUB_OIDC_TOKEN" \
+            --data-urlencode 'subject_token_type=urn:ietf:params:oauth:token-type:id_token' \
+            https://auth.yandex.cloud/oauth/token)
+          CODE=$(printf '%s' "$RESPONSE" | tail -n1)
+          test "$CODE" = 200 || { echo "::error::Yandex IAM exchange failed (HTTP $CODE)"; exit 1; }
+          TOKEN=$(printf '%s' "$RESPONSE" | sed '$d' | jq -r '.access_token // empty')
+          test -n "$TOKEN"
+          echo "::add-mask::$TOKEN"
+          echo "YC_IAM_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+      - name: Install Yandex Cloud CLI
+        run: |
+          set -euo pipefail
+          curl -fsSL --connect-timeout 15 --max-time 120 \
+            https://storage.yandexcloud.net/yandexcloud-yc/release/yc_linux_amd64.tar.gz \
+            -o "$RUNNER_TEMP/yc_linux_amd64.tar.gz"
+          mkdir -p "$RUNNER_TEMP/yc-dist" "$HOME/yandex-cloud/bin"
+          tar -xzf "$RUNNER_TEMP/yc_linux_amd64.tar.gz" -C "$RUNNER_TEMP/yc-dist"
+          BIN=$(find "$RUNNER_TEMP/yc-dist" -type f -name yc -print -quit)
+          test -n "$BIN"
+          install -m 0755 "$BIN" "$HOME/yandex-cloud/bin/yc"
+          echo "$HOME/yandex-cloud/bin" >> "$GITHUB_PATH"
+      - name: Audit current production without exposing secrets or writing cloud
+        run: |
+          set -euo pipefail
+          yc config set endpoint api.cloud.yandex.net:443
+          yc config set token "$YC_IAM_TOKEN"
+          yc config set folder-id "$YC_FOLDER_ID"
+          CONTAINER=$(yc serverless container get --name "$CONTAINER_NAME" --folder-id "$YC_FOLDER_ID" --format json)
+          ID=$(printf '%s' "$CONTAINER" | jq -r '.id')
+          test -n "$ID" && test "$ID" != null
+          yc serverless container revision list --container-id "$ID" --folder-id "$YC_FOLDER_ID" --format json > "$RUNNER_TEMP/revisions.json"
+          OLD_REV=$(jq -er '(if type=="array" then . else .revisions end) | sort_by(.created_at // .createdAt) | last | .id' "$RUNNER_TEMP/revisions.json")
+          yc serverless container revision get "$OLD_REV" --folder-id "$YC_FOLDER_ID" --format json > "$RUNNER_TEMP/prod.json"
+          R="$RUNNER_TEMP/prod.json"
+          echo '=== CURRENT PRODUCTION REVISION (metadata only) ==='
+          jq -c '{container_id, status, service_account_id, image: (.image.image_url // .image.imageUrl),memory: .resources.memory,cores: .resources.cores,core_fraction: .resources.core_fraction,environmentKeys:(.image.environment|keys|sort),flags:{web: .image.environment.AUTO_SALE_VK_WEB_ENABLED, mini:.image.environment.AUTO_SALE_VK_ENABLED, origin:.image.environment.AUTO_SALE_VK_WEB_ORIGIN, clientId:.image.environment.AUTO_SALE_VK_WEB_CLIENT_ID, ydbMode:.image.environment.AUTO_SALE_YDB_READ_MODE, legacyWrite:.image.environment.AUTO_SALE_LEGACY_STATE_WRITE, dualWrite:.image.environment.AUTO_SALE_YDB_DUAL_WRITE},secretBindings:(.secrets//[] | map({environmentVariable:(.environment_variable//.environmentVariable),key,id,versionId:(.version_id//.versionId)}))}' "$R"
+          # Guard against ever targeting test YDB or disabled VK Mini App.
+          jq -e --arg suffix "$EXPECTED_YDB_SUFFIX" '
+            .status=="ACTIVE" and (.image.environment.YDB_CONNECTION_STRING|endswith($suffix)) and
+            (.image.environment.AUTO_SALE_PUBLIC_DEMO_WRITE=="false") and
+            (.image.environment.AUTO_SALE_YDB_READ_MODE=="normalized") and
+            (.image.environment.AUTO_SALE_YDB_DUAL_WRITE=="false") and
+            (.image.environment.AUTO_SALE_LEGACY_STATE_WRITE=="false")
+          ' "$R" >/dev/null
+          yc serverless api-gateway get-spec --name "$GATEWAY_NAME" --folder-id "$YC_FOLDER_ID" > "$RUNNER_TEMP/gateway.yml"
+          echo '=== PRODUCTION ROUTES (safe excerpts) ==='
+          grep -E '^(  /|        type:|        bucket:|        container_id:)' "$RUNNER_TEMP/gateway.yml" | head -n 40
+          grep -q "$EXPECTED_STATIC_BUCKET" "$RUNNER_TEMP/gateway.yml"
+          grep -q "$ID" "$RUNNER_TEMP/gateway.yml"
+          echo '=== PUBLIC HTTP DIAGNOSTICS ==='
+          for path in / /auto-sale-bootstrap.mjs /api/health /api/auto-sale/vk/web/config; do
+            code=$(curl -sS --connect-timeout 10 --max-time 35 -o "$RUNNER_TEMP/http-out" -w '%{http_code}' "$PROD_HOST$path" || true)
+            echo "$path = $code"
+            if [ "$path" = /api/health ] && [ "$code" = 200 ]; then
+              jq -c '{ok,vkAuth,vkMessaging,telegramRoutableManagers,buildSha}' "$RUNNER_TEMP/http-out" || true
+            fi
+            if [ "$path" = /api/auto-sale/vk/web/config ] && [ "$code" = 200 ]; then
+              jq -c '{enabled,authenticated}' "$RUNNER_TEMP/http-out" || true
+            fi
+          done
+          echo "Production inspected read-only: container=$ID revision=$OLD_REV"
