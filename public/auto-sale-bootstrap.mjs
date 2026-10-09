@@ -344,7 +344,7 @@ const initialStatePromise=pullInitialState();
 await import('./auto-sale-submit-bridge.mjs?v=20260921-live-values-1');
 await import('./auto-sale-app-v3.mjs?v=20260929-entity-cutover-1');
 await import('./auto-sale-vk-web.mjs?v=20261008-web-auth-v1');
-if(window.location.hostname==='vk-test.awgcars.ru')await import('./auto-sale-vk-status-widget.mjs?v=20261010-staging-v1');
+if(['awgcars.ru','www.awgcars.ru','vk-test.awgcars.ru'].includes(window.location.hostname))await import('./auto-sale-vk-status-widget.mjs?v=20261010-prod-v1');
 await import('./auto-sale-ui-business-guard.mjs?v=20260929-entity-cutover-1');
 await import('./auto-sale-quote-lead-serialization.mjs');
 await import('./auto-sale-quote-save-fix.mjs?v=20260929-entity-cutover-1');
