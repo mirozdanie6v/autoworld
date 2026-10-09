@@ -1,0 +1,20 @@
+name: Verify VK staging profile autofill live
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/verify-awg-vk-profile-staging.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Inspect only the staging domain, no credentials or mutations
+        run: node scripts/check-awg-vk-profile-staging.mjs
