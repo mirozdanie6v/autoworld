@@ -1,0 +1,33 @@
+name: Browser smoke VK staging real site
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/browser-smoke-awg-vk-staging.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Install Playwright isolated runner dependency
+        run: |
+          set -euo pipefail
+          npm install --no-save --ignore-scripts playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Verify real staging catalog and anonymous browser boundaries
+        run: |
+          node scripts/test-awg-vk-staging-browser.mjs
+      - name: Publish test screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: awg-vk-staging-mobile-browser
+          path: vk-staging-mobile-form.png
+          if-no-files-found: ignore
