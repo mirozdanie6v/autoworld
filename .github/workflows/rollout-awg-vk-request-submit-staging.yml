@@ -1,4 +1,4 @@
-name: Roll out VK web request submit fix to isolated staging
+name: Deploy last-status-manager policy to isolated VK staging
 
 on:
   push:
@@ -20,7 +20,7 @@ env:
   STAGING_CONTAINER_NAME: autoworld-vk-web-staging
   STAGING_CONTAINER_ID: bbag75c5g7vup8sfbmop
   STAGING_RUNTIME_SA_ID: ajeqbteofv8negiuhdae
-  STAGING_IMAGE: cr.yandex/crptu0l7jn0iui8b8laa/autoworld-awg:vk-web-candidate-3fd5ad37498d98c2d85410856cde2abf7daf4bf3
+  STAGING_IMAGE: cr.yandex/crptu0l7jn0iui8b8laa/autoworld-awg:vk-web-candidate-3cf92c85955c9c81f2a33b8f76b87e819b00db62
   STAGING_DOMAIN: https://vk-test.awgcars.ru
 
 jobs:
@@ -37,7 +37,7 @@ jobs:
           test "$STAGING_CONTAINER_NAME" = autoworld-vk-web-staging
           test "$STAGING_RUNTIME_SA_ID" = ajeqbteofv8negiuhdae
           test "$STAGING_DOMAIN" = https://vk-test.awgcars.ru
-          test "$STAGING_IMAGE" = cr.yandex/crptu0l7jn0iui8b8laa/autoworld-awg:vk-web-candidate-3fd5ad37498d98c2d85410856cde2abf7daf4bf3
+          test "$STAGING_IMAGE" = cr.yandex/crptu0l7jn0iui8b8laa/autoworld-awg:vk-web-candidate-3cf92c85955c9c81f2a33b8f76b87e819b00db62
       - name: Request GitHub OIDC token
         uses: actions/github-script@v7
         id: oidc
@@ -136,7 +136,7 @@ jobs:
             --service-account-id "$STAGING_RUNTIME_SA_ID"
             --runtime http
             --environment "$ENV_CSV"
-            --description 'VK Web request button and submit feedback — isolated staging only'
+            --description 'Last verified status editor owns lead — isolated VK staging only'
           )
           while IFS=$'\t' read -r id version key envvar; do
             test -n "$id" && test -n "$version" && test -n "$key" && test -n "$envvar"
