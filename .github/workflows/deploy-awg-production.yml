@@ -59,7 +59,7 @@ env:
   AUTO_SALE_VK_COMMUNITY_TOKEN: ${{ secrets.AWG_VK_COMMUNITY_TOKEN }}
   AUTO_SALE_VK_WEB_CLIENT_ID: "54811927"
   AUTO_SALE_VK_WEB_ORIGIN: https://awgcars.ru
-  AUTO_SALE_VK_WEB_ENABLED: "false"
+  AUTO_SALE_VK_WEB_ENABLED: "true"
   AWG_VK_WEB_LOCKBOX_SECRET_ID: ${{ vars.AWG_VK_WEB_LOCKBOX_SECRET_ID || 'e6qg57io19p3ggq73q7g' }}
   AWG_VK_WEB_LOCKBOX_VERSION_ID: ${{ vars.AWG_VK_WEB_LOCKBOX_VERSION_ID || 'e6qdt07qpf86abl8d9d8' }}
 
@@ -83,8 +83,8 @@ jobs:
             echo "::error::Production VK Mini App would be disabled by this workflow. Run a reviewed manual release with vk_enable=true only after verifying existing VK credentials and messages routing."
             exit 1
           fi
-          if [ "${AUTO_SALE_VK_WEB_ENABLED}" != "false" ]; then
-            echo "::error::Browser VK ID remains disabled until live OAuth staging smoke."
+          if [ "${AUTO_SALE_VK_WEB_ENABLED}" != "true" ]; then
+            echo "::error::Production VK ID Web must stay enabled after the guarded VK release."
             exit 1
           fi
 
