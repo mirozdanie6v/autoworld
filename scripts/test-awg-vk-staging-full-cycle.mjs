@@ -96,10 +96,11 @@ try{
 
   // Verify a stale competing update does not steal assignment.
   const staleAccess={role:'admin',apiKey:false,user:{id:'801',username:'smit44744'}};
+  state=await domainStore.loadState();
   const stalePolicy=applyManagerLeadClaims({...state,team:TEAM},[op({
     input:{status:'Ожидает клиента'},baseRowVersion:previousVersion
   })],staleAccess);
-  // It was the current status in stale view, hence it must be treated as no-op.
+  // The submitted status matches current state but its row version is stale.
   check(stalePolicy.ok&&stalePolicy.operations[0].input.manager===undefined,'same status does not reassign');
   const staleWrite=await storeBatch(stalePolicy.operations);
   check(staleWrite.status===409&&staleWrite.data.error==='entity_conflict','stale update denied by row version');
