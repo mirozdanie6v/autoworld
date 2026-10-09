@@ -77,7 +77,7 @@ test('mini app signed-looking URL never authorizes by itself; only backend verif
   await tick();
   const badge=dom.window.document.querySelector('[data-vk-status-widget]');
   assert.equal(badge.dataset.vkStatus,'out');
-  assert.equal(badge.querySelector('[data-vk-status-caption]').textContent,'Войти');
+  assert.equal(badge.querySelector('[data-vk-status-caption]').textContent,'Нет входа');
   win.__AUTO_SALE_ACCESS__={role:'client',authenticated:true,authType:'vk',identity:{provider:'vk',id:'42'},user:{first_name:'Анна',last_name:'Тест'}};
   win.__AUTO_SALE_VK_USER__={displayName:'Анна Тест'};
   win.emit('auto-sale-server-synced');
