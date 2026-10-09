@@ -1,6 +1,7 @@
-// Compact, staging-only VK sign-in status. Never trust unsigned launch parameters.
-const STAGING_HOST='vk-test.awgcars.ru';
-export const isVkStatusStagingHost=host=>host===STAGING_HOST;
+// Compact VK sign-in indicator for the official production and isolated staging hosts.
+// Never infer authentication from unsigned VK launch URL parameters.
+const ALLOWED_HOSTS=new Set(['awgcars.ru','www.awgcars.ru','vk-test.awgcars.ru']);
+export const isVkStatusSupportedHost=host=>ALLOWED_HOSTS.has(String(host||'').toLowerCase());
 const asName=value=>String(value||'').trim().slice(0,120);
 export function deriveVkStatus({mode='web',config=null,profile=null,access=null,vkUser=null}={}){
   if(mode==='mini'){
@@ -26,7 +27,7 @@ function createWidget(document){
 export function initializeVkStatusWidget({
   win=window,doc=document,fetchImpl=fetch,mode=null
 }={}){
-  if(!isVkStatusStagingHost(win.location?.hostname))return null;
+  if(!isVkStatusSupportedHost(win.location?.hostname))return null;
   const query=new URLSearchParams(win.location.search||'');
   const mini=mode==='mini'||(mode===null&&['vk_app_id','vk_user_id','sign'].every(key=>query.has(key)));
   const currentMode=mini?'mini':'web';
@@ -38,7 +39,7 @@ export function initializeVkStatusWidget({
   let destroyed=false;
   const style=doc.createElement('link');
   style.rel='stylesheet';
-  style.href='./auto-sale-vk-status-widget.css?v=20261010-staging-v1';
+  style.href='./auto-sale-vk-status-widget.css?v=20261010-prod-v1';
   style.dataset.vkStatusStyle='1';
   if(!doc.querySelector('[data-vk-status-style]'))doc.head.appendChild(style);
 
@@ -170,6 +171,6 @@ export function initializeVkStatusWidget({
     if(endMiniWait)clearTimeout(endMiniWait);root.remove();
   }};
 }
-if(typeof window!=='undefined'&&typeof document!=='undefined'&&isVkStatusStagingHost(window.location?.hostname)){
+if(typeof window!=='undefined'&&typeof document!=='undefined'&&isVkStatusSupportedHost(window.location?.hostname)){
   initializeVkStatusWidget();
 }
