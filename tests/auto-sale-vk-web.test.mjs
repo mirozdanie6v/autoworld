@@ -30,7 +30,7 @@ test('PKCE challenge, state, signed session and provider scope',async()=>{
  assert.equal(started.status,302);
  const authorization=new URL(started.location);
  assert.equal(authorization.host,'id.vk.ru');
- assert.equal(authorization.searchParams.get('code_challenge_method'),'S256');
+ assert.equal(authorization.searchParams.get('code_challenge_method'),'s256');
  const tokenState=authorization.searchParams.get('state');
  assert.ok(tokenState);
  const transaction=cookieFrom(res,'awg_vkid_tx');
