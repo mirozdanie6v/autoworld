@@ -294,6 +294,28 @@ const server=http.createServer(async(req,res)=>{
     if(url.pathname==='/api/auto-sale/vk/web/config'&&req.method==='GET'){
       json(res,{enabled:vkWeb.enabled,authenticated:Boolean(vkWeb.auth(req))});return;
     }
+    if(url.pathname==='/api/auto-sale/vk/web/profile'&&req.method==='GET'){
+      const auth=vkWeb.auth(req);
+      // A signed, unexpired HttpOnly VK session is the only source of profile data.
+      // Deliberately omit wildcard CORS headers for this personal-data response.
+      const payload=auth?{
+        authenticated:true,
+        user:{
+          id:String(auth.user.id),
+          firstName:String(auth.user.first_name||'').trim().slice(0,80),
+          lastName:String(auth.user.last_name||'').trim().slice(0,80)
+        }
+      }:{authenticated:false};
+      const body=JSON.stringify(payload);
+      res.writeHead(auth?200:401,{
+        'content-type':'application/json; charset=utf-8',
+        'cache-control':'no-store',
+        'x-content-type-options':'nosniff',
+        'content-length':Buffer.byteLength(body)
+      });
+      res.end(body);
+      return;
+    }
     if(url.pathname==='/api/auto-sale/vk/web/start'&&req.method==='GET'){
       const result=vkWeb.start(req,res);
       if(result.location){res.writeHead(302,{location:result.location,'cache-control':'no-store'});res.end()}
