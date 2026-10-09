@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - .github/workflows/publish-awg-vk-web-candidate.yml
+      - server/vk-web-auth.mjs
+      - tests/auto-sale-vk-web.test.mjs
   workflow_dispatch:
 
 permissions:
