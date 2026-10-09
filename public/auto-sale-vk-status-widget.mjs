@@ -57,7 +57,7 @@ export function initializeVkStatusWidget({
   if(app)observer.observe(app,{subtree:true,childList:true});
   attach();
 
-  const labels={in:'Вошли',out:'Войти',pending:'Проверяем',unavailable:'Недоступно'};
+  const labels={in:'Вошли',out:currentMode==='mini'?'Нет входа':'Войти',pending:'Проверяем',unavailable:'Недоступно'};
   function paint(){
     root.dataset.vkStatus=state.status;
     caption.textContent=labels[state.status];
@@ -124,6 +124,8 @@ export function initializeVkStatusWidget({
 
   const onSync=()=>accessStatus();
   win.addEventListener('auto-sale-server-synced',onSync);
+  const onVisibility=()=>{if(!doc.hidden)void(currentMode==='web'?checkWeb():accessStatus())};
+  doc.addEventListener('visibilitychange',onVisibility);
   const interval=mini?setInterval(accessStatus,800):null;
   const endMiniWait=mini?setTimeout(()=>clearInterval(interval),12000):null;
   if(mini)accessStatus();
@@ -163,7 +165,8 @@ export function initializeVkStatusWidget({
   doc.addEventListener('click',outside);
   return{root,getState:()=>({...state}),refresh:()=>currentMode==='web'?checkWeb():accessStatus(),destroy(){
     destroyed=true;observer.disconnect();win.removeEventListener('auto-sale-server-synced',onSync);
-    doc.removeEventListener('click',outside);if(interval)clearInterval(interval);
+    doc.removeEventListener('click',outside);doc.removeEventListener('visibilitychange',onVisibility);
+    if(interval)clearInterval(interval);
     if(endMiniWait)clearTimeout(endMiniWait);root.remove();
   }};
 }
