@@ -9,6 +9,7 @@ try{
  assert.equal(response.status(),200);
  await page.locator('#app .auto-shell').waitFor({state:'visible',timeout:45000});
  await page.waitForFunction(()=>Boolean(window.__AUTO_SALE_CALC_SCROLL_PERF__),{timeout:30000});
+ await page.locator('[data-vk-status-widget]').waitFor({state:'visible',timeout:25000});
  assert.equal(await page.locator('[data-vk-status-widget]').count(),1,'ordinary web VK login badge preserved');
  const btn=page.locator('[data-go="catalog"]').first();
  await btn.click({timeout:20000});
