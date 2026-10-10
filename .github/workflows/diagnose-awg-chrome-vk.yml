@@ -1,0 +1,26 @@
+name: Diagnose Chrome mobile VK ID referrer (read only)
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/diagnose-awg-chrome-vk.yml
+      - scripts/diagnose-awg-chrome-mobile-vk-auth.mjs
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Install Chromium
+        run: |
+          set -euo pipefail
+          npm install --no-save --ignore-scripts playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Read-only Chrome Android VK ID provider diagnostics
+        run: node scripts/diagnose-awg-chrome-mobile-vk-auth.mjs
