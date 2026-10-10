@@ -14,7 +14,16 @@ try{
  const btn=page.locator('[data-go="catalog"]').first();
  await btn.click({timeout:20000});
  await page.locator('.auto-car .auto-calc-glint').first().waitFor({state:'attached',timeout:22000});
- await page.waitForFunction(()=>!document.documentElement.classList.contains('auto-calc-is-scrolling'),{timeout:12000});
+ // The first production cards can be completed auctions with disabled CTAs.
+ // Scroll to a genuinely available Calculate button before testing its motion.
+ const enabledButton=page.locator('.auto-car .auto-calc-btn:not(:disabled):not([aria-disabled="true"])').first();
+ await enabledButton.waitFor({state:'attached',timeout:22000});
+ await enabledButton.scrollIntoViewIfNeeded({timeout:18000});
+ await page.waitForFunction(()=>{
+   const button=document.querySelector('.auto-car .auto-calc-btn:not(:disabled):not([aria-disabled="true"])');
+   return !document.documentElement.classList.contains('auto-calc-is-scrolling')&&
+     button?.closest('.auto-car')?.classList.contains('auto-calc-inview')===true;
+ },{timeout:12000});
  await page.waitForTimeout(300);
  const before=await page.evaluate(()=>{
    const all=[...document.querySelectorAll('.auto-car .auto-calc-glint')];
