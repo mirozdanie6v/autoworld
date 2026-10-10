@@ -99,7 +99,7 @@ jobs:
           ACTUAL_SECRET_ID=$(jq -er '.id' "$RUNNER_TEMP/vk-secret.json")
           yc lockbox secret list-versions --id "$ACTUAL_SECRET_ID" --format json | jq -c '[.[] | {id,status}]'
           echo 'Only selected secret metadata and version IDs; secret payloads are never fetched.'
-          echo 'Production VK preflight recheck after scoped Lockbox viewer permission.'
+          echo 'Read-only post-deploy-failure production safety check; no production writes.'
           echo '=== PUBLIC HTTP DIAGNOSTICS ==='
           for path in / /auto-sale-bootstrap.mjs /api/health /api/auto-sale/vk/web/config; do
             code=$(curl -sS --connect-timeout 10 --max-time 35 -o "$RUNNER_TEMP/http-out" -w '%{http_code}' "$PROD_HOST$path" || true)
