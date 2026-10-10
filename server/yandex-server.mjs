@@ -10,6 +10,7 @@ import {syncYdbState} from './ydb-sync.mjs';
 import {createObjectStorage} from './object-storage.mjs';
 import {createTelegramService} from './telegram-bot.mjs';
 import {createVkService} from './vk.mjs';
+import {notificationsEnabled,notificationsSuppressed,collectSaleNotifications,deliverSaleNotifications} from './auto-sale-notifications.mjs';
 import {createVkWebAuth} from './vk-web-auth.mjs';
 import {addAutoSaleNote,addAutoSalePayment,deleteAutoSaleLeadCascade,mutateAutoSaleEntity,mutateAutoSaleEntityBatch,readAutoSaleEntity} from './ydb-entity-commands.mjs';
 import {MAX_ADMIN_ACCOUNTS,stateForAccess,rowVersionsForAccess,sanitizeClientOperations,sanitizeAdminOperations,applyManagerLeadClaims} from './auto-sale-access.mjs';
@@ -52,9 +53,9 @@ async function invitedAdminPins(){
   const list=await (await getStore()).adminAccessList();
   return list.filter(item=>adminTelegramUsernames.includes(normalizeTelegramUsername(item.username)));
 }
-async function collectTelegramStateChanges(previous,next){
-  const pins=await invitedAdminPins();
-  return telegram.collectStateChanges(enrichStateWithAdminPins(previous,pins),enrichStateWithAdminPins(next,pins));
+async function collectNotificationStateChanges(previous,next,{skipTelegram=false}={}){
+  const pins=telegram.enabled&&!skipTelegram?await invitedAdminPins():[];
+  return collectSaleNotifications(enrichStateWithAdminPins(previous,pins),enrichStateWithAdminPins(next,pins),{telegram,vk,skipTelegram});
 }
 async function claimAdminFromWebhook(update){
   const user=update?.message?.from;
@@ -110,23 +111,8 @@ async function safeNotificationStats(){
   catch(error){console.error('AUTO SALE notification stats unavailable',error);return{unavailable:true}}
 }
 async function deliverNotificationBatch(pending){
-  const results=[];
-  for(const item of pending){
-    try{
-      const channel=String(item?.channel||'telegram');
-      const sent=channel==='vk'
-        ?await vk.send(item.vkUserId,item.message,{idempotencyKey:item.id})
-        :await telegram.send(item.chatId,item.message,{replyMarkup:item.replyMarkup});
-      if(!sent?.message_id)throw new Error(channel==='vk'?'vk_message_id_missing':'telegram_message_id_missing');
-      await (await getStore()).markNotification(item.id,{ok:true,messageId:sent?.message_id||'',attempts:item.attempts});
-      results.push({id:item.id,ok:true,channel,messageId:sent?.message_id||null});
-    }catch(error){
-      const message=String(error?.vkDescription||error?.telegramDescription||error?.message||'notification_send_failed');
-      await (await getStore()).markNotification(item.id,{ok:false,error:message,attempts:item.attempts,permanent:Boolean(error?.permanent)});
-      results.push({id:item.id,ok:false,channel:String(item?.channel||'telegram'),error:message});
-    }
-  }
-  return results;
+  return deliverSaleNotifications(pending,{telegram,vk,
+    markNotification:async(id,result)=>(await getStore()).markNotification(id,result)});
 }
 async function processNotificationClaim(claim){
   const pending=await claim();
@@ -165,7 +151,7 @@ const apiHeaders={
   'content-type':'application/json; charset=utf-8',
   'cache-control':'no-store',
   'access-control-allow-origin':'*',
-  'access-control-allow-headers':'content-type,authorization,x-auto-sale-key,x-auto-sale-catalog-import-key,x-telegram-init-data,x-vk-launch-params,x-auto-sale-skip-telegram',
+  'access-control-allow-headers':'content-type,authorization,x-auto-sale-key,x-auto-sale-catalog-import-key,x-telegram-init-data,x-vk-launch-params,x-auto-sale-skip-telegram,x-auto-sale-skip-notifications',
   'access-control-allow-methods':'GET,PUT,POST,DELETE,OPTIONS'
 };
 const json=(res,data,status=200)=>{
@@ -479,7 +465,7 @@ const server=http.createServer(async(req,res)=>{
         const after=await entityStores.domainStore.loadState();
         const visibleA=stateForAccess(after,{role:'client',user:users[0]}).leads||[];
         const visibleB=stateForAccess(after,{role:'client',user:users[1]}).leads||[];
-        const planned=await collectTelegramStateChanges({...before,initialized:true},after);
+        const planned=await collectNotificationStateChanges({...before,initialized:true},after);
         const managerPlanned=leadIds.filter(leadId=>planned.some(item=>item.event==='lead_created'&&item.leadId===leadId&&item.target==='manager'));
         const clientPlanned=leadIds.filter(leadId=>planned.some(item=>item.event==='lead_created_confirmation'&&item.leadId===leadId&&item.target==='client'));
         smoke={
@@ -531,15 +517,15 @@ const server=http.createServer(async(req,res)=>{
         if(!claimPolicy.ok){json(res,{error:claimPolicy.error,id:claimPolicy.id,assignedManager:claimPolicy.assignedManager||null},claimPolicy.status||409);return}
         operations=claimPolicy.operations;
       }
-      const skipTelegram=req.headers['x-auto-sale-skip-telegram']==='1'&&hasApiKey(req);
-      const notifyTelegram=telegram.enabled&&!skipTelegram;
+      const skipNotifications=notificationsSuppressed(req.headers,{apiKey:hasApiKey(req)});
+      const notifyChannels=notificationsEnabled(telegram,vk)&&!skipNotifications;
       const entityStores=await getEntityStores();
       const result=await mutateAutoSaleEntityBatch({
         ...entityStores,
         operations,
-        prepareNotifications:notifyTelegram?collectTelegramStateChanges:null
+        prepareNotifications:notifyChannels?collectNotificationStateChanges:null
       });
-      if(result.status>=200&&result.status<300&&notifyTelegram){
+      if(result.status>=200&&result.status<300&&notifyChannels){
         const notificationItems=takeCommittedNotificationItems(result.data);
         result.data.notifications={...(result.data.notifications||{}),deliveries:[]};
         json(res,result.data,result.status);
@@ -565,15 +551,15 @@ const server=http.createServer(async(req,res)=>{
       if(resource==='team'&&!hasApiKey(req)){json(res,{error:'team_mutation_requires_batch'},405);return}
       if(req.method==='POST'&&child==='notes'&&resource==='lead'&&id){
         const input=await parseJson(req);
-        const skipTelegram=req.headers['x-auto-sale-skip-telegram']==='1';
-        const notifyTelegram=telegram.enabled&&!skipTelegram;
+        const skipNotifications=notificationsSuppressed(req.headers,{apiKey:hasApiKey(req)});
+        const notifyChannels=notificationsEnabled(telegram,vk)&&!skipNotifications;
         const entityStores=await getEntityStores();
         const result=await addAutoSaleNote({
           ...entityStores,leadId:id,input,
           expectedRowVersion:input?.baseRowVersion,
-          prepareNotifications:notifyTelegram?collectTelegramStateChanges:null
+          prepareNotifications:notifyChannels?collectNotificationStateChanges:null
         });
-        if(result.status>=200&&result.status<300&&notifyTelegram){
+        if(result.status>=200&&result.status<300&&notifyChannels){
           const notificationItems=takeCommittedNotificationItems(result.data);
           result.data.notifications={...(result.data.notifications||{}),deliveries:[]};
           json(res,result.data,result.status);
@@ -584,15 +570,15 @@ const server=http.createServer(async(req,res)=>{
       }
       if(req.method==='POST'&&child==='payments'&&resource==='order'&&id){
         const input=await parseJson(req);
-        const skipTelegram=req.headers['x-auto-sale-skip-telegram']==='1';
-        const notifyTelegram=telegram.enabled&&!skipTelegram;
+        const skipNotifications=notificationsSuppressed(req.headers,{apiKey:hasApiKey(req)});
+        const notifyChannels=notificationsEnabled(telegram,vk)&&!skipNotifications;
         const entityStores=await getEntityStores();
         const result=await addAutoSalePayment({
           ...entityStores,orderId:id,input,
           expectedRowVersion:input?.baseRowVersion,
-          prepareNotifications:notifyTelegram?collectTelegramStateChanges:null
+          prepareNotifications:notifyChannels?collectNotificationStateChanges:null
         });
-        if(result.status>=200&&result.status<300&&notifyTelegram){
+        if(result.status>=200&&result.status<300&&notifyChannels){
           const notificationItems=takeCommittedNotificationItems(result.data);
           result.data.notifications={...(result.data.notifications||{}),deliveries:[]};
           json(res,result.data,result.status);
@@ -605,14 +591,14 @@ const server=http.createServer(async(req,res)=>{
       if(req.method==='POST'&&!id){
         const input=await parseJson(req);
         const entityId=String(input?.id||'').trim();
-        const skipTelegram=req.headers['x-auto-sale-skip-telegram']==='1';
-        const notifyTelegram=telegram.enabled&&!skipTelegram;
+        const skipNotifications=notificationsSuppressed(req.headers,{apiKey:hasApiKey(req)});
+        const notifyChannels=notificationsEnabled(telegram,vk)&&!skipNotifications;
         const entityStores=await getEntityStores();
         const result=await mutateAutoSaleEntity({
           ...entityStores,resource,operation:'create',
-          id:entityId,input,prepareNotifications:notifyTelegram?collectTelegramStateChanges:null
+          id:entityId,input:sanitizeAdminOperations([{resource,input}],{apiKey:access.apiKey})[0].input,prepareNotifications:notifyChannels?collectNotificationStateChanges:null
         });
-        if(result.status>=200&&result.status<300&&notifyTelegram){
+        if(result.status>=200&&result.status<300&&notifyChannels){
           const notificationItems=takeCommittedNotificationItems(result.data);
           result.data.notifications={...(result.data.notifications||{}),deliveries:[]};
           json(res,result.data,201);
@@ -629,15 +615,15 @@ const server=http.createServer(async(req,res)=>{
           if(!claimPolicy.ok){json(res,{error:claimPolicy.error,id:claimPolicy.id,assignedManager:claimPolicy.assignedManager||null},claimPolicy.status||409);return}
           mutationInput=claimPolicy.operations[0]?.input||input;
         }
-        const skipTelegram=req.headers['x-auto-sale-skip-telegram']==='1';
-        const notifyTelegram=telegram.enabled&&!skipTelegram;
+        const skipNotifications=notificationsSuppressed(req.headers,{apiKey:hasApiKey(req)});
+        const notifyChannels=notificationsEnabled(telegram,vk)&&!skipNotifications;
         const entityStores=await getEntityStores();
         const result=await mutateAutoSaleEntity({
           ...entityStores,resource,operation:'patch',
           id,input:mutationInput,expectedRowVersion:input?.baseRowVersion,
-          prepareNotifications:notifyTelegram?collectTelegramStateChanges:null
+          prepareNotifications:notifyChannels?collectNotificationStateChanges:null
         });
-        if(result.status>=200&&result.status<300&&notifyTelegram){
+        if(result.status>=200&&result.status<300&&notifyChannels){
           const notificationItems=takeCommittedNotificationItems(result.data);
           result.data.notifications={...(result.data.notifications||{}),deliveries:[]};
           json(res,result.data,result.status);
@@ -675,10 +661,10 @@ const server=http.createServer(async(req,res)=>{
       if(!hasApiKey(req)){json(res,{error:'unauthorized'},401);return}
       const input=await parseJson(req);
       if(!input||typeof input!=='object'){json(res,{error:'invalid_json'},400);return}
-      const skipTelegram=req.headers['x-auto-sale-skip-telegram']==='1'&&hasApiKey(req);
-      const notifyTelegram=telegram.enabled&&!skipTelegram;
-      const result=await syncYdbState(await getStore(),input,{prepareNotifications:notifyTelegram?collectTelegramStateChanges:null});
-      if(result.status>=200&&result.status<300&&notifyTelegram){
+      const skipNotifications=notificationsSuppressed(req.headers,{apiKey:hasApiKey(req)});
+      const notifyChannels=notificationsEnabled(telegram,vk)&&!skipNotifications;
+      const result=await syncYdbState(await getStore(),input,{prepareNotifications:notifyChannels?collectNotificationStateChanges:null});
+      if(result.status>=200&&result.status<300&&notifyChannels){
         // State persistence is the request's critical path. Telegram delivery is durable
         // through the outbox and must not hold the state response open for tens of seconds.
         const notificationItems=takeCommittedNotificationItems(result.data);

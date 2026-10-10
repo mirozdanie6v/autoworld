@@ -236,8 +236,8 @@ test('invited Telegram admins are captured from webhook updates for manager rout
 
 test('Telegram notification planning uses pinned admin identities as manager routes',async()=>{
   const server=await readFile(new URL('../server/yandex-server.mjs',import.meta.url),'utf8');
-  assert.match(server,/async function collectTelegramStateChanges/);
-  assert.match(server,/prepareNotifications:notifyTelegram\?collectTelegramStateChanges:null/);
+  assert.match(server,/async function collectNotificationStateChanges/);
+  assert.match(server,/prepareNotifications:notifyChannels\?/);
   assert.match(server,/const healthState=enrichStateWithAdminPins/);
 });
 

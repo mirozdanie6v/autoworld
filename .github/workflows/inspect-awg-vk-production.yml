@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - .github/workflows/inspect-awg-vk-production.yml
+      - .diagnostics/awg-vk-notifications-preflight
   workflow_dispatch:
 permissions:
   contents: read

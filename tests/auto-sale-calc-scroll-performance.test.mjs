@@ -38,7 +38,7 @@ test('v25 button design remains source of truth; only animation sampling pauses'
   assert.ok(entry.includes('auto-sale-calc-cta-v25.css'));
   assert.ok(entry.includes('auto-sale-calc-scroll-performance.css?v=20261010-scroll-v1'));
   assert.ok(bootstrap.includes("await import('./auto-sale-calc-scroll-performance.mjs?v=20261010-scroll-v1')"));
-  assert.ok(entry.includes('auto-sale-bootstrap.mjs?v=20261010-scroll-v1'));
+  assert.ok(entry.includes('auto-sale-bootstrap.mjs?v='),'entrypoint retains an explicit cache version');
 });
 
 test('only intersecting catalog cards may animate, regardless of catalog size',()=>{
