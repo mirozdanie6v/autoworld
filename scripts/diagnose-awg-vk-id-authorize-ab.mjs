@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import {chromium} from 'playwright';
 
-const STAGING='https://vk-test.awgcars.ru';
+const STAGING=process.env.AWG_VK_DIAG_ORIGIN||'https://vk-test.awgcars.ru';
+assert.ok(['https://vk-test.awgcars.ru','https://awgcars.ru'].includes(STAGING),'Only allow official isolated staging or read-only production provider diagnostic');
 const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
 const results=[];
 try {
@@ -33,10 +34,10 @@ try {
       const isLoginScreen=normalized.includes('войти')||normalized.includes('телефон')||normalized.includes('вход')||normalized.includes('sign in')||normalized.includes('авторизаци');
       const status=typeof response?.status==='function'?response.status():null;
       results.push({variant,status,isDomainError,isLoginScreen,content:body.slice(0,360),finalHost:new URL(page.url()).hostname,requestError:response?.error||null});
-      await page.screenshot({path:'vk-id-provider-'+variant+'.png',fullPage:false});
+      await page.screenshot({path:'vk-id-provider-'+new URL(STAGING).hostname+'-'+variant+'.png',fullPage:false});
     }finally{await page.close()}
   }
-  console.log('VK_ID_AUTHORIZE_AB_COMPARISON',JSON.stringify(results));
+  console.log('VK_ID_AUTHORIZE_AB_COMPARISON',JSON.stringify({testedOrigin:STAGING,results}));
   // This is only diagnostic: VK ID may block datacenter browsers.
   assert.equal(results.length,3);
 }finally{await browser.close()}
