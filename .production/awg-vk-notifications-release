@@ -1,0 +1,4 @@
+2026-10-11: release user-authorized improvements 2–5 after isolated staging verification.
+Candidate: 26901f48217bfa5e118a2ee8972fda8c4a277858
+Read-only preflight: 38092865380; expected production revision bbafo3l4q6tpag0uhopr.
+Preserve all environment values and pinned secret bindings. No schema migration, IAM changes or customer test messages.

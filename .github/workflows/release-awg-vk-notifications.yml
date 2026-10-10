@@ -1,0 +1,97 @@
+name: Release AWG VK notifications and channel analytics
+on:
+  push:
+    branches: [main]
+    paths:
+      - .production/awg-vk-notifications-release
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+  id-token: write
+concurrency:
+  group: awg-yandex-production-writer
+  cancel-in-progress: false
+env:
+  YC_FOLDER_ID: b1g8u8vqkgehvtbj8n13
+  YC_DEPLOY_SA_ID: ${{ vars.AWG_YC_DEPLOY_SA_ID || 'aje775bcl6hgp40eu8of' }}
+  TARGET_SHA: 26901f48217bfa5e118a2ee8972fda8c4a277858
+  EXPECTED_PRODUCTION_REVISION: bbafo3l4q6tpag0uhopr
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - name: Validate exact candidate source and release guards
+        run: |
+          set -euo pipefail
+          git diff --exit-code "$TARGET_SHA" HEAD -- public server shared index.html scripts/build-autoworld.mjs package.json package-lock.json Dockerfile.yandex
+          bash -n scripts/release-awg-vk-notifications.sh
+          node --check scripts/auto-sale-vk-release-config.mjs
+          npm ci
+          npm run check
+      - name: Require successful tested candidate publication
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const result = await github.rest.actions.listWorkflowRunsForRepo({
+              owner: context.repo.owner, repo: context.repo.repo,
+              head_sha: process.env.TARGET_SHA, per_page: 50
+            });
+            const candidate = result.data.workflow_runs.find(run =>
+              run.name === 'Publish AWG VK Web candidate image' && run.conclusion === 'success');
+            if (!candidate) throw new Error('The pinned, tested candidate was not published');
+            core.info('Validated candidate publication: ' + candidate.id);
+      - name: Request GitHub OIDC token
+        uses: actions/github-script@v7
+        id: oidc
+        with:
+          script: |
+            const token = await core.getIDToken('https://github.com/mirozdanie6v')
+            core.setSecret(token)
+            core.setOutput('token', token)
+      - name: Exchange OIDC for Yandex IAM
+        env:
+          GITHUB_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        run: |
+          set -euo pipefail
+          RESPONSE=$(curl --fail --silent --show-error --connect-timeout 10 --max-time 30 \
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            --data-urlencode 'grant_type=urn:ietf:params:oauth:grant-type:token-exchange' \
+            --data-urlencode 'requested_token_type=urn:ietf:params:oauth:token-type:access_token' \
+            --data-urlencode "audience=$YC_DEPLOY_SA_ID" \
+            --data-urlencode "subject_token=$GITHUB_OIDC_TOKEN" \
+            --data-urlencode 'subject_token_type=urn:ietf:params:oauth:token-type:id_token' \
+            https://auth.yandex.cloud/oauth/token)
+          TOKEN=$(printf '%s' "$RESPONSE" | jq -er '.access_token')
+          echo "::add-mask::$TOKEN"
+          echo "YC_IAM_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+      - name: Install Yandex Cloud CLI
+        run: |
+          set -euo pipefail
+          curl -fsSL --connect-timeout 15 --max-time 120 \
+            https://storage.yandexcloud.net/yandexcloud-yc/release/yc_linux_amd64.tar.gz \
+            -o "$RUNNER_TEMP/yc_linux_amd64.tar.gz"
+          mkdir -p "$RUNNER_TEMP/yc-dist" "$HOME/yandex-cloud/bin"
+          tar -xzf "$RUNNER_TEMP/yc_linux_amd64.tar.gz" -C "$RUNNER_TEMP/yc-dist"
+          BIN=$(find "$RUNNER_TEMP/yc-dist" -type f -name yc -print -quit)
+          test -n "$BIN"
+          install -m 0755 "$BIN" "$HOME/yandex-cloud/bin/yc"
+          echo "$HOME/yandex-cloud/bin" >> "$GITHUB_PATH"
+      - name: Verify isolated staging and release with preserved configuration and rollback
+        run: bash scripts/release-awg-vk-notifications.sh
+      - name: Retain public frontend rollback snapshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: awg-vk-notifications-frontend-backup
+          path: ${{ runner.temp }}/vk-notifications-public-backup
+          if-no-files-found: ignore
+          retention-days: 7
