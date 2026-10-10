@@ -1,0 +1,36 @@
+name: Smoke VK ID production mobile browser (read only)
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/browser-smoke-awg-vk-production.yml
+      - scripts/test-awg-vk-production-browser.mjs
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Install isolated Chromium runner
+        run: |
+          set -euo pipefail
+          npm install --no-save --ignore-scripts playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Verify real production UI and VK/Telegram server status
+        run: |
+          node scripts/test-awg-vk-production-browser.mjs
+      - name: Save real browser screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: awg-vk-production-mobile-smoke
+          path: |
+            awg-vk-production-mobile-login.png
+            awg-vk-production-mobile-request.png
+          if-no-files-found: ignore
