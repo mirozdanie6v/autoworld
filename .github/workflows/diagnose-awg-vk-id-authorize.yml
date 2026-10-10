@@ -1,0 +1,34 @@
+name: Diagnostic VK ID authorize mismatch (staging read-only)
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/diagnose-awg-vk-id-authorize.yml
+      - scripts/diagnose-awg-vk-id-authorize-ab.mjs
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 13
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Install isolated Chromium
+        run: |
+          set -euo pipefail
+          npm install --no-save --ignore-scripts playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Compare VK ID provider outcomes without signing in
+        run: |
+          node scripts/diagnose-awg-vk-id-authorize-ab.mjs
+      - name: Upload provider diagnostic screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: awg-vk-id-authorize-ab
+          path: vk-id-provider-*.png
+          if-no-files-found: ignore
