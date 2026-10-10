@@ -11,6 +11,10 @@ import {createYdbStateStore} from '../server/ydb-state.mjs';
 
 const clean=value=>String(value??'').trim();
 const normalize=value=>clean(value).replace(/^@/,'').toLowerCase();
+const managerName=clean(process.env.AUDIT_MANAGER_NAME||'Дмитрий');
+const managerUsernames={'Дмитрий':'Flyer_Flyer','Алексей':'smit44744','Иван':'Ivan_AWG'};
+const managerUsername=managerUsernames[managerName];
+assert.ok(managerUsername,'selected manager must be in the canonical manager directory');
 const connectionString=clean(process.env.YDB_CONNECTION_STRING);
 const iamToken=clean(process.env.YC_IAM_TOKEN);
 const botToken=clean(process.env.AUTO_SALE_TELEGRAM_BOT_TOKEN);
@@ -27,11 +31,11 @@ try{
   assert.equal(health.buildSha,process.env.AUDIT_EXPECTED_BUILD_SHA,'credentials must match current production');
   assert.equal(health.telegramNotifications,'enabled');
   const pins=await runtime.adminAccessList();
-  const managerPin=pins.find(item=>normalize(item.username)==='flyer_flyer');
-  assert.ok(managerPin&&/^\d+$/.test(managerPin.telegramUserId),'Dmitry must already be registered');
+  const managerPin=pins.find(item=>normalize(item.username)===normalize(managerUsername));
+  assert.ok(managerPin&&/^\d+$/.test(managerPin.telegramUserId),managerName+' must already be registered');
   const snapshot=await domain.loadState();
-  const managerMember=(snapshot.team||[]).find(item=>clean(item.name)==='Дмитрий'&&item.active!==false);
-  assert.ok(managerMember&&clean(managerMember.role)==='Менеджер','Dmitry active manager required');
+  const managerMember=(snapshot.team||[]).find(item=>clean(item.name)===managerName&&item.active!==false);
+  assert.ok(managerMember&&clean(managerMember.role)==='Менеджер',managerName+' active manager required');
 
   async function chatFor(id){
     const url='https://api.telegram.org/bot'+botToken+'/getChat';
@@ -58,8 +62,10 @@ try{
   }
   let managerChat=await chatFor(managerPin.telegramUserId);
   const managerIdentitySource=managerChat?'telegram-getChat':'registered-immutable-admin-pin';
-  if(!managerChat)managerChat={id:managerPin.telegramUserId,username:'Flyer_Flyer',first_name:'Дмитрий',type:'private'};
-  assert.ok(normalize(managerChat.username)==='flyer_flyer'&&managerChat.type==='private','registered private Dmitry Telegram identity');
+  if(!managerChat)managerChat={id:managerPin.telegramUserId,username:managerUsername,first_name:managerName,type:'private'};
+  assert.ok(normalize(managerChat.username)===normalize(managerUsername)&&managerChat.type==='private','registered private '+managerName+' Telegram identity');
+  assert.equal(String(managerChat.id),String(managerPin.telegramUserId),'verified Telegram account must match immutable manager pin');
+  if(clean(managerMember.telegramUserId))assert.equal(clean(managerMember.telegramUserId),String(managerPin.telegramUserId),'manager team routing must match registered Telegram pin');
   console.log('AUDIT_LINKED_CLIENT_ROWS',JSON.stringify({matchingRows:(snapshot.leads||[]).filter(item=>normalize(item.telegramUsername)==='flyer_kg'&&/^\d+$/.test(clean(item.telegramUserId))).length}));
   const candidates=new Set((snapshot.leads||[])
     .filter(item=>normalize(item.telegramUsername)==='flyer_kg'&&/^\d+$/.test(clean(item.telegramUserId)))
@@ -100,11 +106,12 @@ try{
     AUDIT_CLIENT_USER:JSON.stringify(asUser(clientChat)),
     AUDIT_MANAGER_USER:JSON.stringify(asUser(managerChat)),
     AUDIT_CLIENT_TELEGRAM_USERNAME:'Flyer_kg',
-    AUDIT_MANAGER_NAME:'Дмитрий'
+    AUDIT_MANAGER_NAME:managerName,
+    AUDIT_MANAGER_TELEGRAM_USERNAME:managerUsername
   };
   for(const id of [String(clientChat.id),String(managerChat.id)])console.log('::add-mask::'+id);
   await appendFile(process.env.GITHUB_ENV,Object.entries(values).map(([key,value])=>key+'='+value).join('\n')+'\n');
-  console.log('AUDIT_IDENTITIES_VERIFIED',JSON.stringify({client:'@Flyer_kg',manager:'Дмитрий / @Flyer_Flyer',identitySource:source,managerIdentitySource,alreadyRegistered:true,distinctAccounts:true,buildSha:health.buildSha}));
+  console.log('AUDIT_IDENTITIES_VERIFIED',JSON.stringify({client:'@Flyer_kg',manager:managerName+' / @'+managerUsername,identitySource:source,managerIdentitySource,alreadyRegistered:true,distinctAccounts:true,buildSha:health.buildSha}));
 }finally{
   if(extraDriver)extraDriver.close();
   await Promise.allSettled([domain.close(),runtime.close()]);
