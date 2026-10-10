@@ -1,7 +1,19 @@
-name: Full AWG Telegram client and Dmitry cycle
+name: AWG full Telegram sales cycle
+run-name: "Flyer_kg → ${{ inputs.manager || 'Алексей' }} · ${{ inputs.mode || 'full_cycle' }}"
 on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/run-awg-telegram-full-cycle.yml]
   workflow_dispatch:
     inputs:
+      manager:
+        description: 'Registered manager for this test'
+        type: choice
+        options:
+          - Дмитрий
+          - Алексей
+          - Иван
+        default: Алексей
       mode:
         description: 'full_cycle sends test Telegram notifications; ui_only uses silent fixtures'
         type: choice
@@ -19,6 +31,7 @@ env:
   YC_FOLDER_ID: b1g8u8vqkgehvtbj8n13
   YC_DEPLOY_SA_ID: ${{ vars.AWG_YC_DEPLOY_SA_ID || 'aje775bcl6hgp40eu8of' }}
   STAGING_URL: https://awgcars.ru
+  AUDIT_MANAGER_NAME: ${{ inputs.manager || 'Алексей' }}
 jobs:
   test:
     runs-on: ubuntu-24.04
@@ -26,7 +39,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: 6873deaeff13265e31d3f12645cc1853fc3e0776
+          ref: 6968ccd865af12c991a41d702e207808bf034d5d
       - uses: actions/setup-node@v5
         with:
           node-version: 22
@@ -94,7 +107,7 @@ jobs:
           BUILD=$(jq -er '.image.environment.AUTO_SALE_BUILD_SHA' "$RUNNER_TEMP/current-revision.json")
           echo "AUDIT_EXPECTED_BUILD_SHA=$BUILD" >> "$GITHUB_ENV"
           echo "Current production revision verified; credentials stay only in this runner."
-      - name: Resolve and verify existing Flyer_kg and Dmitry physical Telegram identities
+      - name: Resolve and verify existing Flyer_kg and selected manager Telegram identities
         run: node scripts/resolve-awg-telegram-audit-identities.mjs
       - name: Run selected production QA scenario for the verified client and manager
         env:
