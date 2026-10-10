@@ -19,7 +19,7 @@ env:
   GATEWAY_NAME: autoworld-awg-prod
   STATIC_BUCKET: viiversion-autoworld-awg-static-b1g8u8vqkgehvtbj8n13
   TARGET_IMAGE: cr.yandex/crptu0l7jn0iui8b8laa/autoworld-awg:vk-web-candidate-201d760d62d3e065e27119ea18091db76f30ed1d
-  LOCKBOX_ID: ${{ vars.AWG_VK_WEB_LOCKBOX_SECRET_ID || 'e6qg57io19p3ggq73q7g' }}
+  LOCKBOX_ID: ${{ vars.AWG_VK_WEB_LOCKBOX_SECRET_ID || 'e6qg57io19p3gqg73q7g' }}
   LOCKBOX_VERSION: ${{ vars.AWG_VK_WEB_LOCKBOX_VERSION_ID || 'e6qdt07qpf86abl8d9d8' }}
 jobs:
   release:
