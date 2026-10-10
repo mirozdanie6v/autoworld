@@ -1,0 +1,79 @@
+name: Repair AWG production Telegram webhook (guarded)
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/repair-awg-telegram-prod-webhook.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: awg-telegram-prod-webhook-writer
+  cancel-in-progress: false
+env:
+  YC_FOLDER_ID: b1g8u8vqkgehvtbj8n13
+  YC_DEPLOY_SA_ID: ${{ vars.AWG_YC_DEPLOY_SA_ID || 'aje775bcl6hgp40eu8of' }}
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Request existing Yandex federation identity
+        uses: actions/github-script@v7
+        id: oidc
+        with:
+          script: |
+            const token = await core.getIDToken('https://github.com/mirozdanie6v')
+            core.setSecret(token)
+            core.setOutput('token', token)
+      - name: Exchange identity and install official Yandex CLI
+        env:
+          GITHUB_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        run: |
+          set -euo pipefail
+          RESPONSE=$(curl --fail --silent --show-error --connect-timeout 10 --max-time 30 \
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            --data-urlencode 'grant_type=urn:ietf:params:oauth:grant-type:token-exchange' \
+            --data-urlencode 'requested_token_type=urn:ietf:params:oauth:token-type:access_token' \
+            --data-urlencode "audience=$YC_DEPLOY_SA_ID" \
+            --data-urlencode "subject_token=$GITHUB_OIDC_TOKEN" \
+            --data-urlencode 'subject_token_type=urn:ietf:params:oauth:token-type:id_token' \
+            https://auth.yandex.cloud/oauth/token)
+          TOKEN=$(printf '%s' "$RESPONSE" | jq -er '.access_token')
+          echo "::add-mask::$TOKEN"
+          echo "YC_IAM_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+          curl --fail --silent --show-error --connect-timeout 15 --max-time 90 \
+            https://storage.yandexcloud.net/yandexcloud-yc/release/yc_linux_amd64.tar.gz \
+            -o "$RUNNER_TEMP/yc.tar.gz"
+          mkdir -p "$RUNNER_TEMP/yc-dist" "$RUNNER_TEMP/yc-bin"
+          tar -xzf "$RUNNER_TEMP/yc.tar.gz" -C "$RUNNER_TEMP/yc-dist"
+          BIN=$(find "$RUNNER_TEMP/yc-dist" -type f -name yc -print -quit)
+          test -n "$BIN"
+          install -m 0755 "$BIN" "$RUNNER_TEMP/yc-bin/yc"
+          echo "$RUNNER_TEMP/yc-bin" >> "$GITHUB_PATH"
+      - name: Read verified running production bot credentials without logging
+        run: |
+          set -euo pipefail
+          yc config set endpoint api.cloud.yandex.net:443
+          yc config set token "$YC_IAM_TOKEN"
+          yc config set folder-id "$YC_FOLDER_ID"
+          CID=$(yc serverless container get --name autoworld-awg-prod --format json | jq -er '.id')
+          test "$CID" = bba691o7au7epjqvs77b
+          yc serverless container revision list --container-id "$CID" --format json > "$RUNNER_TEMP/revs.json"
+          RID=$(jq -er '(if type=="array" then . else .revisions end) | map(select(.status=="ACTIVE")) | sort_by(.created_at // .createdAt) | last | .id' "$RUNNER_TEMP/revs.json")
+          yc serverless container revision get "$RID" --format json > "$RUNNER_TEMP/prod.json"
+          jq -e '.image.environment.YDB_CONNECTION_STRING|endswith("/etn00ojk5iv1u7dgpdar")' "$RUNNER_TEMP/prod.json" >/dev/null
+          jq -e '.image.environment.AUTO_SALE_PUBLIC_DEMO_WRITE=="false"' "$RUNNER_TEMP/prod.json" >/dev/null
+          for KEY in AUTO_SALE_API_KEY AUTO_SALE_TELEGRAM_BOT_TOKEN; do
+            VALUE=$(jq -er --arg key "$KEY" '.image.environment[$key]|select(length>0)' "$RUNNER_TEMP/prod.json")
+            echo "::add-mask::$VALUE"
+            echo "$KEY=$VALUE" >> "$GITHUB_ENV"
+          done
+          echo "Production runtime and YDB checked; no webhook config changes."
+      - name: Change only current registered Telegram webhook URL, preserve pending
+        run: node scripts/repair-awg-telegram-prod-webhook.mjs
