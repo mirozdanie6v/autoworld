@@ -319,6 +319,26 @@ try{
     deposit:0,
     note:'Полный тест уведомлений. Не реальная покупка.'
   };
+
+  if(process.env.AUDIT_UI_ONLY==='1'){
+    report.mode='UI recheck of the final state verified in run 38043465852; no Telegram notifications';
+    const uiLead={...lead,status:'Сделка',manager:auditManagerName,managerTelegramUserId,managerTelegramUsername:'Flyer_Flyer',managerClaimedByTelegramUserId:managerTelegramUserId,deposit:10000,depositDate:today,paymentMethod:'Банк',note:'ТЕСТ интерфейса; без Telegram-уведомлений и реальных денег.'};
+    const uiQuote={id:quoteId,leadId,model,origin:'США',transportMode:'Море',lot:25000,auction:1000,inland:1000,ocean:2500,customs:6500,repair:1500,service:1500,total:39000,status:'Согласован',version:1,validUntil:future,verification,clientDecision:'agreed',clientDecisionAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+    const uiOrder={id:orderId,leadId,customer:lead.name,model,origin:'США',transportMode:'Море',manager:auditManagerName,source:'Mini App',total:39000,cost:37500,paid:39000,stage:'Выдача',lot:verification.lotNumber,vin:verification.vin,eta:future,location:'ТЕСТ · Выдача',riskType:'Нет',riskNote:'',risk:'Нет',paymentPlan:plan,payments:plan.map((_,i)=>payment(i)),updatedAt:new Date().toISOString()};
+    scenarioStarted=true;
+    const fixture=await req('/api/auto-sale/entities/batch',{actor:'admin',method:'POST',headers:{'x-auto-sale-skip-telegram':'1'},body:{operations:[
+      {resource:'lead',operation:'create',id:leadId,input:uiLead},
+      {resource:'quote',operation:'create',id:quoteId,input:uiQuote},
+      {resource:'order',operation:'create',id:orderId,input:uiOrder}
+    ]}});
+    assert.ok(fixture.response.ok,'UI fixture create HTTP '+fixture.response.status+': '+JSON.stringify(fixture.data));
+    assert.equal(Number(fixture.data.notifications?.queued||0),0);
+    console.log('TELEGRAM_UI_FIXTURE_READY',JSON.stringify({leadId,quoteId,orderId,notifications:0}));
+    report.ui=await verifyLiveUI();
+    report.ok=true;
+    console.log('TELEGRAM_UI_RECHECK_OK',JSON.stringify({priorLifecycleRun:38043465852,ui:report.ui,notifications:0}));
+  }else{
+
   const clientBefore=await req('/api/auto-sale/state',{actor:'client'});
   const managerBefore=await req('/api/auto-sale/state',{actor:'manager'});
   assert.equal(clientBefore.data?._access?.role,'client');
@@ -466,6 +486,7 @@ try{
   report.perRole={client:receipts.filter(x=>x.target==='client').length,manager:receipts.filter(x=>x.target==='manager').length};
   report.finalRevision=Number(final.revision)||0;
   console.log('AUTOWORLD_FULL_LIFECYCLE_OK',JSON.stringify({...report,receipts:undefined}));
+  }
 }finally{
   if(scenarioStarted){
     try{
@@ -515,14 +536,16 @@ async function verifyLiveUI(){
       });
       const navigated=await page.goto(base+'/',{waitUntil:'domcontentloaded',timeout:60000});
       assert.equal(navigated?.status(),200);
+      await page.locator('#auto-client-quote-style').waitFor({state:'attached',timeout:60000});
+      console.log('TELEGRAM_UI_MODULES_READY',JSON.stringify({actor}));
       if(actor==='client'){
         await page.locator('[data-go="orders"]').first().click({timeout:30000});
         await page.getByText(model,{exact:false}).first().waitFor({timeout:30000});
         const detail=page.locator('.auto-order-card[data-client-lead="'+leadId+'"]');
         await detail.waitFor({timeout:30000});
-        await detail.click();
+        await detail.locator('h3').click();
         const modal=page.locator('[data-client-detail-bg]');
-        await modal.waitFor();
+        await modal.waitFor({timeout:30000});
         assert.ok(await modal.getByText('Выдача',{exact:false}).count());
         assert.ok(await modal.getByText('Дмитрий',{exact:false}).count());
         assert.ok(await modal.locator('[data-tg-manager]').isEnabled());
@@ -537,12 +560,19 @@ async function verifyLiveUI(){
         assert.equal(await page.locator('#leadEditForm [name="status"]').inputValue(),'Сделка');
         results.manager=true;
       }
+      console.log('TELEGRAM_UI_ACTOR_OK',JSON.stringify({actor,pageErrors:pageErrors.map(x=>x.slice(0,350))}));
       assert.equal(pageErrors.length,0,actor+' JS runtime errors: '+JSON.stringify(pageErrors));
       const file='telegram-full-cycle-'+actor+'.png';
       await page.screenshot({path:file,fullPage:true});
       results.screenshots.push(file);
       await context.close();
     }
+  }catch(error){
+    const contexts=browser.contexts();
+    for(const [i,context] of contexts.entries())for(const page of context.pages()){
+      try{await page.screenshot({path:'telegram-full-cycle-debug-'+i+'.png',fullPage:true});console.log('TELEGRAM_UI_DEBUG',JSON.stringify(await page.evaluate(()=>({loadedTelegramModule:!!document.getElementById('autoSaleTelegramStyles'),loadedQuoteModule:!!document.getElementById('auto-client-quote-style'),server:window.__AUTO_SALE_SERVER__,hasDetail:!!document.querySelector('[data-client-detail-bg]'),moduleScripts:[...document.querySelectorAll('script[type=module]')].map(x=>new URL(x.src,location.href).pathname)}))));}catch{}
+    }
+    throw error;
   }finally{await browser.close()}
   console.log('TELEGRAM_LIVE_UI_OK',JSON.stringify(results));
   return results;
