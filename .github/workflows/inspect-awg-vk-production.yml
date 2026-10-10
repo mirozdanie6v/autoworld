@@ -95,7 +95,15 @@ jobs:
           echo '=== PRODUCTION LOCKBOX SECRET METADATA (no payload) ==='
           yc lockbox secret get --id e6qg57io19p3gqg73q7g --format json > "$RUNNER_TEMP/vk-secret.json"
           jq -e '.name=="autoworld-vk-web-session"' "$RUNNER_TEMP/vk-secret.json" >/dev/null
-          jq -c '{id,name,status}' "$RUNNER_TEMP/vk-secret.json"
+          jq -c '{id,name,status,folderId:(.folder_id // .folderId)}' "$RUNNER_TEMP/vk-secret.json"
+          echo '=== SECRET RESOURCE-LEVEL ROLE BINDINGS (metadata only) ==='
+          yc lockbox secret list-access-bindings --id e6qg57io19p3gqg73q7g --format json \
+            | jq -c '[.access_bindings[]? | {role_id,subject}]' || echo 'Secret policy list denied or unavailable'
+          SECRET_FOLDER_ID=$(jq -er '.folder_id // .folderId' "$RUNNER_TEMP/vk-secret.json")
+          echo "Secret folder ID: $SECRET_FOLDER_ID"
+          echo '=== SERVICE ACCOUNT METADATA (no keys) ==='
+          yc iam service-account get --id aje8o9ric0d20k11521r --format json \
+            | jq -c '{id,name,folder_id}' || echo 'Service account metadata unavailable'
           ACTUAL_SECRET_ID=$(jq -er '.id' "$RUNNER_TEMP/vk-secret.json")
           yc lockbox secret list-versions --id "$ACTUAL_SECRET_ID" --format json | jq -c '[.[] | {id,status}]'
           echo 'Only selected secret metadata and version IDs; secret payloads are never fetched.'
