@@ -46,12 +46,15 @@ try{
   assert.equal(state.publicState?.leads?.length,0,'guest cannot see customer leads');
   assert.equal(state.publicState?.team?.length,0,'guest cannot see staff directory');
   const trigger=badge.locator('[data-vk-status-trigger]');
-  await trigger.click();
-  const panel=badge.locator('[data-vk-status-panel]');
-  await panel.waitFor({state:'visible',timeout:5000});
-  assert.equal(await panel.locator('[data-vk-status-login]').count(),1,'VK login action available');
+  assert.match(await trigger.getAttribute('aria-label'),/нажмите, чтобы войти/);
+  // Signed-out trigger navigates straight to VK ID, rather than opening a panel.
+  // Inspect the real HTTP redirect without following it or signing in.
+  const start=await page.request.get(origin+'/api/auto-sale/vk/web/start',{maxRedirects:0,timeout:30000});
+  assert.equal(start.status(),302,'VK ID authorization endpoint redirects');
+  const destination=start.headers()['location']||'';
+  assert.match(destination,/^https:\/\/id\.vk\.ru\/authorize\?/);
+  assert.ok(destination.includes('awgcars.ru'),'OAuth callback returns to production host');
   await page.screenshot({path:'awg-vk-production-mobile-login.png',fullPage:false});
-  await trigger.click();
   await page.locator('[data-go="catalog"]').first().click();
   assert.ok(await page.locator('[data-vk-status-widget]').isVisible(),'widget remains after SPA navigation');
   await page.locator('[data-go="orders"]').first().click();
