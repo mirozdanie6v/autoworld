@@ -323,16 +323,25 @@ try{
   if(process.env.AUDIT_UI_ONLY==='1'){
     report.mode='UI recheck of the final state verified in run 38043465852; no Telegram notifications';
     const uiLead={...lead,status:'Сделка',manager:auditManagerName,managerTelegramUserId,managerTelegramUsername:'Flyer_Flyer',managerClaimedByTelegramUserId:managerTelegramUserId,deposit:10000,depositDate:today,paymentMethod:'Банк',note:'ТЕСТ интерфейса; без Telegram-уведомлений и реальных денег.'};
-    const uiQuote={id:quoteId,leadId,model,origin:'США',transportMode:'Море',lot:25000,auction:1000,inland:1000,ocean:2500,customs:6500,repair:1500,service:1500,total:39000,status:'Согласован',version:1,validUntil:future,verification,clientDecision:'agreed',clientDecisionAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
-    const uiOrder={id:orderId,leadId,customer:lead.name,model,origin:'США',transportMode:'Море',manager:auditManagerName,source:'Mini App',total:39000,cost:37500,paid:39000,stage:'Выдача',lot:verification.lotNumber,vin:verification.vin,eta:future,location:'ТЕСТ · Выдача',riskType:'Нет',riskNote:'',risk:'Нет',paymentPlan:plan,payments:plan.map((_,i)=>payment(i)),updatedAt:new Date().toISOString()};
+    const uiQuote={id:quoteId,leadId,model,origin:'США',transportMode:'Море',lot:25000,auction:1000,inland:1000,ocean:2500,customs:6500,repair:1500,service:1500,total:39000,status:'Отправлен',version:1,validUntil:future,verification,updatedAt:new Date().toISOString()};
+    const uiOrder={id:orderId,leadId,customer:lead.name,model,origin:'США',transportMode:'Море',manager:auditManagerName,source:'Mini App',total:39000,cost:37500,paid:39000,stage:'Выкуп',lot:verification.lotNumber,vin:verification.vin,eta:future,location:'ТЕСТ · Выдача',riskType:'Нет',riskNote:'',risk:'Нет',paymentPlan:plan,payments:plan.map((_,i)=>payment(i)),updatedAt:new Date().toISOString()};
     scenarioStarted=true;
-    const fixture=await req('/api/auto-sale/entities/batch',{actor:'admin',method:'POST',headers:{'x-auto-sale-skip-telegram':'1'},body:{operations:[
+    async function silentBatch(operations){
+      const prepared=operations.map(operation=>operation.operation==='create'?operation:{...operation,baseRowVersion:knownVersion(operation.resource,operation.id)});
+      const result=await req('/api/auto-sale/entities/batch',{actor:'admin',method:'POST',headers:{'x-auto-sale-skip-telegram':'1'},body:{operations:prepared}});
+      assert.ok(result.response.ok,'UI fixture HTTP '+result.response.status+': '+JSON.stringify(result.data));
+      assert.equal(Number(result.data.notifications?.queued||0),0);
+      applyVersions(result.data.rowVersions||{});
+    }
+    await silentBatch([
       {resource:'lead',operation:'create',id:leadId,input:uiLead},
-      {resource:'quote',operation:'create',id:quoteId,input:uiQuote},
+      {resource:'quote',operation:'create',id:quoteId,input:uiQuote}
+    ]);
+    await silentBatch([
+      {resource:'quote',operation:'patch',id:quoteId,input:{status:'Согласован',clientDecision:'agreed',clientDecisionAt:new Date().toISOString()}},
       {resource:'order',operation:'create',id:orderId,input:uiOrder}
-    ]}});
-    assert.ok(fixture.response.ok,'UI fixture create HTTP '+fixture.response.status+': '+JSON.stringify(fixture.data));
-    assert.equal(Number(fixture.data.notifications?.queued||0),0);
+    ]);
+    for(const stage of ['Подготовка к отправке','В пути','Таможня','Доставка','Выдача'])await silentBatch([{resource:'order',operation:'patch',id:orderId,input:{stage,location:'ТЕСТ · '+stage}}]);
     console.log('TELEGRAM_UI_FIXTURE_READY',JSON.stringify({leadId,quoteId,orderId,notifications:0}));
     report.ui=await verifyLiveUI();
     report.ok=true;
