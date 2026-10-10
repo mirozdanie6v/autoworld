@@ -1,0 +1,32 @@
+/* Preserve the v25 glass gradients, frame, shine and CTA geometry.
+   Pause continuous expensive blurred fields on invisible catalog cards and
+   while the user scrolls. Only idle, on-screen cards animate. */
+html.auto-calc-perf-ready .auto-car .auto-card-actions
+  .auto-btn.primary.auto-calc-btn[data-request-car] .auto-calc-glint::before,
+html.auto-calc-perf-ready .auto-car .auto-card-actions
+  .auto-btn.primary.auto-calc-btn[data-request-car] .auto-calc-glint::after{
+  animation-play-state:paused!important;
+}
+html.auto-calc-perf-ready:not(.auto-calc-is-scrolling)
+  .auto-car.auto-calc-inview .auto-card-actions
+  .auto-btn.primary.auto-calc-btn[data-request-car]:not(:disabled):not([aria-disabled="true"])
+  .auto-calc-glint::before,
+html.auto-calc-perf-ready:not(.auto-calc-is-scrolling)
+  .auto-car.auto-calc-inview .auto-card-actions
+  .auto-btn.primary.auto-calc-btn[data-request-car]:not(:disabled):not([aria-disabled="true"])
+  .auto-calc-glint::after{
+  animation-play-state:running!important;
+}
+/* Do not promote every catalog button to an expensive compositing layer. */
+html.auto-calc-perf-ready .auto-car .auto-card-actions
+  .auto-btn.primary.auto-calc-btn[data-request-car] .auto-calc-glint{
+  will-change:auto!important;
+}
+@media(prefers-reduced-motion:reduce){
+  html.auto-calc-perf-ready .auto-car .auto-card-actions
+    .auto-btn.primary.auto-calc-btn[data-request-car] .auto-calc-glint::before,
+  html.auto-calc-perf-ready .auto-car .auto-card-actions
+    .auto-btn.primary.auto-calc-btn[data-request-car] .auto-calc-glint::after{
+    animation:none!important;
+  }
+}
