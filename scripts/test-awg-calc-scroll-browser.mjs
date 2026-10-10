@@ -19,6 +19,7 @@ try{
    const get=x=>getComputedStyle(x,'::before');
    return{visibleName:get(a).animationName,visible:get(a).animationPlayState,offscreen:get(off).animationPlayState,visibleCount:document.querySelectorAll('.auto-calc-inview').length,tracked:window.__AUTO_SALE_CALC_SCROLL_PERF__.getStats().tracked};
  });
+ console.log('AWG_CALC_SCROLL_DIAGNOSTIC_INITIAL',JSON.stringify(initial));
  assert.equal(initial.visibleName,'autoCalcPearlWaveV25','v25 reflection unchanged');
  assert.equal(initial.visible,'running');
  assert.equal(initial.offscreen,'paused');
