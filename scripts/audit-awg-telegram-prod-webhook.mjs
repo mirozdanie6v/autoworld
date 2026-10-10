@@ -68,6 +68,7 @@ if(url){
  console.log('AWG_TELEGRAM_CONFIGURED_WEBHOOK_NOOP_PROBE',JSON.stringify({status:rsp.status,ok:rsp.data?.ok,ignored:rsp.data?.ignored,error:rsp.data?.error||rsp.error||null}));
 }
 
+// Post-repair verification after switching Telegram to awgcars.ru: read-only.
 const noop={update_id:-91020261011};
 for(const [label,endpoint] of [
  ['production-gateway',base+directPath],
