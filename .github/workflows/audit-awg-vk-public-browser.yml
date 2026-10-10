@@ -1,0 +1,86 @@
+name: Audit public VK community in Chromium (read only)
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/audit-awg-vk-public-browser.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: awg-vk-public-browser-audit
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Install isolated browser
+        run: |
+          set -euo pipefail
+          npm install --no-save --ignore-scripts playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Capture public community state without signing in or modifying anything
+        run: |
+          node --input-type=module <<'NODE'
+          import {chromium} from 'playwright';
+          import {appendFileSync} from 'node:fs';
+          const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
+          const summary=['# Read-only public VK community audit','', '- Executed: '+new Date().toISOString(),''];
+          const targets=[
+            ['vk-ru-community','https://vk.ru/club242103542'],
+            ['vk-com-community','https://vk.com/awgcars'],
+            ['vk-com-wall','https://vk.com/wall-242103542']
+          ];
+          const clean=(s,n=120)=>String(s||'').replace(/\s+/g,' ').slice(0,n);
+          let visible=0;
+          try {
+            for(const [key,url] of targets){
+              const context=await browser.newContext({viewport:{width:1280,height:900},locale:'ru-RU'});
+              const page=await context.newPage();
+              try {
+                const res=await page.goto(url,{waitUntil:'domcontentloaded',timeout:35000});
+                await page.waitForTimeout(2500);
+                const info=await page.evaluate(()=>{
+                  const txt=String(document.body?.innerText||'').slice(0,12000);
+                  const links=[...document.querySelectorAll('a[href]')].map(a=>({
+                    text:String(a.innerText||'').trim().slice(0,65),
+                    href:a.getAttribute('href')||''
+                  })).filter(x=>/wall-242103542|awgcars|market|app[0-9]|\/services|\/menu|мини-приложен/i.test(x.href+' '+x.text)).slice(0,40);
+                  return {title:document.title,bodyLength:txt.length,
+                    hasKnownName:txt.includes('Автомир'),
+                    loginGate:/войдите или зарегистрируйтесь|войти в вк|вход вконтакте/i.test(txt.slice(0,1400)),
+                    mentions:{menu:(txt.match(/Меню/gi)||[]).length,services:(txt.match(/Услуги/gi)||[]).length,
+                      goods:(txt.match(/Товары/gi)||[]).length,pinned:(txt.match(/закреплен/gi)||[]).length,
+                      miniApp:(txt.match(/мини-приложен/gi)||[]).length},
+                    excerpt:txt.slice(0,1800),links};
+                });
+                info.httpStatus=res?.status()||null;
+                info.finalUrl=page.url();
+                console.log('VK_PUBLIC_BROWSER '+key+' '+JSON.stringify(info));
+                if(info.hasKnownName)visible++;
+                summary.push('## '+key,'','- HTTP status: '+info.httpStatus,
+                  '- Final URL: '+info.finalUrl,'- Recognized community name: '+info.hasKnownName,
+                  '- Login gate (heuristic): '+info.loginGate,'','~~~json',JSON.stringify(info,null,2),'~~~','');
+                await page.screenshot({path:'vk-audit-'+key+'.png',fullPage:false,timeout:12000});
+              }catch(e){
+                console.log('VK_PUBLIC_BROWSER_ERROR '+key+' '+clean(e.message,260));
+                summary.push('## '+key,'','- Browser error: '+clean(e.message,300),'');
+              }finally{await context.close();}
+            }
+          }finally {await browser.close();}
+          summary.push('- Public page loads with recognized name: '+visible+'/3');
+          appendFileSync(process.env.GITHUB_STEP_SUMMARY,summary.join('\n')+'\n');
+          if(!visible)console.log('VK_PUBLIC_BROWSER_LIMITED No public page rendered with recognizable community text; do not interpret missing content as absent.');
+          NODE
+      - name: Save public screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: awg-vk-public-community-audit
+          path: vk-audit-*.png
+          if-no-files-found: ignore
