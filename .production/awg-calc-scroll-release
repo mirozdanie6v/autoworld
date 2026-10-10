@@ -1,3 +1,5 @@
 Release approved: v25 Calculate button appearance preserved. Pause costly catalog button glass animations when offscreen or during scrolling. Strict 4-file static-only release with rollback and real mobile Chromium smoke. No server, YDB, VK, or Telegram webhook changes.
 
 Retry guarded release after verifying rollback and adjusting asynchronous login-widget wait; no backend changes.
+
+Final guarded rerun: live smoke waits for SPA/scroll idle and checks only enabled active buttons; retain automatic rollback.
