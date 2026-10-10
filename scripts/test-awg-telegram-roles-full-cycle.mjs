@@ -139,6 +139,12 @@ async function delivered(notifications,expected,label,revision=0){
   const expectedManagers=label==='Новый'?3:expected/2;
   assert.equal(rows.filter(x=>x.target==='client').length,expectedClients,label+' client');
   assert.equal(rows.filter(x=>x.target==='manager').length,expectedManagers,label+' manager');
+  for(const row of rows){
+    if(row.target==='client')assert.ok(String(row.id).endsWith(':'+clientTelegramUserId),label+' notification must target the verified client');
+    if(row.target==='manager'&&label!=='Новый')assert.ok(String(row.id).endsWith(':'+managerTelegramUserId),label+' notification must target the selected manager '+auditManagerName);
+  }
+  if(label==='Новый')assert.ok(rows.some(row=>row.target==='manager'&&String(row.id).endsWith(':'+managerTelegramUserId)),'new lead fanout must include the selected manager');
+  report.security.exactTelegramRecipients=true;
   receipts.push(...rows.map(x=>({id:x.id,target:x.target,event:x.event,messageId:x.messageId,status:x.status,step:label})));
   console.log('TELEGRAM_STEP_OK',JSON.stringify({step:label,deliveries:rows.map(({target,event,messageId})=>({target,event,messageId}))}));
 }
@@ -251,12 +257,13 @@ async function batch(label,expected,operations,actor='manager'){
 const initial=await state();
 const auditManagerTelegramId=String(process.env.AUDIT_MANAGER_TELEGRAM_ID||'').trim();
 const auditManagerName=String(process.env.AUDIT_MANAGER_NAME||'Дмитрий').trim();
+const auditManagerUsername=String(process.env.AUDIT_MANAGER_TELEGRAM_USERNAME||'Flyer_Flyer').trim().replace(/^@/,'');
 const auditClientUsername=String(process.env.AUDIT_CLIENT_TELEGRAM_USERNAME||'Flyer_kg').trim().replace(/^@/,'');
 const auditClientTelegramId=String(process.env.AUDIT_CLIENT_TELEGRAM_ID||'').trim();
-const manager=(initial.team||[]).find(x=>x.active!==false&&String(x.name||'').trim()===auditManagerName&&String(x.telegramUsername||x.telegram||'').replace(/^@/,'').toLowerCase()==='flyer_flyer');
-assert.ok(manager,`${auditManagerName} / Flyer_Flyer manager must exist in production team`);
+const manager=(initial.team||[]).find(x=>x.active!==false&&String(x.name||'').trim()===auditManagerName&&String(x.telegramUsername||x.telegram||'').replace(/^@/,'').toLowerCase()===auditManagerUsername.toLowerCase());
+assert.ok(manager,`${auditManagerName} / ${auditManagerUsername} manager must exist in production team`);
 const managerTelegramUserId=/^\d+$/.test(String(manager.telegramUserId||''))?String(manager.telegramUserId):auditManagerTelegramId;
-assert.match(managerTelegramUserId,/^\d+$/,'Flyer_Flyer manager Telegram must be linked');
+assert.match(managerTelegramUserId,/^\d+$/,auditManagerUsername+' manager Telegram must be linked');
 const linkedClientLead=(initial.leads||[]).find(x=>
   String(x.telegramUsername||'').replace(/^@/,'').toLowerCase()===auditClientUsername.toLowerCase()
   && /^\d+$/.test(String(x.telegramUserId||''))
@@ -295,7 +302,7 @@ const payment=i=>({
   paymentStage:plan[i].id,
   note:'ТЕСТ, деньги не переводились'
 });
-const report={leadId,quoteId,orderId,telegram:{client:'@'+auditClientUsername,manager:'@Flyer_Flyer'},writePath:'entity-batch',authMode:'QA signatures for verified existing physical Telegram identities',logicalRoles:['client','manager'],initialManagerFanout:3,subsequentPhysicalRecipients:2,receipts,security:{},ui:{},conversation:[],cleanup:null};
+const report={leadId,quoteId,orderId,telegram:{client:'@'+auditClientUsername,manager:'@'+auditManagerUsername},writePath:'entity-batch',authMode:'QA signatures for verified existing physical Telegram identities',logicalRoles:['client','manager'],initialManagerFanout:3,subsequentPhysicalRecipients:2,receipts,security:{},ui:{},conversation:[],cleanup:null};
 let scenarioStarted=false;
 let cleanupFailure=null;
 
@@ -322,7 +329,7 @@ try{
 
   if(process.env.AUDIT_UI_ONLY==='1'){
     report.mode='UI recheck of the final state verified in run 38043465852; no Telegram notifications';
-    const uiLead={...lead,status:'Сделка',manager:auditManagerName,managerTelegramUserId,managerTelegramUsername:'Flyer_Flyer',managerClaimedByTelegramUserId:managerTelegramUserId,deposit:10000,depositDate:today,paymentMethod:'Банк',note:'ТЕСТ интерфейса; без Telegram-уведомлений и реальных денег.'};
+    const uiLead={...lead,status:'Сделка',manager:auditManagerName,managerTelegramUserId,managerTelegramUsername:auditManagerUsername,managerClaimedByTelegramUserId:managerTelegramUserId,deposit:10000,depositDate:today,paymentMethod:'Банк',note:'ТЕСТ интерфейса; без Telegram-уведомлений и реальных денег.'};
     const uiQuote={id:quoteId,leadId,model,origin:'США',transportMode:'Море',lot:25000,auction:1000,inland:1000,ocean:2500,customs:6500,repair:1500,service:1500,total:39000,status:'Отправлен',version:1,validUntil:future,verification,updatedAt:new Date().toISOString()};
     const uiOrder={id:orderId,leadId,customer:lead.name,model,origin:'США',transportMode:'Море',manager:auditManagerName,source:'Mini App',total:39000,cost:37500,paid:39000,stage:'Выкуп',lot:verification.lotNumber,vin:verification.vin,eta:future,location:'ТЕСТ · Выдача',riskType:'Нет',riskNote:'',risk:'Нет',paymentPlan:plan,payments:plan.map((_,i)=>payment(i)),updatedAt:new Date().toISOString()};
     scenarioStarted=true;
@@ -388,7 +395,7 @@ try{
     assert.equal(owned.managerTelegramUserId,managerTelegramUserId);
     assert.equal(owned.managerClaimedByTelegramUserId,managerTelegramUserId);
   }
-  report.security.statusClaimedByDmitry=true;
+  report.security.statusClaimedBySelectedManager=true;
   const deniedEdit=await req('/api/auto-sale/entities/batch',{
     actor:'client',method:'POST',body:{operations:[{
       resource:'lead',operation:'patch',id:leadId,
@@ -416,8 +423,8 @@ try{
   report.security.staleUpdateRejected=true;
 
   for(const [actor,target,text] of [
-    ['manager','client','ТЕСТ полного цикла: сообщение Дмитрия клиенту.'],
-    ['client','manager','ТЕСТ полного цикла: ответ клиента Дмитрию.']
+    ['manager','client','ТЕСТ полного цикла: сообщение менеджера '+auditManagerName+' клиенту.'],
+    ['client','manager','ТЕСТ полного цикла: ответ клиента менеджеру '+auditManagerName+'.']
   ]){
     const sent=await req('/api/auto-sale/telegram/message',{actor,method:'POST',body:{leadId,target,text}});
     assert.equal(sent.response.status,201);
@@ -556,7 +563,7 @@ async function verifyLiveUI(){
         const modal=page.locator('[data-client-detail-bg]');
         await modal.waitFor({timeout:30000});
         assert.ok(await modal.getByText('Выдача',{exact:false}).count());
-        assert.ok(await modal.getByText('Дмитрий',{exact:false}).count());
+        assert.ok(await modal.getByText(auditManagerName,{exact:false}).count());
         assert.ok(await modal.locator('[data-tg-manager]').isEnabled());
         results.client=true;
       }else{
