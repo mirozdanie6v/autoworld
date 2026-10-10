@@ -3,3 +3,5 @@ Release approved: v25 Calculate button appearance preserved. Pause costly catalo
 Retry guarded release after verifying rollback and adjusting asynchronous login-widget wait; no backend changes.
 
 Final guarded rerun: live smoke waits for SPA/scroll idle and checks only enabled active buttons; retain automatic rollback.
+
+Guarded final retry: verify enabled Calculate CTA after scrolling to it; preserve existing disabled-ended-auction behavior and rollback gate.
