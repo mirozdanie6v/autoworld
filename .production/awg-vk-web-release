@@ -1,0 +1,3 @@
+AWG production VK ID Web release authorized after successful Lockbox readiness audit.
+Use only the guarded release workflow and verified candidate image.
+Do not alter production YDB or gateway routes.
