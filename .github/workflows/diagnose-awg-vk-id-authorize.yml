@@ -24,7 +24,8 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Compare VK ID provider outcomes without signing in
         run: |
-          node scripts/diagnose-awg-vk-id-authorize-ab.mjs
+          AWG_VK_DIAG_ORIGIN=https://vk-test.awgcars.ru node scripts/diagnose-awg-vk-id-authorize-ab.mjs
+          AWG_VK_DIAG_ORIGIN=https://awgcars.ru node scripts/diagnose-awg-vk-id-authorize-ab.mjs
       - name: Upload provider diagnostic screenshots
         if: always()
         uses: actions/upload-artifact@v4
