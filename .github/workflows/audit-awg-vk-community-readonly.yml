@@ -58,12 +58,13 @@ jobs:
             avatar_present:!!(g?.photo_200 && !g?.photo_200.includes('camera_200')),
             cover_present:!!(g?.cover?.enabled||g?.cover?.images?.length),
             site:String(g?.site||''),
-            fixed_post:g?.fixed_post||null,
+            pinned_post_status:('fixed_post' in (g||{})) ? (g.fixed_post||null) : 'unverified_from_group_metadata',
             main_section:g?.main_section??null,
             secondary_section:g?.secondary_section??null,
             members_count:g?.members_count??null,
+            links_field_returned: Object.prototype.hasOwnProperty.call(g||{},'links'),
             links:(g?.links?.items||g?.links||[]).map(x=>({name:String(x.name||''),url:String(x.url||'')})).slice(0,20),
-            menu_present:!!g?.menu,
+            menu_status:g?.menu ? 'menu_metadata_returned' : 'not_verifiable_via_groups_getById',
             menu_item_count:g?.menu?.items?.length??null,
             can_message:g?.can_message??null
           } : group;
@@ -83,9 +84,14 @@ jobs:
             items:(market.data.items||[]).map(x=>({id:x.id,title:String(x.title||'').slice(0,95)}))
           } : market;
           const perms = await vk('groups.getTokenPermissions',{});
-          results.permissions = perms.data ? {settings:perms.data.settings??[],valid:true} : perms;
-          const app = await vk('apps.get',{app_id:'54810434'});
-          results.app = app.data ? {count:app.data.count??null,returned:true} : app;
+          results.permissions = perms.data ? {
+            token_api_accepted:true,
+            mask:perms.data.mask??null,
+            permissions:Array.isArray(perms.data.permissions) ? perms.data.permissions.map(x=>({name:x.name,setting:x.setting})) : null,
+            settings:Array.isArray(perms.data.settings) ? perms.data.settings : null,
+            raw_response_keys:Object.keys(perms.data).slice(0,20)
+          } : perms;
+          results.app = {status:'not_verified',reason:'Mini App identity and placement need authorized VK community view; VK ID Web app and Mini App IDs must not be conflated'};
           try {
            const r=await fetch('https://awgcars.ru/api/health',{signal:AbortSignal.timeout(20000)});
            const j=await r.json().catch(()=>({}));
