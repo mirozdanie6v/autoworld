@@ -1,9 +1,14 @@
-name: AWG Flyer_kg and Dmitry final UI verification
+name: Full AWG Telegram client and Dmitry cycle
 on:
-  push:
-    branches: [main]
-    paths: [.github/workflows/run-awg-telegram-full-cycle.yml]
   workflow_dispatch:
+    inputs:
+      mode:
+        description: 'full_cycle sends test Telegram notifications; ui_only uses silent fixtures'
+        type: choice
+        options:
+          - full_cycle
+          - ui_only
+        default: full_cycle
 permissions:
   contents: read
   id-token: write
@@ -91,9 +96,9 @@ jobs:
           echo "Current production revision verified; credentials stay only in this runner."
       - name: Resolve and verify existing Flyer_kg and Dmitry physical Telegram identities
         run: node scripts/resolve-awg-telegram-audit-identities.mjs
-      - name: Verify final live interface for client and manager without repeating Telegram deliveries
+      - name: Run selected production QA scenario for the verified client and manager
         env:
-          AUDIT_UI_ONLY: '1'
+          AUDIT_UI_ONLY: ${{ inputs.mode == 'ui_only' && '1' || '0' }}
         run: node scripts/test-awg-telegram-roles-full-cycle.mjs
       - name: Save sanitized lifecycle report and browser evidence
         if: always()
