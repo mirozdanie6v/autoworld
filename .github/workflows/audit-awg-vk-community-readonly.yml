@@ -1,0 +1,100 @@
+name: Audit AutoWorld VK community (read only)
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/audit-awg-vk-community-readonly.yml
+permissions:
+  contents: read
+concurrency:
+  group: awg-vk-community-audit-readonly
+  cancel-in-progress: false
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      VK_GROUP_ID: '242103542'
+      VK_TOKEN: ${{ secrets.AWG_VK_COMMUNITY_TOKEN }}
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Read community, posts, market and API permissions; no writes
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import {appendFileSync} from 'node:fs';
+          const gid = process.env.VK_GROUP_ID || '242103542';
+          const token = String(process.env.VK_TOKEN || '').trim();
+          const results = {};
+          const briefError = e => String(e?.message||e).slice(0,150);
+          async function vk(method, input = {}) {
+            if (!token) return {error:'missing_community_token'};
+            try {
+              const body = new URLSearchParams({access_token:token, v:'5.199', ...input});
+              const r = await fetch('https://api.vk.com/method/' + method, {
+                method:'POST',body,signal:AbortSignal.timeout(14000)
+              });
+              const out = await r.json();
+              if (out?.error) return {error_code:out.error.error_code,error_msg:String(out.error.error_msg||'').slice(0,110)};
+              if (!r.ok) return {http_status:r.status};
+              return {data:out.response};
+            } catch(e) {return {error:briefError(e)};}
+          }
+          const group = await vk('groups.getById',{
+            group_ids:gid,
+            fields:'description,status,cover,links,main_section,secondary_section,site,members_count,menu,can_message,market'
+          });
+          const g = Array.isArray(group.data) ? group.data[0] : (group.data?.groups?.[0] ?? group.data);
+          results.community = group.data ? {
+            id:g?.id,
+            name:g?.name,
+            screen_name:g?.screen_name,
+            description_present:!!String(g?.description||'').trim(),
+            description_length:String(g?.description||'').length,
+            status_present:!!String(g?.status||'').trim(),
+            avatar_present:!!(g?.photo_200 && !g?.photo_200.includes('camera_200')),
+            cover_present:!!(g?.cover?.enabled||g?.cover?.images?.length),
+            site:String(g?.site||''),
+            fixed_post:g?.fixed_post||null,
+            main_section:g?.main_section??null,
+            secondary_section:g?.secondary_section??null,
+            members_count:g?.members_count??null,
+            links:(g?.links?.items||g?.links||[]).map(x=>({name:String(x.name||''),url:String(x.url||'')})).slice(0,20),
+            menu_present:!!g?.menu,
+            menu_item_count:g?.menu?.items?.length??null,
+            can_message:g?.can_message??null
+          } : group;
+          const wall = await vk('wall.get',{owner_id:'-'+gid,count:'30',filter:'owner'});
+          results.wall = wall.data ? {
+            count_total:wall.data.count??null,
+            recent:(wall.data.items||[]).slice(0,30).map(p=>({
+              id:p.id,
+              date:p.date ? new Date(p.date*1000).toISOString().slice(0,10):null,
+              pinned:!!(p.is_pinned||p.pinned),
+              headline:String(p.text||'').replace(/\s+/g,' ').slice(0,100)
+            }))
+          } : wall;
+          const market = await vk('market.get',{owner_id:'-'+gid,count:'100'});
+          results.market = market.data ? {
+            count_total:market.data.count??null,
+            items:(market.data.items||[]).map(x=>({id:x.id,title:String(x.title||'').slice(0,95)}))
+          } : market;
+          const perms = await vk('groups.getTokenPermissions',{});
+          results.permissions = perms.data ? {settings:perms.data.settings??[],valid:true} : perms;
+          const app = await vk('apps.get',{app_id:'54810434'});
+          results.app = app.data ? {count:app.data.count??null,returned:true} : app;
+          try {
+           const r=await fetch('https://awgcars.ru/api/health',{signal:AbortSignal.timeout(20000)});
+           const j=await r.json().catch(()=>({}));
+           results.backend={http_status:r.status,ok:j.ok===true,vkAuth:j.vkAuth??null,vkMessaging:j.vkMessaging??null,telegramRoutableManagers:j.telegramRoutableManagers??null};
+          } catch(e){results.backend={error:briefError(e)}}
+          for (const [key,value] of Object.entries(results)) console.log('VK_AUDIT_'+key.toUpperCase()+' '+JSON.stringify(value));
+          const md = ['# VK community read-only audit','','- Community ID: '+gid,'- Date (UTC): '+new Date().toISOString(),''];
+          for(const [key,value] of Object.entries(results)){
+            md.push('## '+key, '', '~~~json',JSON.stringify(value,null,2),'~~~','');
+          }
+          appendFileSync(process.env.GITHUB_STEP_SUMMARY,md.join('\n')+'\n');
+          NODE
