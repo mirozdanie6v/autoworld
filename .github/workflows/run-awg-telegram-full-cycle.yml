@@ -1,6 +1,9 @@
 name: AWG full Telegram sales cycle
-run-name: "Flyer_kg → ${{ inputs.manager || 'Алексей' }} · ${{ inputs.mode || 'full_cycle' }}"
+run-name: "Flyer_kg → ${{ inputs.manager || 'Иван' }} · ${{ inputs.mode || 'full_cycle' }}"
 on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/run-awg-telegram-full-cycle.yml]
   workflow_dispatch:
     inputs:
       manager:
@@ -10,7 +13,7 @@ on:
           - Дмитрий
           - Алексей
           - Иван
-        default: Алексей
+        default: Иван
       mode:
         description: 'full_cycle sends test Telegram notifications; ui_only uses silent fixtures'
         type: choice
@@ -28,7 +31,7 @@ env:
   YC_FOLDER_ID: b1g8u8vqkgehvtbj8n13
   YC_DEPLOY_SA_ID: ${{ vars.AWG_YC_DEPLOY_SA_ID || 'aje775bcl6hgp40eu8of' }}
   STAGING_URL: https://awgcars.ru
-  AUDIT_MANAGER_NAME: ${{ inputs.manager || 'Алексей' }}
+  AUDIT_MANAGER_NAME: ${{ inputs.manager || 'Иван' }}
 jobs:
   test:
     runs-on: ubuntu-24.04
@@ -114,7 +117,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: awg-flyer-kg-dmitry-full-cycle
+          name: awg-flyer-kg-${{ env.AUDIT_MANAGER_TELEGRAM_USERNAME || 'manager' }}-full-cycle
           path: |
             telegram-lifecycle-report.json
             telegram-full-cycle-client.png
