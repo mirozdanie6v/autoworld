@@ -1,4 +1,4 @@
-name: Full AWG Telegram client and Dmitry cycle
+name: AWG Flyer_kg and Dmitry final UI verification
 on:
   push:
     branches: [main]
@@ -21,7 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: 2f10a8ff0b885502d781a8b398f5b2a274e2b2e1
+          ref: 8aa631fdf549582b09576d1e9f7b902a7b3ad485
       - uses: actions/setup-node@v5
         with:
           node-version: 22
@@ -91,7 +91,9 @@ jobs:
           echo "Current production revision verified; credentials stay only in this runner."
       - name: Resolve and verify existing Flyer_kg and Dmitry physical Telegram identities
         run: node scripts/resolve-awg-telegram-audit-identities.mjs
-      - name: Run client and manager roles through full production sales lifecycle
+      - name: Verify final live interface for client and manager without repeating Telegram deliveries
+        env:
+          AUDIT_UI_ONLY: '1'
         run: node scripts/test-awg-telegram-roles-full-cycle.mjs
       - name: Save sanitized lifecycle report and browser evidence
         if: always()
@@ -102,4 +104,5 @@ jobs:
             telegram-lifecycle-report.json
             telegram-full-cycle-client.png
             telegram-full-cycle-manager.png
+            telegram-full-cycle-debug-*.png
           if-no-files-found: ignore
