@@ -93,7 +93,7 @@ jobs:
           grep -q "$EXPECTED_STATIC_BUCKET" "$RUNNER_TEMP/gateway.yml"
           grep -q "$ID" "$RUNNER_TEMP/gateway.yml"
           echo '=== PRODUCTION LOCKBOX SECRET METADATA (no payload) ==='
-          yc lockbox secret get --name autoworld-vk-web-session --folder-id "$YC_FOLDER_ID" --format json > "$RUNNER_TEMP/vk-secret.json"
+          yc lockbox secret get --id e6qg57io19p3gqg73q7g --format json > "$RUNNER_TEMP/vk-secret.json"
           jq -e '.name=="autoworld-vk-web-session"' "$RUNNER_TEMP/vk-secret.json" >/dev/null
           jq -c '{id,name,status}' "$RUNNER_TEMP/vk-secret.json"
           ACTUAL_SECRET_ID=$(jq -er '.id' "$RUNNER_TEMP/vk-secret.json")
