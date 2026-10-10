@@ -1,0 +1,38 @@
+name: Verify production VK badge web-only behavior
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/verify-awg-vk-web-only-production.yml
+      - scripts/test-awg-vk-web-only-production-browser.mjs
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Run scoped VK badge unit tests and build
+        run: |
+          npm ci
+          node --test tests/auto-sale-vk-status-widget.test.mjs
+          npm run build
+          grep -q 'telegramLaunchDetected()&&!telegramInitData()' dist/auto-sale-bootstrap.mjs
+      - name: Install isolated Chromium
+        run: |
+          npm install --no-save --ignore-scripts playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Read-only verify current production for browser Telegram and VK Mini App
+        run: node scripts/test-awg-vk-web-only-production-browser.mjs
+      - name: Attach real browser screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: awg-vk-web-only-production-smoke
+          path: awg-web-only-production-browser.png
+          if-no-files-found: ignore
