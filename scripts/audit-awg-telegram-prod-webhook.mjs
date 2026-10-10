@@ -30,7 +30,7 @@ if(url){
 }
 const report={
  bot:'AutoWorld_Georgia_bot',webhookKind:kind,
- webhookRegistered:Boolean(url),pathMatchesCurrentCode:matchesKey,
+ webhookRegistered:Boolean(url),webhookHost:url?new URL(url).hostname:null,webhookScheme:url?new URL(url).protocol:null,pathMatchesCurrentCode:matchesKey,
  pendingUpdateCount:Number(info.pending_update_count||0),
  lastErrorAt:info.last_error_date?new Date(info.last_error_date*1000).toISOString():null,
  lastErrorClass:info.last_error_message?String(info.last_error_message).replace(/\/[a-f0-9]{32,64}/g,'/[secret]').slice(0,200):null,
@@ -66,4 +66,17 @@ if(url){
  }).then(async r=>({status:r.status,data:await r.json().catch(()=>({}))}))
  .catch(error=>({error:String(error.message||error).slice(0,180)}));
  console.log('AWG_TELEGRAM_CONFIGURED_WEBHOOK_NOOP_PROBE',JSON.stringify({status:rsp.status,ok:rsp.data?.ok,ignored:rsp.data?.ignored,error:rsp.data?.error||rsp.error||null}));
+}
+
+const noop={update_id:-91020261011};
+for(const [label,endpoint] of [
+ ['production-gateway',base+directPath],
+ ['cloudflare-relay','https://integration-telegram.viiversion.com/telegram/webhook']
+]){
+ const start=Date.now();
+ try{
+  const rsp=await fetch(endpoint,{method:'POST',headers:{'content-type':'application/json','x-telegram-bot-api-secret-token':secret},body:JSON.stringify(noop),signal:AbortSignal.timeout(21000)});
+  const data=await rsp.json().catch(()=>({}));
+  console.log('AWG_TELEGRAM_INBOUND_ALTERNATIVE_NOOP',JSON.stringify({label,status:rsp.status,ms:Date.now()-start,ok:data.ok,ignored:data.ignored,error:data.error||null}));
+ }catch(e){console.log('AWG_TELEGRAM_INBOUND_ALTERNATIVE_NOOP',JSON.stringify({label,ms:Date.now()-start,error:String(e.message).slice(0,100)}))}
 }
