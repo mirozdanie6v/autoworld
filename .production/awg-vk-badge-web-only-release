@@ -1,0 +1,1 @@
+Approved guarded static-only release: hide VK ID web badge in Telegram and VK Mini Apps; preserve browser badge. Backup/restore exactly index.html, auto-sale-bootstrap.mjs and auto-sale-vk-status-widget.mjs. No server or webhook changes.
