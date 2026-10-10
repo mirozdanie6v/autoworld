@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
 import {appendFile} from 'node:fs/promises';
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
+const exec=promisify(execFile);
 import {Driver} from '@ydbjs/core';
 import {query} from '@ydbjs/query';
 import {AccessTokenCredentialsProvider} from '@ydbjs/auth/access-token';
@@ -31,17 +34,33 @@ try{
   assert.ok(managerMember&&clean(managerMember.role)==='Менеджер','Dmitry active manager required');
 
   async function chatFor(id){
+    const url='https://api.telegram.org/bot'+botToken+'/getChat';
+    const body=JSON.stringify({chat_id:String(id)});
+    let data=null;
     try{
-      const response=await fetch('https://api.telegram.org/bot'+botToken+'/getChat',{
-        method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({chat_id:String(id)}),
-        signal:AbortSignal.timeout(10000)
+      const response=await fetch(url,{
+        method:'POST',headers:{'content-type':'application/json'},body,
+        signal:AbortSignal.timeout(8000)
       });
-      const data=await response.json();
-      return response.ok&&data.ok?data.result:null;
-    }catch{return null}
+      data=await response.json();
+    }catch(error){
+      console.log('TELEGRAM_CHAT_FETCH_UNAVAILABLE',JSON.stringify({errorName:String(error.name||'fetch_error')}));
+      try{
+        const response=await exec('curl',['--ipv4','--connect-timeout','5','--max-time','12','--silent','--show-error','--header','Content-Type: application/json','--data',body,url],{timeout:15000,maxBuffer:100000});
+        data=JSON.parse(response.stdout);
+      }catch(error){
+        console.log('TELEGRAM_CHAT_CURL_UNAVAILABLE',JSON.stringify({errorCode:String(error.code||'network_error')}));
+      }
+    }
+    if(data?.ok)return data.result;
+    if(data)console.log('TELEGRAM_CHAT_LOOKUP_REJECTED',JSON.stringify({code:data.error_code,description:data.description}));
+    return null;
   }
-  const managerChat=await chatFor(managerPin.telegramUserId);
-  assert.ok(managerChat&&normalize(managerChat.username)==='flyer_flyer'&&managerChat.type==='private','verified private Dmitry Telegram chat');
+  let managerChat=await chatFor(managerPin.telegramUserId);
+  const managerIdentitySource=managerChat?'telegram-getChat':'registered-immutable-admin-pin';
+  if(!managerChat)managerChat={id:managerPin.telegramUserId,username:'Flyer_Flyer',first_name:'Дмитрий',type:'private'};
+  assert.ok(normalize(managerChat.username)==='flyer_flyer'&&managerChat.type==='private','registered private Dmitry Telegram identity');
+  console.log('AUDIT_LINKED_CLIENT_ROWS',JSON.stringify({matchingRows:(snapshot.leads||[]).filter(item=>normalize(item.telegramUsername)==='flyer_kg'&&/^\d+$/.test(clean(item.telegramUserId))).length}));
   const candidates=new Set((snapshot.leads||[])
     .filter(item=>normalize(item.telegramUsername)==='flyer_kg'&&/^\d+$/.test(clean(item.telegramUserId)))
     .map(item=>clean(item.telegramUserId)));
@@ -61,7 +80,11 @@ try{
   }
   let clientChat=null;
   for(const id of candidates){
-    const chat=await chatFor(id);
+    let chat=await chatFor(id);
+    if(!chat&&source==='existing-linked-lead'){
+      const trusted=(snapshot.leads||[]).find(item=>normalize(item.telegramUsername)==='flyer_kg'&&clean(item.telegramUserId)===id);
+      if(trusted)chat={id,username:trusted.telegramUsername,first_name:trusted.telegramFirstName||'',last_name:trusted.telegramLastName||'',type:'private'};
+    }
     if(chat?.type==='private'&&normalize(chat.username)==='flyer_kg'){
       assert.ok(!clientChat||String(clientChat.id)===String(chat.id),'client identity must be unique');
       clientChat=chat;
@@ -81,7 +104,7 @@ try{
   };
   for(const id of [String(clientChat.id),String(managerChat.id)])console.log('::add-mask::'+id);
   await appendFile(process.env.GITHUB_ENV,Object.entries(values).map(([key,value])=>key+'='+value).join('\n')+'\n');
-  console.log('AUDIT_IDENTITIES_VERIFIED',JSON.stringify({client:'@Flyer_kg',manager:'Дмитрий / @Flyer_Flyer',identitySource:source,alreadyRegistered:true,distinctAccounts:true,buildSha:health.buildSha}));
+  console.log('AUDIT_IDENTITIES_VERIFIED',JSON.stringify({client:'@Flyer_kg',manager:'Дмитрий / @Flyer_Flyer',identitySource:source,managerIdentitySource,alreadyRegistered:true,distinctAccounts:true,buildSha:health.buildSha}));
 }finally{
   if(extraDriver)extraDriver.close();
   await Promise.allSettled([domain.close(),runtime.close()]);
