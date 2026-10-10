@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {JSDOM} from 'jsdom';
-import {deriveVkStatus,isVkStatusSupportedHost,initializeVkStatusWidget} from '../public/auto-sale-vk-status-widget.mjs';
+import {deriveVkStatus,isVkStatusSupportedHost,isAutoSaleMiniAppLaunch,initializeVkStatusWidget} from '../public/auto-sale-vk-status-widget.mjs';
 
 const tick=()=>new Promise(resolve=>setTimeout(resolve,20));
 const fakeBrowser=(url='https://vk-test.awgcars.ru/')=>{
@@ -10,7 +10,7 @@ const fakeBrowser=(url='https://vk-test.awgcars.ru/')=>{
   const events=new Map();
   const routes=[];
   const win={
-    location:{hostname:new URL(url).hostname,search:new URL(url).search,assign:path=>routes.push(path)},
+    location:{hostname:new URL(url).hostname,href:url,hash:new URL(url).hash,search:new URL(url).search,assign:path=>routes.push(path)},
     addEventListener(name,fn){events.set(name,fn)},
     removeEventListener(name){events.delete(name)},
     emit(name){events.get(name)?.()}
@@ -85,21 +85,55 @@ test('plain web validated VK profile displays logged in status and name in expan
   dom.window.close();
 });
 
-test('mini app signed-looking URL never authorizes by itself; only backend verified VK access enables badge',async()=>{
-  const {dom,win}=fakeBrowser('https://vk-test.awgcars.ru/?vk_app_id=777&vk_user_id=42&sign=untrusted');
-  win.__AUTO_SALE_ACCESS__={role:'public',authenticated:false,authType:'public'};
-  win.__AUTO_SALE_SERVER__={online:true};
-  const widget=initializeVkStatusWidget({win,doc:dom.window.document,fetchImpl:async()=>{throw Error('mini app must not call VK web config')}});
+test('VK Mini App never renders VK ID web widget, even before its launch signature is verified',async()=>{
+  for(const address of [
+    'https://awgcars.ru/?vk_app_id=54811927&vk_user_id=42&sign=untrusted',
+    'https://awgcars.ru/?vk_app_id=54811927',
+    'https://vk-test.awgcars.ru/?vk_app_id=54811927&vk_platform=mobile_web&vk_user_id=42&sign=untrusted'
+  ]){
+    const {dom,win}=fakeBrowser(address);
+    let calls=0;
+    win.__AUTO_SALE_ACCESS__={role:'client',authenticated:true,authType:'vk',identity:{provider:'vk',id:'42'}};
+    assert.equal(isAutoSaleMiniAppLaunch(win),true);
+    const widget=initializeVkStatusWidget({win,doc:dom.window.document,fetchImpl:async()=>{calls++;throw Error('VK Mini App must not fetch VK Web config')}});
+    assert.equal(widget,null,'VK launch parameters must suppress web-only widget');
+    assert.equal(dom.window.document.querySelector('[data-vk-status-widget]'),null);
+    assert.equal(dom.window.document.querySelector('[data-vk-status-style]'),null);
+    assert.equal(calls,0);
+    dom.window.close();
+  }
+});
+
+test('Telegram Mini App suppresses VK ID widget for query, fragment and SDK initData launch',async()=>{
+  for(const address of [
+    'https://awgcars.ru/?tgWebAppVersion=8.0&tgWebAppPlatform=android',
+    'https://awgcars.ru/#tgWebAppData=query_id%3Dtest&tgWebAppThemeParams=%7B%7D',
+    'https://vk-test.awgcars.ru/?tgWebAppPlatform=ios',
+    'https://awgcars.ru/?tgWebAppData=anything'
+  ]){
+    const {dom,win}=fakeBrowser(address);
+    assert.equal(isAutoSaleMiniAppLaunch(win),true);
+    let calls=0;
+    const widget=initializeVkStatusWidget({win,doc:dom.window.document,fetchImpl:async()=>{calls++;throw Error('Telegram Mini App must not fetch VK Web config')}});
+    assert.equal(widget,null);
+    assert.equal(dom.window.document.querySelector('[data-vk-status-widget]'),null);
+    assert.equal(calls,0);
+    dom.window.close();
+  }
+  const {dom,win}=fakeBrowser('https://awgcars.ru/');
+  win.Telegram={WebApp:{initData:'auth_date=123&hash=untrusted'}};
+  assert.equal(isAutoSaleMiniAppLaunch(win),true);
+  assert.equal(initializeVkStatusWidget({win,doc:dom.window.document}),null);
+  dom.window.close();
+});
+
+test('ordinary browser retains VK ID even when Telegram SDK is loaded without launch data',async()=>{
+  const {dom,win}=fakeBrowser('https://awgcars.ru/');
+  win.Telegram={WebApp:{initData:''}};
+  assert.equal(isAutoSaleMiniAppLaunch(win),false);
+  const widget=initializeVkStatusWidget({win,doc:dom.window.document,fetchImpl:async()=>config(true,false)});
   await tick();
-  const badge=dom.window.document.querySelector('[data-vk-status-widget]');
-  assert.equal(badge.dataset.vkStatus,'out');
-  assert.equal(badge.querySelector('[data-vk-status-caption]').textContent,'Нет входа');
-  win.__AUTO_SALE_ACCESS__={role:'client',authenticated:true,authType:'vk',identity:{provider:'vk',id:'42'},user:{first_name:'Анна',last_name:'Тест'}};
-  win.__AUTO_SALE_VK_USER__={displayName:'Анна Тест'};
-  win.emit('auto-sale-server-synced');
-  assert.equal(badge.dataset.vkStatus,'in');
-  assert.match(badge.querySelector('button').getAttribute('aria-label'),/Анна Тест/);
-  assert.equal(badge.querySelector('[data-vk-status-logout]'),null,'mini app should not offer unrelated web-cookie logout');
+  assert.equal(dom.window.document.querySelector('[data-vk-status-widget]')?.dataset.vkStatus,'out');
   widget.destroy();
   dom.window.close();
 });
