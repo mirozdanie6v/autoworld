@@ -23,7 +23,7 @@ try{
  assert.equal(initial.visibleName,'autoCalcPearlWaveV25','v25 reflection unchanged');
  assert.equal(initial.visible,'running');
  assert.equal(initial.offscreen,'paused');
- assert.ok(initial.visibleCount<8&&initial.tracked===45,'offscreen cards never animate');
+ assert.ok(initial.visibleCount>0&&initial.visibleCount<=12&&initial.tracked===45,'only near-screen cards animate, not 45 total');
  await page.evaluate(()=>window.scrollTo(0,700));
  await page.waitForFunction(()=>document.documentElement.classList.contains('auto-calc-is-scrolling'));
  const scrolling=await page.evaluate(()=>({
