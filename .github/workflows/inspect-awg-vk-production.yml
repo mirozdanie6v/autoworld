@@ -96,6 +96,7 @@ jobs:
           yc lockbox secret get --id e6qg57io19p3ggq73q7g --format json | jq -c '{id,name,status}'
           yc lockbox secret list-versions --id e6qg57io19p3ggq73q7g --format json | jq -c '[.[] | {id,status}]'
           echo 'Only selected secret metadata and version IDs; secret payloads are never fetched.'
+          echo 'Production VK preflight recheck after scoped Lockbox viewer permission.'
           echo '=== PUBLIC HTTP DIAGNOSTICS ==='
           for path in / /auto-sale-bootstrap.mjs /api/health /api/auto-sale/vk/web/config; do
             code=$(curl -sS --connect-timeout 10 --max-time 35 -o "$RUNNER_TEMP/http-out" -w '%{http_code}' "$PROD_HOST$path" || true)
