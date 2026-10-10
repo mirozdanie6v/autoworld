@@ -2,6 +2,17 @@
 // Never infer authentication from unsigned VK launch URL parameters.
 const ALLOWED_HOSTS=new Set(['awgcars.ru','www.awgcars.ru','vk-test.awgcars.ru']);
 export const isVkStatusSupportedHost=host=>ALLOWED_HOSTS.has(String(host||'').toLowerCase());
+// Mini Apps already authenticate with their own signed launch data.
+// Hide the web-only VK ID control even before those signatures are verified;
+// this is presentation gating only, never an authentication decision.
+export function isAutoSaleMiniAppLaunch(win){
+  const href=String(win?.location?.href||'');
+  if(/(?:[?#&])tgWebApp(?:Data|Version|Platform|ThemeParams)=/i.test(href))return true;
+  if(String(win?.Telegram?.WebApp?.initData||'').trim())return true;
+  const search=new URLSearchParams(String(win?.location?.search||''));
+  if(search.has('vk_app_id'))return true;
+  return false;
+}
 const asName=value=>String(value||'').trim().slice(0,120);
 export function deriveVkStatus({mode='web',config=null,profile=null,access=null,vkUser=null}={}){
   if(mode==='mini'){
@@ -27,7 +38,7 @@ function createWidget(document){
 export function initializeVkStatusWidget({
   win=window,doc=document,fetchImpl=fetch,mode=null
 }={}){
-  if(!isVkStatusSupportedHost(win.location?.hostname))return null;
+  if(!isVkStatusSupportedHost(win.location?.hostname)||isAutoSaleMiniAppLaunch(win))return null;
   const query=new URLSearchParams(win.location.search||'');
   const mini=mode==='mini'||(mode===null&&['vk_app_id','vk_user_id','sign'].every(key=>query.has(key)));
   const currentMode=mini?'mini':'web';
@@ -171,6 +182,6 @@ export function initializeVkStatusWidget({
     if(endMiniWait)clearTimeout(endMiniWait);root.remove();
   }};
 }
-if(typeof window!=='undefined'&&typeof document!=='undefined'&&isVkStatusSupportedHost(window.location?.hostname)){
+if(typeof window!=='undefined'&&typeof document!=='undefined'&&isVkStatusSupportedHost(window.location?.hostname)&&!isAutoSaleMiniAppLaunch(window)){
   initializeVkStatusWidget();
 }
