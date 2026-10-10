@@ -1,0 +1,36 @@
+name: AWG catalog glass scroll Chromium QA
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/browser-qa-awg-calc-scroll.yml
+      - scripts/test-awg-calc-scroll-browser.mjs
+      - public/auto-sale-calc-scroll-performance.css
+      - public/auto-sale-calc-scroll-performance.mjs
+      - tests/auto-sale-calc-scroll-performance.test.mjs
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Install isolated Chromium
+        run: |
+          set -euo pipefail
+          npm install --no-save --ignore-scripts playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Verify v25 appearance and viewport animation scheduling
+        run: node scripts/test-awg-calc-scroll-browser.mjs
+      - name: Save mobile screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: awg-calc-scroll-browser
+          path: awg-calc-scroll-performance-mobile.png
+          if-no-files-found: ignore
