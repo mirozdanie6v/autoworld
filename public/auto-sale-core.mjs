@@ -1,3 +1,4 @@
+import {leadChannel} from './auto-sale-channel-analytics.mjs';
 export const ORDER_STAGES = ['Запрос','Подбор','Расчёт','Согласование','Выкуп','Подготовка к отправке','В пути','Таможня','Доставка','Выдача'];
 const LEGACY_ORDER_STAGES={'Порт США':'Подготовка к отправке','В море':'В пути'};
 export const normalizeOrderStage=stage=>LEGACY_ORDER_STAGES[stage]||stage;
@@ -77,7 +78,7 @@ export function filterLeads(leads = [], filters = {}) {
     const hay = `${lead.id} ${lead.name} ${lead.contact} ${lead.model}`.toLowerCase();
     return (!query || hay.includes(query)) &&
       (!filters.status || filters.status === 'all' || lead.status === filters.status) &&
-      (!filters.source || filters.source === 'all' || lead.source === filters.source) &&
+      (!filters.source || filters.source === 'all' || (lead.source === filters.source || leadChannel(lead) === filters.source)) &&
       (!filters.manager || filters.manager === 'all' || lead.manager === filters.manager);
   });
 }

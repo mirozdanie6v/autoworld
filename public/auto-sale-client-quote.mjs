@@ -10,13 +10,15 @@ const rows=[['lot','Цена лота'],['auction','Сбор аукциона'],
 
 function panel(leadId,q){
   if(!q||q.status==='Черновик')return'';
-  const actionable=['Отправлен','На согласовании'].includes(q.status);
+  const latest=quoteFor(leadId),outdated=latest&&latest.id!==q.id;
+  const actionable=!outdated&&['Отправлен','На согласовании'].includes(q.status);
   const agreed=q.status==='Согласован';
   const changes=q.clientDecision==='changes_requested';
   return `<section class="auto-client-quote" data-client-quote="${esc(q.id)}" data-lead="${esc(leadId)}">
     <div class="auto-client-quote-head"><div><span>РАСЧЁТ · ${esc(q.id)} · V${Number(q.version)||1}</span><h3>${esc(q.model||'Расчёт автомобиля')}</h3></div><b class="auto-status ${agreed?'good':''}">${esc(q.status)}</b></div>
     <div class="auto-client-quote-lines">${rows.map(([key,label])=>`<div><span>${label}</span><strong>${money(q[key])}</strong></div>`).join('')}</div>
     <div class="auto-client-quote-total"><span><b>Итого под ключ</b><small>Расчёт действует до ${dateRu(q.validUntil)}</small></span><strong>${money(q.total)}</strong></div>
+    ${outdated?'<div class="auto-client-decision warn"><b>Предыдущая версия расчёта</b><span>Актуальный расчёт доступен при открытии карточки заявки.</span></div>':''}
     ${agreed?(saving?'<div role="status" class="auto-client-decision"><b>Сохраняем решение…</b></div>':'<div class="auto-client-decision good"><b>Расчёт согласован</b><span>Решение сохранено. Следующий шаг — депозит и оформление заказа.</span></div>'):''}
     ${changes?`<div class="auto-client-decision warn"><b>Запрошены изменения</b><span>${esc(q.clientComment||'Менеджер получил ваш запрос и подготовит следующую версию расчёта.')}</span></div>`:''}
     ${actionable?`<div class="auto-client-quote-actions"><button type="button" class="auto-btn primary" data-client-quote-agree="${esc(q.id)}">Согласовать расчёт</button><button type="button" class="auto-btn ghost" data-client-quote-change="${esc(q.id)}">Нужны изменения</button></div><div class="auto-client-change" data-client-change-panel hidden><label>Что нужно изменить?<textarea data-client-quote-comment placeholder="Например: другой бюджет, комплектация, сроки доставки…"></textarea></label><div class="auto-actions"><button type="button" class="auto-btn primary" data-client-quote-send-change="${esc(q.id)}">Отправить менеджеру</button><button type="button" class="auto-btn ghost" data-client-quote-cancel-change>Отмена</button></div></div>`:''}
@@ -26,7 +28,8 @@ function panel(leadId,q){
 function updateGuide(modal,q){
   const node=modal.querySelector('.auto-guide span');if(!node)return;
   let next='';
-  if(q?.status==='Согласован')next=saving?'Сохраняем решение…':'Расчёт согласован. Следующий шаг — внесение депозита и создание заказа.';
+  if(q&&quoteFor(q.leadId)?.id!==q.id)next='Это предыдущая версия расчёта. Откройте карточку заявки, чтобы увидеть актуальный расчёт.';
+  else if(q?.status==='Согласован')next=saving?'Сохраняем решение…':'Расчёт согласован. Следующий шаг — внесение депозита и создание заказа.';
   else if(q?.clientDecision==='changes_requested')next='Запрос на изменения отправлен. Менеджер подготовит обновлённый расчёт.';
   else if(q&&['Отправлен','На согласовании'].includes(q.status))next='Проверьте расчёт ниже и нажмите «Согласовать расчёт» или «Нужны изменения».';
   if(next&&node.textContent!==next)node.textContent=next;
@@ -35,9 +38,9 @@ function updateGuide(modal,q){
 function enhanceClient(){
   const modal=document.querySelector('[data-client-detail-bg] .auto-tg-modal');if(!modal)return;
   const id=modal.querySelector('[data-tg-manager]')?.dataset.tgManager||'';if(!id)return;
-  const q=quoteFor(id);if(!q||q.status==='Черновик')return;
+  const q=modal.closest('[data-client-detail-bg]')?.dataset.notificationQuote?read(K.quotes,[]).find(row=>row.id===modal.closest('[data-client-detail-bg]').dataset.notificationQuote&&row.leadId===id):quoteFor(id);if(!q||q.status==='Черновик')return;
   const current=modal.querySelector('.auto-client-quote');
-  const state=`${q.status}|${q.clientDecision||''}|${q.clientComment||''}|${saving}`;
+  const state=`${q.status}|${q.clientDecision||''}|${q.clientComment||''}|${saving}|${quoteFor(id)?.id||''}`;
   if(current?.dataset.clientQuote===q.id&&current.dataset.state===state){updateGuide(modal,q);return}
   current?.remove();
   const grid=modal.querySelector('.auto-client-order-grid');
@@ -71,6 +74,7 @@ let saving=false;
 async function saveDecision(id,decision,comment=''){
   if(saving)return false;
   const before=read(K.quotes,[]).find(q=>q.id===id);if(!before||!['Отправлен','На согласовании'].includes(before.status))return false;
+  if(quoteFor(before.leadId)?.id!==before.id)return false;
   if(decision==='agreed'){
     const errors=validateQuote({...before,status:'Согласован'});
     if(errors.length){decisionError('Менеджеру нужно завершить проверку автомобиля и данные расчёта. '+errors.join(' '));return false}

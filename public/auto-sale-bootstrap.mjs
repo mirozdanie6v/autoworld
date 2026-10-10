@@ -338,11 +338,11 @@ function normalizeSettledPaymentField(){
 
 await ensureTelegramSdk();
 isolateBootstrapCache();
-const vkModule=await import('./auto-sale-vk.mjs?v=20261008-vk-v3');
+const vkModule=await import('./auto-sale-vk.mjs?v=20261011-vk-notifications-v1');
 const vkShellPromise=vkLaunchParams()?vkModule.initVkMiniAppShell():Promise.resolve({ok:true,skipped:'not-vk'});
 const initialStatePromise=pullInitialState();
 await import('./auto-sale-submit-bridge.mjs?v=20260921-live-values-1');
-await import('./auto-sale-app-v3.mjs?v=20261010-vk-prod-v1');
+await import('./auto-sale-app-v3.mjs?v=20261011-vk-notifications-v1');
 await import('./auto-sale-calc-scroll-performance.mjs?v=20261010-scroll-v1');
 await import('./auto-sale-vk-web.mjs?v=20261010-vk-prod-v1');
 if(['awgcars.ru','www.awgcars.ru','vk-test.awgcars.ru'].includes(window.location.hostname)&&!telegramLaunchDetected()&&!telegramInitData()&&!new URLSearchParams(window.location.search||'').has('vk_app_id'))await import('./auto-sale-vk-status-widget.mjs?v=20261010-web-only-v2');
@@ -353,9 +353,10 @@ await import('./auto-sale-lead-status-fix.mjs');
 await import('./auto-sale-required-fields.mjs');
 await import('./auto-sale-request-submit-feedback.mjs?v=20261010-request-visibility-v1');
 await import('./auto-sale-director-team.mjs?v=20260929-entity-cutover-1');
-await import('./auto-sale-telegram.mjs?v=20260929-entity-cutover-1');
+await import('./auto-sale-telegram.mjs?v=20261011-vk-notifications-v1');
 await import('./auto-sale-telegram-id.mjs?v=20260927-safe-chat-link-v2');
-await import('./auto-sale-client-quote.mjs?v=20260929-entity-cutover-1');
+await import('./auto-sale-client-quote.mjs?v=20261011-vk-notifications-v1');
+await import('./auto-sale-vk-notification-navigation.mjs?v=20261011-v1');
 normalizeSettledPaymentField();
 const appRoot=document.querySelector('#app');
 if(appRoot)new MutationObserver(()=>queueMicrotask(normalizeSettledPaymentField)).observe(appRoot,{childList:true,subtree:true});

@@ -110,7 +110,7 @@ function clientIdentityPatch(user,identityInput=null){
   };
 }
 
-export function sanitizeClientOperations(state,operations,user,identityInput=null){
+export function sanitizeClientOperations(state,operations,user,identityInput=null,{now=()=>new Date().toISOString()}={}){
   const identity=identityFrom(identityInput||{provider:user?.provider||'telegram',id:user?.id});
   if(!identity)return{ok:false,status:401,error:'telegram_auth_required'};
   const source=Array.isArray(operations)?operations:[];
@@ -132,6 +132,7 @@ export function sanitizeClientOperations(state,operations,user,identityInput=nul
         id,
         source:'Mini App',manager:'',status:'Новый',priority:'Средний',
         createdAt:input.createdAt||new Date().toISOString(),nextAction:input.nextAction||new Date().toISOString().slice(0,10),
+        acquisitionChannel:identity.provider,clientSubmittedAt:now(),
         deposit:0,depositDate:'',paymentMethod:'',
         ...clientIdentityPatch(user,identity)
       };
@@ -205,7 +206,8 @@ export function applyManagerLeadClaims(state,operations,access,{now=()=>new Date
     const hasStatus=Object.prototype.hasOwnProperty.call(input,'status');
     const statusChanged=hasStatus&&clean(input.status)!==clean(current.status);
     const managerFields=['manager','managerClaimedAt','managerClaimedByTelegramUserId',
-      'managerClaimedByTelegramUsername','managerTelegramUserId','managerTelegramUsername'];
+      'managerClaimedByTelegramUsername','managerTelegramUserId','managerTelegramUsername',
+      'firstManagerActionAt','acquisitionChannel','clientSubmittedAt'];
     // All manager attribution is server-owned; incoming values cannot impersonate staff.
     for(const key of managerFields)delete input[key];
     if(statusChanged){
@@ -216,6 +218,7 @@ export function applyManagerLeadClaims(state,operations,access,{now=()=>new Date
       // from an earlier manager. Status concurrency is enforced by row version.
       input.manager=actorName;
       input.managerClaimedAt=now();
+      if(!clean(current.firstManagerActionAt))input.firstManagerActionAt=input.managerClaimedAt;
       input.managerClaimedByTelegramUserId=actorTelegramId;
       input.managerClaimedByTelegramUsername=actorTelegramUsername;
       // Clearing an old Telegram route avoids notifying the former owner.
@@ -233,8 +236,13 @@ export function applyManagerLeadClaims(state,operations,access,{now=()=>new Date
 export function sanitizeAdminOperations(operations,{apiKey=false}={}){
   if(apiKey)return Array.isArray(operations)?operations:[];
   return (Array.isArray(operations)?operations:[]).map(raw=>{
-    if(clean(raw?.resource)!=='team'||!raw?.input||typeof raw.input!=='object')return raw;
+    if(!raw?.input||typeof raw.input!=='object')return raw;
     const input={...raw.input};
+    if(clean(raw.resource)==='lead'){
+      for(const key of ['firstManagerActionAt','acquisitionChannel','clientSubmittedAt'])delete input[key];
+      return{...raw,input};
+    }
+    if(clean(raw.resource)!=='team')return raw;
     for(const key of ['telegramUserId','telegramUsername','telegramFirstName','telegramLastName','telegramLinkedAt'])delete input[key];
     return{...raw,input};
   });

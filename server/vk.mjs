@@ -1,4 +1,5 @@
 import {createHash,createHmac,timingSafeEqual} from 'node:crypto';
+import {notificationTarget,notificationHash} from '../shared/auto-sale-notification-links.mjs';
 
 const clean=value=>String(value??'').trim();
 const enabledFlag=value=>/^(1|true|yes)$/i.test(clean(value));
@@ -75,7 +76,7 @@ export function createVkService({
     };
   }
 
-  async function send(userId,message,{idempotencyKey=''}={}){
+  async function send(userId,message,{idempotencyKey='',notification=null}={}){
     const peerId=numeric(userId),text=clean(message);
     if(!messagingEnabled){const error=new Error('vk_messaging_not_configured');error.statusCode=503;throw error}
     if(!peerId){const error=new Error('vk_user_id_required');error.statusCode=409;throw error}
@@ -87,13 +88,26 @@ export function createVkService({
       random_id:String(randomIdFromKey(idempotencyKey||`${peerId}:${text}`)),
       message:text
     });
-    const response=await fetchImpl(`${clean(apiBaseUrl).replace(/\/$/,'')}/messages.send`,{
-      method:'POST',
-      headers:{'content-type':'application/x-www-form-urlencoded'},
-      body:body.toString(),
-      signal:AbortSignal.timeout(8000)
-    });
-    let data={};try{data=await response.json()}catch{}
+    const target=notificationTarget(notification||{}),hash=notificationHash(target);
+    if(hash){
+      const label=target.type==='quote'?'Посмотреть расчёт':target.type==='order'?'Открыть заказ':'Открыть заявку';
+      body.set('keyboard',JSON.stringify({inline:true,buttons:[[{action:{type:'open_app',app_id:Number(vkAppId),owner_id:-Number(vkGroupId),hash,label}}]]}));
+    }
+    async function request(){
+      const response=await fetchImpl(`${clean(apiBaseUrl).replace(/\/$/,'')}/messages.send`,{
+        method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},
+        body:body.toString(),signal:AbortSignal.timeout(8000)
+      });
+      let data={};try{data=await response.json()}catch{}
+      return{response,data};
+    }
+    let {response,data}=await request();
+    // Some communities do not accept keyboards. Keep the same random_id so
+    // falling back to text cannot produce a second delivery.
+    if(Number(data?.error?.error_code)===911&&body.has('keyboard')){
+      body.delete('keyboard');
+      ({response,data}=await request());
+    }
     if(!response.ok||data?.error){
       const code=Number(data?.error?.error_code||0);
       const error=new Error(code===901?'vk_messages_not_allowed':'vk_api_error');

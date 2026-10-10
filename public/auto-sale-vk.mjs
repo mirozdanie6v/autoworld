@@ -10,6 +10,7 @@ let configPromise=null;
 let initPromise=null;
 let userPromise=null;
 let currentVkUser=null;
+let messagesPromise=null;
 
 function withTimeout(promise,ms,code){
   let timer=null;
@@ -133,6 +134,7 @@ export async function initVkMiniAppShell(){
       const result={ok:true};
       window.__AUTO_SALE_VK_SHELL__=result;
       void ensureVkUserProfile(bridge);
+      void restoreVkMessagesState().catch(()=>console.warn('AUTO SALE VK permission state unavailable'));
       return result;
     }catch(error){
       console.warn('AUTO SALE VK shell initialization failed',String(error?.message||error));
@@ -144,19 +146,62 @@ export async function initVkMiniAppShell(){
   return initPromise;
 }
 
-export async function ensureVkMessagesAllowed(){
+function setMessagesState(status){
+  window.__AUTO_SALE_VK_MESSAGES_STATE__={status};
+  renderVkMessagesHint();
+}
+
+async function restoreVkMessagesState(){
+  const config=await vkConfig();
+  if(!config?.messagingEnabled||!config?.groupId)return;
+  let cached=null;
+  try{cached=sessionStorage.getItem(`auto-sale-vk-messages-allowed:${config.groupId}:${launchVkUserId()}`)}catch{return}
+  if(cached==='1'||cached==='0')setMessagesState(cached==='1'?'allowed':'denied');
+}
+
+export function renderVkMessagesHint(){
+  if(typeof document==='undefined')return;
+  const state=window.__AUTO_SALE_VK_MESSAGES_STATE__;
+  const form=document.querySelector('#requestForm');
+  const area=form?.elements?.managerMode?.value==='0'?form:document.querySelector('[data-client-orders]');
+  document.querySelectorAll('[data-vk-messages-notice]').forEach(node=>{if(!area?.contains(node))node.remove()});
+  if(!area)return;
+  let note=area.querySelector('[data-vk-messages-notice]');
+  if(!state||state.status==='allowed'){note?.remove();return}
+  if(!note){note=document.createElement('div');note.className='auto-note full';note.dataset.vkMessagesNotice='1';note.setAttribute('role','status');area.prepend(note)}
+  const unavailable=state.status==='unavailable',pending=state.status==='pending';
+  note.innerHTML='<b>Сообщения ВК</b><span>Статусы заявки доступны в «Мои заказы». '+
+    (unavailable?'Уведомления ВК временно недоступны.':pending?'Ожидаем разрешение на сообщения.':'Включите сообщения, чтобы получать расчёт и этапы доставки в ВК.')+'</span>'+
+    (unavailable?'':'<button type="button" class="auto-btn ghost" data-vk-allow-messages'+(pending?' disabled':'')+'>Включить сообщения</button>');
+}
+
+export function ensureVkMessagesAllowed(options={}){
+  if(!messagesPromise)messagesPromise=requestVkMessagesAllowed(options).finally(()=>{messagesPromise=null});
+  return messagesPromise;
+}
+
+async function requestVkMessagesAllowed({force=false}={}){
   if(!hasVkLaunch())return{ok:true,skipped:'not-vk'};
   const shell=await initVkMiniAppShell();
-  if(!shell.ok)return shell;
-  if(sessionStorage.getItem('auto-sale-vk-messages-allowed')==='1')return{ok:true,cached:true};
+  if(!shell.ok){setMessagesState('unavailable');return shell}
+  if(force)configPromise=null;
   const config=await vkConfig();
-  if(!config?.enabled||!config?.groupId)return{ok:false,skipped:'vk-messaging-not-configured'};
+  if(!config?.enabled||!config?.messagingEnabled||!config?.groupId){setMessagesState('unavailable');return{ok:false,skipped:'vk-messaging-not-configured'}}
+  const cacheKey=`auto-sale-vk-messages-allowed:${config.groupId}:${launchVkUserId()}`;
+  let cached=false;
+  try{cached=sessionStorage.getItem(cacheKey)==='1'}catch{console.warn('AUTO SALE VK permission cache unavailable')}
+  if(!force&&cached){setMessagesState('allowed');return{ok:true,cached:true}}
+  setMessagesState('pending');
   try{
     const bridge=await loadBridge();
-    await bridge.send('VKWebAppAllowMessagesFromGroup',{group_id:Number(config.groupId)});
-    sessionStorage.setItem('auto-sale-vk-messages-allowed','1');
+    const permission=await withTimeout(bridge.send('VKWebAppAllowMessagesFromGroup',{group_id:Number(config.groupId)}),15000,'vk_messages_permission_timeout');
+    if(permission?.result!==true)throw new Error('vk_messages_permission_not_granted');
+    try{sessionStorage.setItem(cacheKey,'1')}catch{console.warn('AUTO SALE VK permission cache unavailable')}
+    setMessagesState('allowed');
     return{ok:true};
   }catch(error){
+    try{sessionStorage.setItem(cacheKey,'0')}catch{console.warn('AUTO SALE VK permission cache unavailable')}
+    setMessagesState('denied');
     console.warn('AUTO SALE VK messages permission not granted',String(error?.message||error));
     return{ok:false,error:'vk_messages_permission_not_granted'};
   }
@@ -165,6 +210,9 @@ export async function ensureVkMessagesAllowed(){
 if(typeof document!=='undefined'){
   document.addEventListener('click',event=>{
     if(event.target?.closest?.('[data-open-request],[data-request-car]'))scheduleVkClientPrefill();
+    if(event.target?.closest?.('[data-vk-allow-messages]')&&!event.target.closest('[data-vk-allow-messages]').disabled){
+      void ensureVkMessagesAllowed({force:true}).catch(()=>setMessagesState('unavailable'));
+    }
   },true);
   document.addEventListener('submit',event=>{
     if(event.target?.id==='requestForm')autofillVkClientRequest();
@@ -174,3 +222,4 @@ if(typeof document!=='undefined'){
 window.__AUTO_SALE_INIT_VK_SHELL__=initVkMiniAppShell;
 window.__AUTO_SALE_ENSURE_VK_MESSAGES__=ensureVkMessagesAllowed;
 window.__AUTO_SALE_PREFILL_VK_CLIENT__=autofillVkClientRequest;
+window.__AUTO_SALE_RENDER_VK_MESSAGES_HINT__=renderVkMessagesHint;

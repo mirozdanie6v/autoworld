@@ -184,8 +184,8 @@ export function createTelegramService({
     return{ok:true,chatId:recipient.chatId,messageId:result?.message_id||null};
   }
 
-  async function collectStateChanges(previous,next){
-    if(!enabled||!previous?.initialized)return[];
+  async function collectStateChanges(previous,next,{telegramEnabled=enabled,vkEnabled=enabled}={}){
+    if((!telegramEnabled&&!vkEnabled)||!previous?.initialized)return[];
     const deliveries=[];
     const eventKey=meta=>[Number(previous.revision||0)+1,meta.event,meta.leadId,meta.quoteId,meta.orderId,meta.paymentId].filter(x=>x!==undefined&&x!=='').join(':');
     const prevLeads=new Map(arr(previous.leads).map(x=>[clean(x.id),x]));
@@ -196,6 +196,7 @@ export function createTelegramService({
     const actionMarkup=label=>appUrl?{inline_keyboard:[[{text:label,web_app:{url:appUrl}}]]}:null;
     const deliver=async(route,message,meta,replyMarkup=null)=>{
       const channel=clean(route?.channel)||'telegram';
+      if((channel==='telegram'&&!telegramEnabled)||(channel==='vk'&&!vkEnabled))return;
       const recipientId=clean(route?.id);
       if(!recipientId)return;
       const recipientKey=channel==='telegram'?recipientId:`${channel}:${recipientId}`;
