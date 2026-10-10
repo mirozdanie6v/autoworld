@@ -1,9 +1,6 @@
 name: AWG full Telegram sales cycle
 run-name: "Flyer_kg → ${{ inputs.manager || 'Алексей' }} · ${{ inputs.mode || 'full_cycle' }}"
 on:
-  push:
-    branches: [main]
-    paths: [.github/workflows/run-awg-telegram-full-cycle.yml]
   workflow_dispatch:
     inputs:
       manager:
