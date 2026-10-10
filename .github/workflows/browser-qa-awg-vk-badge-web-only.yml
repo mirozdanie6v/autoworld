@@ -1,0 +1,33 @@
+name: Browser QA AWG web-only VK badge in production
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/browser-qa-awg-vk-badge-web-only.yml
+      - scripts/test-awg-vk-badge-web-only-production-browser.mjs
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Install isolated Chromium
+        run: |
+          set -euo pipefail
+          npm install --no-save --ignore-scripts playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Check live web browser, Telegram and VK Mini App presentation
+        run: node scripts/test-awg-vk-badge-web-only-production-browser.mjs
+      - name: Save browser screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: awg-web-only-vk-badge-qa
+          path: awg-vk-badge-*.png
+          if-no-files-found: ignore
