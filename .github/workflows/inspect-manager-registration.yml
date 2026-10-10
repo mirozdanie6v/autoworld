@@ -1,0 +1,22 @@
+name: Inspect AWG manager registration (read only)
+on:
+  push:
+    branches: [diagnostics/manager-registration-20261010]
+    paths: [.github/workflows/inspect-manager-registration.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - name: Read live production manager registration counters
+        run: |
+          set -euo pipefail
+          date -u +CHECKED_AT=%Y-%m-%dT%H:%M:%SZ
+          curl --retry 1 --retry-delay 2 --retry-max-time 55 --connect-timeout 10 --max-time 25 \
+            --fail --silent --show-error -H 'Cache-Control: no-cache' \
+            https://awgcars.ru/api/health -o "$RUNNER_TEMP/awg-manager-health.json"
+          jq -e '.ok == true and (.linkedAdminAccounts | type) == "number"' "$RUNNER_TEMP/awg-manager-health.json" >/dev/null
+          jq -c '{ok,buildSha,maxAdminAccounts,adminInvites,linkedAdminAccounts,telegramNotifications,telegramRoutableManagers,telegramRoutingReady}' "$RUNNER_TEMP/awg-manager-health.json"
