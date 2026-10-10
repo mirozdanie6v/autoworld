@@ -95,7 +95,16 @@ jobs:
           echo '=== PRODUCTION LOCKBOX SECRET METADATA (no payload) ==='
           yc lockbox secret get --id e6qg57io19p3gqg73q7g --format json > "$RUNNER_TEMP/vk-secret.json"
           jq -e '.name=="autoworld-vk-web-session"' "$RUNNER_TEMP/vk-secret.json" >/dev/null
-          jq -c '{id,name,status,folderId:(.folder_id // .folderId)}' "$RUNNER_TEMP/vk-secret.json"
+          jq -c '{id,name,status,folderId:(.folder_id // .folderId),kmsKeyId:(.kms_key_id // .kmsKeyId // null)}' "$RUNNER_TEMP/vk-secret.json"
+          KMS_KEY=$(jq -r '.kms_key_id // .kmsKeyId // empty' "$RUNNER_TEMP/vk-secret.json")
+          if [ -n "$KMS_KEY" ]; then
+            echo '=== CUSTOMER-MANAGED KMS KEY ACCESS (metadata only) ==='
+            yc kms symmetric-key get --id "$KMS_KEY" --format json | jq -c '{id,name,status,folder_id}'
+            yc kms symmetric-key list-access-bindings --id "$KMS_KEY" --format json \
+              | jq -c '((if type=="array" then . else (.access_bindings // []) end) | map(select((.subject.id // "")=="aje8o9ric0d20k11521r") | {role_id,subject}))' || echo 'KMS key policy list denied or unavailable'
+          else
+            echo 'Secret has no customer-managed KMS key in metadata.'
+          fi
           echo '=== SECRET RESOURCE-LEVEL ROLE BINDINGS (metadata only) ==='
           yc lockbox secret list-access-bindings --id e6qg57io19p3gqg73q7g --format json \
             | jq -c '((if type=="array" then . else (.access_bindings // []) end) | map({role_id,subject}))' || echo 'Secret policy list denied or unavailable'
