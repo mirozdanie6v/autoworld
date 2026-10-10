@@ -53,7 +53,20 @@ try{
   assert.equal(start.status(),302,'VK ID authorization endpoint redirects');
   const destination=start.headers()['location']||'';
   assert.match(destination,/^https:\/\/id\.vk\.ru\/authorize\?/);
-  assert.ok(destination.includes('awgcars.ru'),'OAuth callback returns to production host');
+  const vkAuthorization=new URL(destination);
+  assert.equal(vkAuthorization.searchParams.get('client_id'),'54811927','VK ID web app matches the registered application');
+  assert.equal(vkAuthorization.searchParams.get('redirect_uri'),'https://awgcars.ru/api/auto-sale/vk/web/callback','production redirect URL matches the VK dashboard entry');
+  assert.equal(vkAuthorization.searchParams.get('response_type'),'code','authorization code flow');
+  assert.equal(vkAuthorization.searchParams.get('code_challenge_method'),'s256','VK SDK PKCE method');
+  assert.ok(vkAuthorization.searchParams.has('state'),'CSRF state provided');
+  assert.ok(vkAuthorization.searchParams.has('code_challenge'),'PKCE challenge provided');
+  console.log('VK_OAUTH_PRODUCTION_PARAMETERS_VERIFIED',JSON.stringify({
+    authorizationHost:vkAuthorization.hostname,
+    clientId:vkAuthorization.searchParams.get('client_id'),
+    redirectUri:vkAuthorization.searchParams.get('redirect_uri'),
+    responseType:vkAuthorization.searchParams.get('response_type'),
+    pkceMethod:vkAuthorization.searchParams.get('code_challenge_method')
+  }));
   await page.screenshot({path:'awg-vk-production-mobile-login.png',fullPage:false});
   await page.locator('[data-go="catalog"]').first().click();
   assert.ok(await page.locator('[data-vk-status-widget]').isVisible(),'widget remains after SPA navigation');
