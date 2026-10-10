@@ -79,7 +79,7 @@ jobs:
           yc serverless container revision get "$OLD_REV" --folder-id "$YC_FOLDER_ID" --format json > "$RUNNER_TEMP/prod.json"
           R="$RUNNER_TEMP/prod.json"
           echo '=== CURRENT PRODUCTION REVISION (metadata only) ==='
-          jq -c '{container_id, status, service_account_id, image: (.image.image_url // .image.imageUrl),memory: .resources.memory,cores: .resources.cores,core_fraction: .resources.core_fraction,environmentKeys:(.image.environment|keys|sort),flags:{web: .image.environment.AUTO_SALE_VK_WEB_ENABLED, mini:.image.environment.AUTO_SALE_VK_ENABLED, origin:.image.environment.AUTO_SALE_VK_WEB_ORIGIN, clientId:.image.environment.AUTO_SALE_VK_WEB_CLIENT_ID, ydbMode:.image.environment.AUTO_SALE_YDB_READ_MODE, legacyWrite:.image.environment.AUTO_SALE_LEGACY_STATE_WRITE, dualWrite:.image.environment.AUTO_SALE_YDB_DUAL_WRITE},secretBindings:(.secrets//[] | map({environmentVariable:(.environment_variable//.environmentVariable),key,id,versionId:(.version_id//.versionId)}))}' "$R"
+          jq -c '{revision_id:.id,container_id, status, service_account_id, image: (.image.image_url // .image.imageUrl),memory: .resources.memory,cores: .resources.cores,core_fraction: .resources.core_fraction,environmentKeys:(.image.environment|keys|sort),flags:{web: .image.environment.AUTO_SALE_VK_WEB_ENABLED, mini:.image.environment.AUTO_SALE_VK_ENABLED, origin:.image.environment.AUTO_SALE_VK_WEB_ORIGIN, clientId:.image.environment.AUTO_SALE_VK_WEB_CLIENT_ID, ydbMode:.image.environment.AUTO_SALE_YDB_READ_MODE, legacyWrite:.image.environment.AUTO_SALE_LEGACY_STATE_WRITE, dualWrite:.image.environment.AUTO_SALE_YDB_DUAL_WRITE},secretBindings:(.secrets//[] | map({environmentVariable:(.environment_variable//.environmentVariable),key,id,versionId:(.version_id//.versionId)}))}' "$R"
           # Guard against ever targeting test YDB or disabled VK Mini App.
           jq -e --arg suffix "$EXPECTED_YDB_SUFFIX" '
             .status=="ACTIVE" and (.image.environment.YDB_CONNECTION_STRING|endswith($suffix)) and
@@ -97,38 +97,20 @@ jobs:
           yc lockbox secret get --id e6qg57io19p3gqg73q7g --format json > "$RUNNER_TEMP/vk-secret.json"
           jq -e '.name=="autoworld-vk-web-session"' "$RUNNER_TEMP/vk-secret.json" >/dev/null
           jq -c '{id,name,status,folderId:(.folder_id // .folderId),kmsKeyId:(.kms_key_id // .kmsKeyId // null)}' "$RUNNER_TEMP/vk-secret.json"
-          KMS_KEY=$(jq -r '.kms_key_id // .kmsKeyId // empty' "$RUNNER_TEMP/vk-secret.json")
-          if [ -n "$KMS_KEY" ]; then
-            echo '=== CUSTOMER-MANAGED KMS KEY ACCESS (metadata only) ==='
-            yc kms symmetric-key get --id "$KMS_KEY" --format json | jq -c '{id,name,status,folder_id}'
-            yc kms symmetric-key list-access-bindings --id "$KMS_KEY" --format json \
-              | jq -c '((if type=="array" then . else (.access_bindings // []) end) | map(select((.subject.id // "")=="aje8o9ric0d20k11521r") | {role_id,subject}))' || echo 'KMS key policy list denied or unavailable'
-          else
-            echo 'Secret has no customer-managed KMS key in metadata.'
-          fi
-          echo '=== SECRET RESOURCE-LEVEL ROLE BINDINGS (metadata only) ==='
-          yc lockbox secret list-access-bindings --id e6qg57io19p3gqg73q7g --format json \
-            | jq -c '((if type=="array" then . else (.access_bindings // []) end) | map({role_id,subject}))' || echo 'Secret policy list denied or unavailable'
-          SECRET_FOLDER_ID=$(jq -er '.folder_id // .folderId' "$RUNNER_TEMP/vk-secret.json")
-          echo "Secret folder ID: $SECRET_FOLDER_ID"
-          echo '=== FOLDER BINDINGS FOR EXACT RUNTIME (metadata only) ==='
-          yc resource-manager folder list-access-bindings --id "$SECRET_FOLDER_ID" --format json \
-            | jq -c '((if type=="array" then . else (.access_bindings // []) end) | map(select((.subject.id // "")=="aje8o9ric0d20k11521r") | {role_id,subject}))' || echo 'Folder policy list denied or unavailable'
-          echo '=== SERVICE ACCOUNT METADATA (no keys) ==='
-          yc iam service-account get --id aje8o9ric0d20k11521r --format json \
-            | jq -c '{id,name,folder_id}' || echo 'Service account metadata unavailable'
-          ACTUAL_SECRET_ID=$(jq -er '.id' "$RUNNER_TEMP/vk-secret.json")
-          yc lockbox secret list-versions --id "$ACTUAL_SECRET_ID" --format json | jq -c '[.[] | {id,status}]'
-          echo 'Only selected secret metadata and version IDs; secret payloads are never fetched.'
-          echo 'Read-only post-deploy-failure production safety check; no production writes.'
+          # Existing pinned bindings are preserved; this feature does not alter
+          # secret payloads or IAM/KMS policies. Those administrative reads are
+          # outside this application's deployment permissions.
           echo '=== PUBLIC HTTP DIAGNOSTICS ==='
           for path in / /auto-sale-bootstrap.mjs /api/health /api/auto-sale/vk/web/config; do
             code=$(curl -sS --connect-timeout 10 --max-time 35 -o "$RUNNER_TEMP/http-out" -w '%{http_code}' "$PROD_HOST$path" || true)
             echo "$path = $code"
+            test "$code" = 200 || { echo "::error::Production HTTP preflight failed at $path"; exit 1; }
             if [ "$path" = /api/health ] && [ "$code" = 200 ]; then
+              jq -e '.ok==true and .vkAuth=="enabled" and .vkMessaging=="enabled" and .telegramRoutableManagers>=2' "$RUNNER_TEMP/http-out" >/dev/null
               jq -c '{ok,vkAuth,vkMessaging,telegramRoutableManagers,buildSha}' "$RUNNER_TEMP/http-out" || true
             fi
             if [ "$path" = /api/auto-sale/vk/web/config ] && [ "$code" = 200 ]; then
+              jq -e '.enabled==true and .authenticated==false' "$RUNNER_TEMP/http-out" >/dev/null
               jq -c '{enabled,authenticated}' "$RUNNER_TEMP/http-out" || true
             fi
           done
