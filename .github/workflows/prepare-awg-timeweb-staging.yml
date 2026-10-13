@@ -23,13 +23,14 @@ jobs:
       TIMEWEB_CLOUD_TOKEN: ${{ secrets.TIMEWEB_CLOUD_TOKEN }}
       AWG_TIMEWEB_SSH_PUBLIC_KEY: ${{ vars.AWG_TIMEWEB_SSH_PUBLIC_KEY }}
       CREATE_SERVER: ${{ inputs.create_server }}
-      AWG_TIMEWEB_PLAN_OUTPUT: ${{ runner.temp }}/timeweb-staging-plan.json
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
           node-version: 22
       - name: Inspect account and prepare staging
+        env:
+          AWG_TIMEWEB_PLAN_OUTPUT: ${{ runner.temp }}/timeweb-staging-plan.json
         shell: bash
         run: |
           set -euo pipefail
