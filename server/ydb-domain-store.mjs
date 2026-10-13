@@ -413,5 +413,31 @@ export async function createYdbDomainStore({
 
   async function close(){driver.close()}
 
-  return{sql,schemaVersion,replaceSnapshot,loadRows,loadReadSnapshot,loadAuthoritativeSnapshot,loadState,migrationMeta,entityRowVersion,counts,close};
+  async function loadRecoverySnapshot(){
+    return sql.begin({isolation:'snapshotReadOnly',idempotent:true},async tx=>{
+      const id=u64(1);
+      const sets=await tx`
+        SELECT compat_revision,schema_version,migration_status,source_revision,updated_at FROM auto_sale_state_meta WHERE id=${id};
+        SELECT id,row_version,sort_order,status,manager,source,client_created,payload,updated_at FROM auto_sale_leads;
+        SELECT id,row_version,sort_order,lead_id,status,quote_version,payload,updated_at FROM auto_sale_quotes;
+        SELECT id,row_version,sort_order,lead_id,stage,manager,risk_type,payload,updated_at FROM auto_sale_orders;
+        SELECT order_id,id,sort_order,amount,payment_date,method,payload,created_at FROM auto_sale_payments;
+        SELECT lead_id,id,sort_order,text,payload,created_at FROM auto_sale_notes;
+        SELECT id,row_version,sort_order,name,role,active,payload,updated_at FROM auto_sale_team;
+        SELECT id,row_version,sort_order,origin,active,auction_date,payload,updated_at FROM auto_sale_catalog;
+        SELECT subject_type,subject_id,telegram_user_id,username,first_name,last_name,linked_at,updated_at FROM auto_sale_telegram_bindings;
+        SELECT username,telegram_user_id,linked_at,last_seen_at FROM auto_sale_admin_access;
+        SELECT id,status,payload,attempts,next_attempt_at,created_at,updated_at,last_error,message_id FROM auto_sale_notification_outbox;
+      `;
+      const metaRow=sets?.[0]?.[0];
+      if(!metaRow)throw new Error('normalized_state_meta_missing');
+      return{
+        snapshot:{meta:{compatRevision:Number(metaRow.compat_revision),sourceRevision:Number(metaRow.source_revision),schemaVersion:Number(metaRow.schema_version),migrationStatus:String(metaRow.migration_status),updatedAt:String(metaRow.updated_at)},rows:mapDomainSets(sets.slice(1,9))},
+        adminAccess:(sets[9]||[]).map(row=>({username:String(row.username),telegramUserId:String(row.telegram_user_id),linkedAt:String(row.linked_at),lastSeenAt:String(row.last_seen_at)})),
+        outbox:(sets[10]||[]).map(row=>({id:String(row.id),status:String(row.status),payload:JSON.parse(String(row.payload)),attempts:Number(row.attempts),nextAttemptAt:String(row.next_attempt_at),createdAt:String(row.created_at),updatedAt:String(row.updated_at),lastError:String(row.last_error||''),messageId:String(row.message_id||'')}))
+      };
+    });
+  }
+
+  return{sql,schemaVersion,replaceSnapshot,loadRows,loadReadSnapshot,loadAuthoritativeSnapshot,loadRecoverySnapshot,loadState,migrationMeta,entityRowVersion,counts,close};
 }

@@ -12,6 +12,22 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: awg_runtime_test
+          POSTGRES_USER: awg_test
+          POSTGRES_PASSWORD: ci-test-only-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U awg_test -d awg_runtime_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      AWG_TEST_DATABASE_URL: postgresql://awg_test:ci-test-only-password@localhost:5432/awg_runtime_test
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -32,3 +48,5 @@ jobs:
           node --check scripts/e2e-yandex-workflow.mjs
       - name: Build Yandex runtime image
         run: docker build -f Dockerfile.yandex -t autoworld-yandex:check .
+      - name: Build portable runtime image
+        run: docker build -f Dockerfile.timeweb -t autoworld-timeweb:check .

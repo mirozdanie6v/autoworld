@@ -1,0 +1,50 @@
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: awg
+      POSTGRES_USER: awg
+      POSTGRES_PASSWORD: ${AWG_POSTGRES_PASSWORD:?required}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U awg -d awg]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  app:
+    image: ${AWG_RUNTIME_IMAGE:?required}
+    restart: unless-stopped
+    init: true
+    env_file: runtime.env
+    environment:
+      AUTO_SALE_PERSISTENCE: postgres
+      AUTO_SALE_MEDIA_PROVIDER: s3
+      DATABASE_URL: postgresql://awg:${AWG_POSTGRES_PASSWORD:?required}@postgres:5432/awg
+      AUTO_SALE_LEGACY_STATE_WRITE: "false"
+      AUTO_SALE_YDB_READ_MODE: normalized
+    expose:
+      - "8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    environment:
+      AWG_STAGING_HOST: ${AWG_STAGING_HOST:?required}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./static:/srv/awg-static:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - app
+volumes:
+  postgres-data:
+  caddy-data:
+  caddy-config:
