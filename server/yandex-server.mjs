@@ -21,12 +21,16 @@ const rootDir=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const distDir=path.join(rootDir,'dist');
 const port=Number(process.env.PORT||8080);
 const connectionString=String(process.env.YDB_CONNECTION_STRING||'').trim();
+const persistenceProvider=String(process.env.AUTO_SALE_PERSISTENCE||'ydb').trim();
+if(!['ydb','postgres'].includes(persistenceProvider))throw new Error('unsupported_persistence_provider');
+const postgresEnabled=persistenceProvider==='postgres';
+const databaseUrl=String(process.env.DATABASE_URL||'').trim();
 const apiKey=String(process.env.AUTO_SALE_API_KEY||'').trim();
 const catalogImportKey=String(process.env.AUTO_SALE_CATALOG_IMPORT_KEY||'').trim();
 const publicDemoWrite=/^(1|true|yes)$/i.test(String(process.env.AUTO_SALE_PUBLIC_DEMO_WRITE||''));
 const legacyStateWriteEnabled=/^(1|true|yes)$/i.test(String(process.env.AUTO_SALE_LEGACY_STATE_WRITE||''));
 const mediaBucket=String(process.env.AUTO_SALE_MEDIA_BUCKET||'').trim();
-const ydbReadMode=['legacy','shadow','normalized'].includes(String(process.env.AUTO_SALE_YDB_READ_MODE||''))?String(process.env.AUTO_SALE_YDB_READ_MODE):'legacy';
+const ydbReadMode=postgresEnabled?'normalized':['legacy','shadow','normalized'].includes(String(process.env.AUTO_SALE_YDB_READ_MODE||''))?String(process.env.AUTO_SALE_YDB_READ_MODE):'legacy';
 const adminTelegramUsernames=[...new Set(String(process.env.AUTO_SALE_ADMIN_TELEGRAM_USERNAMES||'Flyer_Flyer,smit44744,Ivan_AWG').split(',').map(x=>x.trim().replace(/^@/,'').toLowerCase()).filter(Boolean))].slice(0,MAX_ADMIN_ACCOUNTS);
 
 const normalizeTelegramUsername=value=>String(value||'').trim().replace(/^@/,'').toLowerCase();
@@ -64,13 +68,23 @@ async function claimAdminFromWebhook(update){
   if(!username||!/^\d+$/.test(userId)||!adminTelegramUsernames.includes(username))return null;
   return(await getStore()).claimAdminAccess(username,userId);
 }
-if(!connectionString)throw new Error('YDB_CONNECTION_STRING is required');
+if(postgresEnabled&&!databaseUrl)throw new Error('DATABASE_URL is required');
+if(!postgresEnabled&&!connectionString)throw new Error('YDB_CONNECTION_STRING is required');
+if(postgresEnabled&&legacyStateWriteEnabled)throw new Error('PostgreSQL runtime requires retired legacy state writes');
 if(!publicDemoWrite&&!apiKey)throw new Error('AUTO_SALE_API_KEY is required when public demo write is disabled');
 let store=null;
 let storePromise=null;
 let domainStore=null;
 let domainStorePromise=null;
+let postgresPromise=null;
+function getPostgresStores(){
+  if(!postgresPromise)postgresPromise=import('./postgres-runtime-store.mjs')
+    .then(({createPostgresRuntimeStores})=>createPostgresRuntimeStores({databaseUrl,ensureSchema:false}))
+    .catch(error=>{postgresPromise=null;throw error});
+  return postgresPromise;
+}
 async function getDomainStore(){
+  if(postgresEnabled)return(await getPostgresStores()).domainStore;
   if(domainStore)return domainStore;
   if(!domainStorePromise){
     domainStorePromise=createYdbDomainStore({connectionString,ensureSchema:false})
@@ -87,11 +101,14 @@ async function getApiState(){
   if(ydbReadMode==='legacy')return readAutoSaleState({legacyStore,domainStore:null,mode:'legacy'});
   return readAutoSaleState({legacyStore,domainStore:await getDomainStore(),mode:ydbReadMode,authoritativeNormalized:false});
 }
-const media=createObjectStorage({bucket:mediaBucket});
+const mediaProvider=String(process.env.AUTO_SALE_MEDIA_PROVIDER||'yandex');
+if(!['yandex','s3'].includes(mediaProvider))throw new Error('unsupported_media_provider');
+const media=mediaProvider==='s3'?(await import('./s3-storage.mjs')).createS3Storage({bucket:mediaBucket}):createObjectStorage({bucket:mediaBucket});
 const telegram=createTelegramService();
 const vk=createVkService();
 const vkWeb=createVkWebAuth();
 async function getStore(){
+  if(postgresEnabled)return(await getPostgresStores()).legacyStore;
   if(store)return store;
   if(!storePromise){
     storePromise=createYdbStateStore({connectionString,ensureSchema:false})
@@ -105,6 +122,7 @@ async function getEntityStores(){
   return{legacyStore,domainStore};
 }
 const notificationPumpIntervalMs=Math.max(15_000,Number(process.env.AUTO_SALE_NOTIFICATION_PUMP_MS||60_000));
+const notificationPumpEnabled=!/^(0|false|no)$/i.test(String(process.env.AUTO_SALE_NOTIFICATION_PUMP_ENABLED||'true'));
 let notificationPriorityWaiters=0;
 async function safeNotificationStats(){
   try{return await (await getStore()).notificationStats()}
@@ -331,7 +349,7 @@ const server=http.createServer(async(req,res)=>{
       const activeManagers=(Array.isArray(healthState?.team)?healthState.team:[]).filter(item=>item?.active!==false&&String(item?.role||'').trim()==='Менеджер');
       const routableManagerIds=new Set(activeManagers.flatMap(member=>telegram.managerIds({manager:String(member?.name||'').trim()},healthState)));
       const routableManagers=routableManagerIds.size;
-      json(res,{ok:true,service:'auto-sale-yandex',persistence:'ydb-serverless',schemaVersion:6,writeMode:'telegram-rbac',stateReadMode:'viewer-filtered',publicDemoWrite:Boolean(publicDemoWrite),maxAdminAccounts:MAX_ADMIN_ACCOUNTS,adminInvites:adminTelegramUsernames.length,linkedAdminAccounts:pins.length,legacyStateWrite:legacyStateWriteEnabled?'rollback-only':'retired',normalizedAuthoritative:ydbReadMode==='normalized'&&!legacyStateWriteEnabled,ydbDomainDualWrite:liveStore.domainDualWriteEnabled?'enabled':'disabled',ydbStateReadMode:ydbReadMode,mediaStorage:mediaBucket?'object-storage':'disabled',mediaBucket:mediaBucket||null,telegramNotifications:telegram.enabled?'enabled':'disabled',vkAuth:vk.enabled?'enabled':'disabled',vkMessaging:vk.messagingEnabled?'enabled':'disabled',telegramFallbackManagers:telegram.fallbackManagerCount,telegramRoutableManagers:routableManagers,telegramRoutingReady:Boolean(telegram.enabled&&routableManagers>0),catalogImport:(catalogImportKey?'secret+github-oidc':'github-oidc'),buildSha:String(process.env.AUTO_SALE_BUILD_SHA||'')});
+      json(res,{ok:true,service:postgresEnabled?'auto-sale-timeweb':'auto-sale-yandex',persistence:postgresEnabled?'postgresql':'ydb-serverless',schemaVersion:6,writeMode:'telegram-rbac',stateReadMode:'viewer-filtered',publicDemoWrite:Boolean(publicDemoWrite),maxAdminAccounts:MAX_ADMIN_ACCOUNTS,adminInvites:adminTelegramUsernames.length,linkedAdminAccounts:pins.length,legacyStateWrite:legacyStateWriteEnabled?'rollback-only':'retired',normalizedAuthoritative:ydbReadMode==='normalized'&&!legacyStateWriteEnabled,ydbDomainDualWrite:liveStore.domainDualWriteEnabled?'enabled':'disabled',ydbStateReadMode:ydbReadMode,mediaStorage:mediaBucket?(mediaProvider==='s3'?'s3':'object-storage'):'disabled',mediaBucket:mediaBucket||null,telegramNotifications:telegram.enabled?'enabled':'disabled',vkAuth:vk.enabled?'enabled':'disabled',vkMessaging:vk.messagingEnabled?'enabled':'disabled',telegramFallbackManagers:telegram.fallbackManagerCount,telegramRoutableManagers:routableManagers,telegramRoutingReady:Boolean(telegram.enabled&&routableManagers>0),catalogImport:(catalogImportKey?'secret+github-oidc':'github-oidc'),buildSha:String(process.env.AUTO_SALE_BUILD_SHA||'')});
       return;
     }
     if(url.pathname==='/api/auto-sale/admin/read-parity'&&req.method==='GET'){
@@ -964,16 +982,18 @@ const server=http.createServer(async(req,res)=>{
 });
 server.listen(port,'0.0.0.0',()=>{
   console.log(`AUTO SALE Yandex listening on ${port}`);
-  setTimeout(()=>processNotificationOutbox().catch(error=>console.error('AUTO SALE notification pump failed',error)),5_000).unref();
+  if(notificationPumpEnabled)setTimeout(()=>processNotificationOutbox().catch(error=>console.error('AUTO SALE notification pump failed',error)),5_000).unref();
 });
-const notificationPump=setInterval(()=>processNotificationOutbox().catch(error=>console.error('AUTO SALE notification pump failed',error)),notificationPumpIntervalMs);
-notificationPump.unref();
+const notificationPump=notificationPumpEnabled?setInterval(()=>processNotificationOutbox().catch(error=>console.error('AUTO SALE notification pump failed',error)),notificationPumpIntervalMs):null;
+notificationPump?.unref();
 
 const shutdown=signal=>{
   console.log(`Received ${signal}`);
   clearInterval(notificationPump);
   server.close(async()=>{
+    if(postgresPromise)await(await postgresPromise).close();
     if(store)await store.close();
+    if(domainStore)await domainStore.close();
     process.exit(0);
   });
   setTimeout(()=>process.exit(1),10000).unref();

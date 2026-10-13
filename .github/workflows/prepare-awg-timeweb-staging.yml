@@ -1,0 +1,45 @@
+name: Prepare AWG Timeweb staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      create_server:
+        description: Create the isolated 2 CPU / 4 GB staging server (base tariff capped at 1080 RUB/month; IPv4 and storage are extra)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: awg-timeweb-staging-provision
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      TIMEWEB_CLOUD_TOKEN: ${{ secrets.TIMEWEB_CLOUD_TOKEN }}
+      AWG_TIMEWEB_SSH_PUBLIC_KEY: ${{ vars.AWG_TIMEWEB_SSH_PUBLIC_KEY }}
+      CREATE_SERVER: ${{ inputs.create_server }}
+      AWG_TIMEWEB_PLAN_OUTPUT: ${{ runner.temp }}/timeweb-staging-plan.json
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Inspect account and prepare staging
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=()
+          if [ "$CREATE_SERVER" = "true" ]; then args+=(--create); fi
+          node scripts/prepare-awg-timeweb.mjs "${args[@]}"
+      - name: Save sanitized infrastructure report
+        uses: actions/upload-artifact@v4
+        with:
+          name: awg-timeweb-staging-plan
+          path: ${{ runner.temp }}/timeweb-staging-plan.json
+          retention-days: 7
+          if-no-files-found: error
