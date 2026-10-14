@@ -1,0 +1,53 @@
+name: AWG Timeweb plan only
+
+on:
+  push:
+    branches:
+      - feature/awg-timeweb-fresh-install-20261014
+    paths:
+      - .github/workflows/awg-timeweb-plan-only.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: awg-timeweb-readonly-plan
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    env:
+      TIMEWEB_CLOUD_TOKEN: ${{ secrets.TIMEWEB_CLOUD_TOKEN }}
+    steps:
+      - name: Checkout AWG candidate
+        uses: actions/checkout@v5
+      - name: Node 22
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Confirm API credential is configured
+        shell: bash
+        run: |
+          if [ -z "$TIMEWEB_CLOUD_TOKEN" ]; then
+            echo 'TIMEWEB_CLOUD_TOKEN is missing in repository Actions secrets'
+            exit 1
+          fi
+          echo 'Credential configured; only Timeweb GET requests will be made'
+      - name: Inspect actual Russian hosting tariffs (NO server creation)
+        shell: bash
+        env:
+          AWG_TIMEWEB_PLAN_OUTPUT: ${{ runner.temp }}/timeweb-readonly-plan.json
+        run: |
+          set -euo pipefail
+          node scripts/prepare-awg-timeweb.mjs
+      - name: Save sanitized plan
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: awg-timeweb-readonly-plan
+          path: ${{ runner.temp }}/timeweb-readonly-plan.json
+          retention-days: 7
+          if-no-files-found: error
