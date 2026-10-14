@@ -33,12 +33,11 @@ jobs:
         shell: bash
         run: |
           if [ "${#AWG_SSH_KEY_WRAP_PASSPHRASE}" -lt 32 ]; then
-            echo "::notice::Add a unique random 32+ character Actions Secret AWG_SSH_KEY_WRAP_PASSPHRASE, then rerun this workflow."
-            echo "ready=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "Encryption secret is present (value never displayed)."
-            echo "ready=true" >> "$GITHUB_OUTPUT"
+            echo "::error::A unique 32+ character Actions Secret AWG_SSH_KEY_WRAP_PASSPHRASE is required. No SSH key was created."
+            exit 1
           fi
+          echo "Encryption secret is present (value never displayed)."
+          echo "ready=true" >> "$GITHUB_OUTPUT"
       - name: Generate and encrypt ED25519 private key in ephemeral runner
         if: steps.prerequisites.outputs.ready == 'true'
         shell: bash
