@@ -2,10 +2,10 @@ import {writeFile} from 'node:fs/promises';
 import {pathToFileURL} from 'node:url';
 
 const serverName='awg-timeweb-staging';
-export function chooseTimewebPreset(presets,{maxPrice=1080}={}){
-  const candidates=presets.filter(p=>p.location==='ru-1'&&p.cpu===2&&p.ram===4096&&p.disk>=50000&&p.disk<=60000&&['ssd','nvme'].includes(p.disk_type)&&Number(p.price)<=maxPrice);
+export function chooseTimewebPreset(presets,{maxPrice=1940}={}){
+  const candidates=presets.filter(p=>p.location==='ru-1'&&p.cpu===1&&p.ram===2048&&p.disk>=30000&&p.disk<=32000&&['ssd','nvme'].includes(p.disk_type)&&Number(p.price)<=maxPrice);
   candidates.sort((a,b)=>Number(a.price)-Number(b.price)||a.id-b.id);
-  if(!candidates[0])throw new Error('No 2 CPU / 4 GB / 50 GB Russian preset within the permitted base price');
+  if(!candidates[0])throw new Error('No 1 CPU / 2 GB / 30 GB Russian preset within the permitted base price');
   return candidates[0];
 }
 export function timewebCloudInit(publicKey){
@@ -14,7 +14,7 @@ export function timewebCloudInit(publicKey){
     users:[{name:'root',ssh_authorized_keys:[publicKey]}],disable_root:false,ssh_pwauth:false,
     runcmd:[['systemctl','enable','--now','docker'],['install','-d','-m','0700','/opt/awg/staging'],['ufw','default','deny','incoming'],['ufw','allow','22/tcp'],['ufw','allow','80/tcp'],['ufw','allow','443/tcp'],['ufw','--force','enable']]});
 }
-export async function prepareTimeweb({token,create=false,publicKey,maxPrice=1080,fetchImpl=fetch}={}){
+export async function prepareTimeweb({token,create=false,publicKey,maxPrice=1940,fetchImpl=fetch}={}){
   if(!token)throw new Error('TIMEWEB_CLOUD_TOKEN is required');
   async function request(path,method='GET',body){
     const response=await fetchImpl('https://api.timeweb.cloud/api/v1'+path,{method,headers:{authorization:`Bearer ${token}`,'content-type':'application/json'},
@@ -44,7 +44,7 @@ export async function prepareTimeweb({token,create=false,publicKey,maxPrice=1080
   return{ok:true,created:true,serverId:server.id,status:server.status,plan};
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
-  const report=await prepareTimeweb({token:process.env.TIMEWEB_CLOUD_TOKEN,create:process.argv.includes('--create'),publicKey:String(process.env.AWG_TIMEWEB_SSH_PUBLIC_KEY||'').trim(),maxPrice:1080});
+  const report=await prepareTimeweb({token:process.env.TIMEWEB_CLOUD_TOKEN,create:process.argv.includes('--create'),publicKey:String(process.env.AWG_TIMEWEB_SSH_PUBLIC_KEY||'').trim(),maxPrice:1940});
   const output=process.env.AWG_TIMEWEB_PLAN_OUTPUT;
   if(output)await writeFile(output,JSON.stringify(report,null,2),{mode:0o600});
   console.log(JSON.stringify(report));
