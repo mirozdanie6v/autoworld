@@ -6,7 +6,7 @@ This path is for a **brand-new, isolated PostgreSQL database** when the Yandex Y
 
 ## Prerequisites
 
-1. A Timeweb Linux server in Russia (planned 1 vCPU / 2 GB RAM / 30 GB NVMe, Ubuntu 24.04), with Docker + Compose, public IPv4 and SSH. This is a target, not proof of provisioned capacity. The earlier `prepare-awg-timeweb-staging.yml` workflow is **outdated**: it targets 2 CPU / 4 GB / 50 GB under a 1,080 RUB cap. Do not use its `create_server=true` setting without revising and rechecking prices.
+1. A Timeweb Linux server in Russia (planned 1 vCPU / 2 GB RAM / 30 GB NVMe, Ubuntu 24.04), with Docker + Compose, public IPv4 and SSH. This is a target, not proof of provisioned capacity. The `prepare-awg-timeweb-staging.yml` workflow in this branch selects 1 CPU / 2 GB / 30 GB with a **base server price cap of 1,940 RUB/month**. IPv4, backups and S3 are additional. First run with `create_server=false` and review the returned price before a billable `create_server=true` run. Fail closed if the chosen configuration is unavailable or more expensive.
 2. A **new** Docker PostgreSQL volume, with no existing AWG data. The fresh initializer is fail-closed on any existing rows, admin bindings or notification outbox items.
 3. A staging-only hostname: `timeweb-staging.viiversion.com` or `awg-timeweb-staging.viiversion.com`. It must not point at the production backend. Configure its DNS to the new host when ready for public HTTPS testing.
 4. A Timeweb S3 bucket for **public catalogue photos only**, with private access keys for writes. Keep confidential backups in a separate private location.
