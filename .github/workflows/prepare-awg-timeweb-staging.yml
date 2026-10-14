@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: awg-timeweb-staging-provision
@@ -21,13 +22,17 @@ jobs:
     timeout-minutes: 5
     env:
       TIMEWEB_CLOUD_TOKEN: ${{ secrets.TIMEWEB_CLOUD_TOKEN }}
-      AWG_TIMEWEB_SSH_PUBLIC_KEY: ${{ vars.AWG_TIMEWEB_SSH_PUBLIC_KEY }}
       CREATE_SERVER: ${{ inputs.create_server }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
           node-version: 22
+      - name: Load verified public SSH key from the encrypted Actions artifact
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/resolve-awg-timeweb-ssh-key.sh
       - name: Inspect account and prepare staging
         env:
           AWG_TIMEWEB_PLAN_OUTPUT: ${{ runner.temp }}/timeweb-staging-plan.json
