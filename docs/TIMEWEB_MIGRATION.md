@@ -9,7 +9,7 @@ The existing Yandex deployment remains the default. PostgreSQL is selected only 
 
 Add `TIMEWEB_CLOUD_TOKEN` through the repository's Actions secrets UI. Do not send it in chat or commit it. The token needs to inspect/create cloud servers, read tariffs and OS images. `AWG_TIMEWEB_SSH_PUBLIC_KEY` is a repository variable containing a deployment Ed25519 public key; keep its private counterpart outside the repository.
 
-Run **Prepare AWG Timeweb staging** with `create_server=false` first. It reads the live account, selects a Russian 2 CPU / 4 GB / 50 GB preset and reports its base price. The price cap is 1,080 RUB/month, excluding IPv4, storage and backups. It fails instead of silently choosing a higher tariff.
+Run **Prepare AWG Timeweb staging** with `create_server=false` first. It reads the live account, selects a Russian 1 CPU / 2 GB / 30 GB preset and reports its base price. The price cap is 1,940 RUB/month (base server only), excluding IPv4, storage and backups. It fails instead of silently choosing a higher tariff.
 
 With `create_server=true`, it creates at most one server named `awg-timeweb-staging`, in `spb-3`, using Ubuntu 24.04 and Docker. The setup changes no production DNS and no production webhooks. A rerun reuses the owned staging instance; an uncertain creation response must be inspected before retrying.
 
@@ -27,7 +27,7 @@ Required environment:
 node scripts/export-awg-recovery.mjs /secure/awg-recovery.enc
 ```
 
-Exports use AES-256-GCM and a complete-body SHA-256 checksum. Files are created with mode 0600. No customer data or plaintext backup should be attached to a public GitHub issue, PR, artifact or log. Keep the encrypted export in private storage and a second copy outside the primary provider. The source export has not yet been obtained; its existence and freshness must be verified.
+Exports use AES-256-GCM and a complete-body SHA-256 checksum. Files are created with mode 0600. No customer data or plaintext backup should be attached to a public GitHub issue, PR, artifact or log. Keep the encrypted export in private storage and a second copy outside the primary provider. The source export has not yet been obtained; its existence and freshness must be verified. If YDB is inaccessible, do not run this recovery flow. Use the separate fresh-install path in [AWG_TIMEWEB_FRESH_INSTALL.md](AWG_TIMEWEB_FRESH_INSTALL.md); historic leads cannot be recovered from a blank database.
 
 ## 3. Copy referenced media
 
