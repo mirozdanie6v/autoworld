@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {prepareTimeweb,chooseTimewebPreset,timewebCloudInit} from '../scripts/prepare-awg-timeweb.mjs';
 
-const preset={id:1,location:'ru-1',price:1080,cpu:2,ram:4096,disk:51200,disk_type:'nvme'};
+const preset={id:1,location:'ru-1',price:1940,cpu:1,ram:2048,disk:30720,disk_type:'nvme'};
 function fakeApi(servers=[]){
   const calls=[];
   return{calls,fetchImpl:async(url,options)=>{
@@ -16,7 +16,7 @@ function fakeApi(servers=[]){
 test('Timeweb plan is read only and cannot silently choose a higher price or foreign region',async()=>{
   const api=fakeApi(),result=await prepareTimeweb({token:'fixture',...api});
   assert.ok(api.calls.every(call=>call.options.method==='GET'));
-  assert.equal(result.created,false);assert.equal(result.plan.baseMonthlyPrice,1080);
+  assert.equal(result.created,false);assert.equal(result.plan.baseMonthlyPrice,1940);
   assert.throws(()=>chooseTimewebPreset([{...preset,price:2000}]),/permitted/);
   assert.throws(()=>chooseTimewebPreset([{...preset,location:'ams-1'}]),/permitted/);
 });
