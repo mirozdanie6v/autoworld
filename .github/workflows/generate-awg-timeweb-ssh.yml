@@ -1,0 +1,83 @@
+name: Generate AWG Timeweb SSH (encrypted)
+
+on:
+  push:
+    branches:
+      - feature/awg-timeweb-fresh-install-20261014
+    paths:
+      - .github/workflows/generate-awg-timeweb-ssh.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: awg-timeweb-ssh-key-generation
+  cancel-in-progress: false
+
+jobs:
+  generate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Require a separately managed encryption secret
+        id: prerequisites
+        env:
+          AWG_SSH_KEY_WRAP_PASSPHRASE: ${{ secrets.AWG_SSH_KEY_WRAP_PASSPHRASE }}
+        shell: bash
+        run: |
+          if [ "${#AWG_SSH_KEY_WRAP_PASSPHRASE}" -lt 32 ]; then
+            echo "::notice::Add a unique random 32+ character Actions Secret AWG_SSH_KEY_WRAP_PASSPHRASE, then rerun this workflow."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Encryption secret is present (value never displayed)."
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Generate and encrypt ED25519 private key in ephemeral runner
+        if: steps.prerequisites.outputs.ready == 'true'
+        shell: bash
+        env:
+          AWG_SSH_KEY_WRAP_PASSPHRASE: ${{ secrets.AWG_SSH_KEY_WRAP_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          umask 077
+          work="$RUNNER_TEMP/awg-timeweb-ssh-private"
+          export_dir="$RUNNER_TEMP/awg-timeweb-ssh-archive"
+          mkdir -p "$work" "$export_dir"
+          trap 'rm -rf "$work"' EXIT
+          ssh-keygen -q -t ed25519 -N '' -C "awg-timeweb-staging" -f "$work/id_ed25519"
+          node scripts/awg-timeweb-ssh-keyring.mjs seal \
+            "$work/id_ed25519" "$work/id_ed25519.pub" "$export_dir/id_ed25519.encrypted.json"
+          node scripts/awg-timeweb-ssh-keyring.mjs verify "$export_dir/id_ed25519.encrypted.json"
+          cp "$work/id_ed25519.pub" "$export_dir/id_ed25519.pub"
+          fingerprint=$(ssh-keygen -lf "$work/id_ed25519.pub" | cut -d' ' -f2)
+          echo '--- PUBLIC SSH KEY (safe to share) ---'
+          cat "$export_dir/id_ed25519.pub"
+          echo '--- END PUBLIC KEY ---'
+          {
+            echo '## AWG Timeweb SSH key generated'
+            echo 'Private key was encrypted with AES-256-GCM and stored only as an encrypted Actions artifact.'
+            echo 'Public key fingerprint:' "$fingerprint"
+            echo
+            echo 'Copy this public key into Actions Variables as AWG_TIMEWEB_SSH_PUBLIC_KEY:'
+            echo '~~~'
+            cat "$export_dir/id_ed25519.pub"
+            echo '~~~'
+            echo
+            echo 'Download the awg-timeweb-ssh-encrypted artifact as a backup before 90-day expiry.'
+            echo 'NEVER delete or disclose the separate AWG_SSH_KEY_WRAP_PASSPHRASE secret.'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Archive encrypted private key and public key only
+        if: steps.prerequisites.outputs.ready == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: awg-timeweb-ssh-encrypted
+          path: ${{ runner.temp }}/awg-timeweb-ssh-archive/
+          retention-days: 90
+          if-no-files-found: error
