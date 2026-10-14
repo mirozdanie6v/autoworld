@@ -36,6 +36,17 @@ jobs:
             exit 1
           fi
           echo 'Credential configured; only Timeweb GET requests will be made'
+      - name: Check deploy SSH public key is configured
+        shell: bash
+        env:
+          AWG_TIMEWEB_SSH_PUBLIC_KEY: ${{ vars.AWG_TIMEWEB_SSH_PUBLIC_KEY }}
+        run: |
+          if [[ "$AWG_TIMEWEB_SSH_PUBLIC_KEY" =~ ^ssh-ed25519[[:space:]][A-Za-z0-9+/=]+([[:space:]].*)?$ ]]; then
+            echo 'SSH public key present and structurally valid'
+          else
+            echo 'SSH public key missing or invalid in Actions Variables: AWG_TIMEWEB_SSH_PUBLIC_KEY'
+            exit 1
+          fi
       - name: Inspect actual Russian hosting tariffs (NO server creation)
         shell: bash
         env:
