@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       create_server:
-        description: Create the isolated 2 CPU / 4 GB staging server (base tariff capped at 1080 RUB/month; IPv4 and storage are extra)
+        description: Create the isolated 1 CPU / 2 GB staging server (base tariff capped at 1940 RUB/month; IPv4 and storage are extra)
         type: boolean
         default: false
 
