@@ -1,0 +1,26 @@
+name: Diagnose AWG Timeweb account readonly
+
+on:
+  push:
+    branches:
+      - feature/awg-timeweb-fresh-install-20261014
+    paths:
+      - .github/workflows/diagnose-awg-timeweb-readonly.yml
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Read account server list and billing indicators
+        shell: bash
+        env:
+          TIMEWEB_CLOUD_TOKEN: ${{ secrets.TIMEWEB_CLOUD_TOKEN }}
+        run: node scripts/diagnose-awg-timeweb-readonly.mjs
