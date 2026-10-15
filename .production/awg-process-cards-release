@@ -1,0 +1,7 @@
+intent=awg-process-cards-static-20261015
+scope=index.html,auto-sale-process-responsive.css
+preserve_backend_sha=true
+preserve_telegram_webhook=true
+preserve_vk=true
+preserve_ydb=true
+ci_run=38706796163
