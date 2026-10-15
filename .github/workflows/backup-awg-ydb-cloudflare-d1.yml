@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       operation:
-        description: 'Backup current YDB, verify most recent, or list encrypted snapshots'
+        description: 'Backup current YDB, verify, list, or export encrypted recovery artifact'
         required: true
         type: choice
         default: backup
@@ -14,6 +14,7 @@ on:
           - backup
           - verify-latest
           - list
+          - download-latest
       create_database:
         description: 'Initial setup only: create the dedicated Cloudflare D1 archive if absent'
         required: false
@@ -68,6 +69,7 @@ jobs:
           node --test tests/auto-sale-cloudflare-d1-backup.test.mjs
           node --check scripts/backup-awg-ydb-cloudflare-d1.mjs
       - name: Request existing GitHub OIDC Yandex identity
+        if: ${{ env.BACKUP_OPERATION == 'backup' }}
         uses: actions/github-script@v7
         id: oidc
         with:
@@ -76,6 +78,7 @@ jobs:
             core.setSecret(token)
             core.setOutput('token',token)
       - name: Exchange Yandex identity for short-lived IAM access token
+        if: ${{ env.BACKUP_OPERATION == 'backup' }}
         env:
           GITHUB_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
         run: |
@@ -92,7 +95,21 @@ jobs:
           echo "::add-mask::$TOKEN"
           echo "YDB_ACCESS_TOKEN_CREDENTIALS=$TOKEN" >> "$GITHUB_ENV"
       - name: Export consistent YDB snapshot, encrypt, store and verify in Cloudflare D1
+        if: ${{ env.BACKUP_OPERATION != 'download-latest' }}
         run: |
           set -euo pipefail
           node scripts/backup-awg-ydb-cloudflare-d1.mjs "$BACKUP_OPERATION"
           echo "AWG_BACKUP_OPERATION_COMPLETE=$BACKUP_OPERATION"
+      - name: Download and validate encrypted offsite recovery artifact (without Yandex access)
+        if: ${{ env.BACKUP_OPERATION == 'download-latest' }}
+        run: |
+          set -euo pipefail
+          node scripts/download-awg-cloudflare-d1-backup.mjs "$RUNNER_TEMP/awg-cloudflare-latest.enc"
+      - name: Attach encrypted archive for manual offsite recovery only
+        if: ${{ env.BACKUP_OPERATION == 'download-latest' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: awg-cloudflare-encrypted-recovery
+          path: ${{ runner.temp }}/awg-cloudflare-latest.enc
+          retention-days: 7
+          if-no-files-found: error
