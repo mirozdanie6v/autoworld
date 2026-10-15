@@ -1,0 +1,7 @@
+intent=awg-desktop-fluid-static-20261015
+scope=index.html,auto-sale-desktop-fluid.css
+preserve_telegram_webhook=true
+preserve_vkmessaging=true
+preserve_backend=true
+preserve_ydb=true
+ci_run=38702696559
