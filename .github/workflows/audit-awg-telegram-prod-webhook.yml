@@ -102,6 +102,25 @@ jobs:
             webhookAppUrl:.image.environment.AUTO_SALE_TELEGRAM_APP_URL,
             staticBucket:.image.environment.AUTO_SALE_MEDIA_BUCKET
           }' "$RUNNER_TEMP/prod.json" | sed 's/^/AWG_PRODUCTION_REVISION_SAFE_SNAPSHOT /'
+      - name: Verify the live notification hotfix and Telegram Mini App navigation files
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --connect-timeout 10 --max-time 35 \
+            https://awgcars.ru/api/health \
+            | jq -e '.ok==true and .buildSha=="18532cca70755fcac8b29575f986fba4bbc2d812" and .vkMessaging=="enabled" and .telegramNotifications=="enabled" and .telegramRoutableManagers==3' >/dev/null
+          curl --fail --silent --show-error --connect-timeout 10 --max-time 35 \
+            "https://awgcars.ru/?awg_hotfix_check=telegram20261015" \
+            | grep -F '20261015-tg-deeplinks-v1' >/dev/null
+          curl --fail --silent --show-error --connect-timeout 10 --max-time 35 \
+            "https://awgcars.ru/auto-sale-bootstrap.mjs?v=20261015-tg-deeplinks-v1" \
+            | grep -F '20261015-tg-deeplinks-v1' >/dev/null
+          curl --fail --silent --show-error --connect-timeout 10 --max-time 35 \
+            "https://awgcars.ru/auto-sale-vk-notification-navigation.mjs?v=20261015-tg-deeplinks-v1" \
+            | grep -F 'resolveManagerNotificationTarget' >/dev/null
+          curl --fail --silent --show-error --connect-timeout 10 --max-time 35 \
+            "https://awgcars.ru/auto-sale-app-v3.mjs?v=20261015-tg-deeplinks-v1" \
+            | grep -F '__AUTO_SALE_OPEN_MANAGER_NOTIFICATION__' >/dev/null
+          echo 'AWG_TELEGRAM_HOTFIX_LIVE_FILES_VERIFIED'
       - name: Audit actual Telegram webhook, relay, outbox and start handler
         run: node scripts/audit-awg-telegram-prod-webhook.mjs
 
