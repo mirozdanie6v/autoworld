@@ -1,0 +1,7 @@
+intent=awg-scroll-top-static-only-20261015
+scope=index.html,auto-sale-scroll-top.mjs,auto-sale-scroll-top.css
+preserve_backend_sha=true
+preserve_telegram_webhook=true
+preserve_vk=true
+preserve_ydb=true
+ci_run=38693790615
