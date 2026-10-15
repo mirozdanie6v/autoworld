@@ -32,10 +32,25 @@ jobs:
       - name: Confirm scoped Cloudflare deployment credentials available
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID || vars.CLOUDFLARE_ACCOUNT_ID || 'f4935962036fd500d34335e0b174b227' }}
         run: |
           test -n "$CLOUDFLARE_API_TOKEN"
           test -n "$CLOUDFLARE_ACCOUNT_ID"
+      - name: Verify exact AWG worker and Cloudflare account before deployment
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID || vars.CLOUDFLARE_ACCOUNT_ID || 'f4935962036fd500d34335e0b174b227' }}
+        run: |
+          set -euo pipefail
+          test "$CLOUDFLARE_ACCOUNT_ID" = f4935962036fd500d34335e0b174b227 || {
+            echo 'Unexpected Cloudflare account ID; no deployment allowed' >&2
+            exit 1
+          }
+          response=$(curl --fail --silent --show-error --connect-timeout 10 --max-time 25 \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts")
+          printf '%s' "$response" | jq -e '.success == true and ([.result[] | select(.id == "viiversion-telegram-relay")] | length) == 1' >/dev/null
+          echo 'Existing AWG Telegram relay verified in the scoped Cloudflare account.'
       - name: Request existing Yandex federation identity
         uses: actions/github-script@v7
         id: oidc
@@ -92,7 +107,7 @@ jobs:
         working-directory: cloudflare/telegram-relay
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID || vars.CLOUDFLARE_ACCOUNT_ID || 'f4935962036fd500d34335e0b174b227' }}
         run: |
           set -euo pipefail
           npx wrangler deploy --config wrangler.toml
