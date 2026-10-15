@@ -45,7 +45,7 @@ test('process CSS loads last after desktop and mobile CSS without disturbing exi
   const order=['auto-sale.css?v=20260927-calc-crypto-v3',
     'auto-sale-responsive.css?v=20260926-calc-cta-v1',
     'auto-sale-desktop-fluid.css?v=20261015-fluid-v1',
-    'auto-sale-process-responsive.css?v=20261015-process-v1'];
+    'auto-sale-process-responsive.css?v=20261015-process-v2'];
   let last=-1;
   for(const path of order){
     const index=html.indexOf(path);
@@ -54,4 +54,8 @@ test('process CSS loads last after desktop and mobile CSS without disturbing exi
   }
   assert.match(html,/auto-sale-bootstrap\.mjs\?v=20261015-tg-deeplinks-v1/);
   assert.match(html,/auto-sale-scroll-top\.mjs\?v=20261015-scrolltop-v1/);
+});
+
+test('Cyrillic titles have enough line-height to avoid glyph clipping at all widths',()=>{
+  assert.match(css,/\.auto-process-section \.auto-process \.auto-step b\s*\{[^}]*line-height:1\.34;/s);
 });
