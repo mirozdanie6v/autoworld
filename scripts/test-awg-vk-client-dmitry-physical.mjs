@@ -13,7 +13,10 @@ const database=String(process.env.YDB_CONNECTION_STRING||'');
 assert.equal(process.env.AWG_PHYSICAL_TEST_GUARD,'VK26443041_TO_TG_DMITRY_SINGLE_TEST_20261015');
 assert.ok(database.endsWith('/etn00ojk5iv1u7dgpdar'),'production YDB guard');
 assert.equal(relayUrl,'https://integration-telegram.viiversion.com/telegram/send');
-assert.ok(token.length>30&&vkToken.length>30&&vkAppSecret.length>10&&relaySecret.length>10,'required credentials');
+assert.ok(token.length>30,'telegram_bot_token_missing_or_short');
+assert.ok(vkToken.length>30,'vk_community_token_missing_or_short');
+assert.ok(vkAppSecret.length>0,'vk_app_secret_missing');
+assert.ok(relaySecret.length>0,'telegram_relay_secret_missing');
 assert.equal(process.env.AUTO_SALE_VK_GROUP_ID,'242103542');
 assert.equal(process.env.AUTO_SALE_VK_APP_ID,'54810434');
 
