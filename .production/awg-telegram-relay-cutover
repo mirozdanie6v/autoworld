@@ -1,0 +1,5 @@
+AWG Telegram webhook cutover to verified Cloudflare ingress — 2026-10-15
+Authorized by user to restore /start replies.
+Deploy workflow 38670307873: success; signed noop 200, ignored true, ingress->Yandex verified.
+Change only Telegram setWebhook to https://integration-telegram.viiversion.com/telegram/webhook.
+Do not drop pending updates. Leave YDB, VK, awgcars.ru and app runtime unchanged.
