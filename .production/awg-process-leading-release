@@ -1,0 +1,7 @@
+intent=awg-process-leading-static-20261015
+scope=index.html,auto-sale-process-responsive.css
+preserve_ydb=true
+preserve_telegram_webhook=true
+preserve_vk=true
+preserve_backend_sha=true
+ci_run=38708997603
