@@ -101,3 +101,5 @@ jobs:
 # VII-172: verify read-only Telegram ingress after verified Cloudflare cutover, 2026-10-15.
 
 # Physical smoke retry after stricter credential guard fix. Previous attempt sent no messages.
+
+# Retry only after pre-send VK token alias correction; no messages were sent on prior runs.
