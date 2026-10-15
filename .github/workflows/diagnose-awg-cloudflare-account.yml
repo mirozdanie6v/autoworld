@@ -1,0 +1,48 @@
+name: Diagnose AWG Cloudflare account (read only)
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/diagnose-awg-cloudflare-account.yml
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID || vars.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Read Cloudflare account metadata without changing anything
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN" || { echo 'AWG_CF_DIAG: missing_api_token'; exit 1; }
+          node --input-type=module <<'JS'
+          const token=process.env.CLOUDFLARE_API_TOKEN;
+          const selected=process.env.CLOUDFLARE_ACCOUNT_ID;
+          const headers={Authorization:'Bearer '+token};
+          async function get(path){
+            try{
+              const r=await fetch('https://api.cloudflare.com/client/v4'+path,{headers,signal:AbortSignal.timeout(15000)});
+              const j=await r.json();
+              return {status:r.status,success:j.success===true,data:j.result,errors:(j.errors||[]).map(e=>({code:e.code,message:String(e.message).slice(0,120)}))};
+            }catch(e){return {status:null,success:false,errors:[{code:'network',message:String(e.message)}]}}
+          }
+          const verify=await get('/user/tokens/verify');
+          console.log('AWG_CF_VERIFY',JSON.stringify({status:verify.status,success:verify.success,errors:verify.errors}));
+          const accounts=await get('/accounts?per_page=50');
+          console.log('AWG_CF_ACCOUNTS',JSON.stringify({status:accounts.status,success:accounts.success,count:Array.isArray(accounts.data)?accounts.data.length:null,errors:accounts.errors}));
+          const ids=selected?[selected]:accounts.success&&Array.isArray(accounts.data)?accounts.data.map(a=>a.id):[];
+          const out=[];
+          for(const id of ids){
+            const res=await get('/accounts/'+encodeURIComponent(id)+'/workers/scripts');
+            const names=Array.isArray(res.data)?res.data.map(s=>s.id||s.script_name):[];
+            out.push({accountId:id,status:res.status,success:res.success,workerPresent:names.includes('viiversion-telegram-relay'),workerCount:names.length,errors:res.errors});
+          }
+          console.log('AWG_CF_WORKERS',JSON.stringify(out));
+          const matched=out.filter(a=>a.success&&a.workerPresent);
+          if(matched.length===1)console.log('AWG_CF_TARGET_RESOLVED',JSON.stringify({accountId:matched[0].accountId,worker:'viiversion-telegram-relay'}));
+          else console.log('AWG_CF_TARGET_NOT_UNIQUE',JSON.stringify({matched:matched.length,candidates:out.length}));
+          JS
