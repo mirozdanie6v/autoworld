@@ -8,6 +8,9 @@ const vkToken=String(process.env.AWG_VK_COMMUNITY_TOKEN||'').trim();
 const botToken=String(process.env.AUTO_SALE_TELEGRAM_BOT_TOKEN||'').trim();
 const apiKey=String(process.env.AUTO_SALE_API_KEY||'').trim();
 const groupId='242103542';
+const ydb=String(process.env.YDB_CONNECTION_STRING||'');
+if(!ydb.endsWith('/etn00ojk5iv1u7dgpdar'))throw Error('production_ydb_guard_failed');
+const creds=new AccessTokenCredentialsProvider({token:String(process.env.YC_IAM_TOKEN||'')});
 if(!vkToken||!botToken||!apiKey)throw Error('required_production_readonly_credentials_missing');
 const timeout=ms=>AbortSignal.timeout(ms);
 async function vk(method,params={}){
@@ -56,9 +59,7 @@ const access=state._access||{};
 if(access.role!=='admin')throw Error('api_key_did_not_resolve_admin');
 const managers=(state.team||[]).filter(m=>m?.active!==false&&m?.role==='Менеджер');
 const dmitry=managers.find(m=>m.name==='Дмитрий');
-const ydb=String(process.env.YDB_CONNECTION_STRING||'');
-if(!ydb.endsWith('/etn00ojk5iv1u7dgpdar'))throw Error('production_ydb_guard_failed');
-const creds=new AccessTokenCredentialsProvider({token:String(process.env.YC_IAM_TOKEN||'')});
+
 const store=await createYdbStateStore({connectionString:ydb,credentialsProvider:creds,ensureSchema:false,domainDualWrite:false});
 let pins;
 try{pins=await store.adminAccessList();}finally{await store.close();}
