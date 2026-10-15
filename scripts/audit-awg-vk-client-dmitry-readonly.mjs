@@ -1,4 +1,5 @@
-import {createHash} from 'node:crypto';
+import {AccessTokenCredentialsProvider} from '@ydbjs/auth/access-token';
+import {createYdbStateStore} from '../server/ydb-state.mjs';
 
 const BASE='https://awgcars.ru';
 const vkToken=String(process.env.AWG_VK_COMMUNITY_TOKEN||'').trim();
@@ -41,7 +42,14 @@ const access=state._access||{};
 if(access.role!=='admin')throw Error('api_key_did_not_resolve_admin');
 const managers=(state.team||[]).filter(m=>m?.active!==false&&m?.role==='Менеджер');
 const dmitry=managers.find(m=>m.name==='Дмитрий');
-const telegramId=String(dmitry?.telegramUserId||'');
+const ydb=String(process.env.YDB_CONNECTION_STRING||'');
+if(!ydb.endsWith('/etn00ojk5iv1u7dgpdar'))throw Error('production_ydb_guard_failed');
+const creds=new AccessTokenCredentialsProvider({token:String(process.env.YC_IAM_TOKEN||'')});
+const store=await createYdbStateStore({connectionString:ydb,credentialsProvider:creds,ensureSchema:false,domainDualWrite:false});
+let pins;
+try{pins=await store.adminAccessList();}finally{await store.close();}
+const pin=pins.find(row=>String(row.username||'').replace(/^@/,'').toLowerCase()==='flyer_flyer');
+const telegramId=String(dmitry?.telegramUserId||pin?.telegramUserId||'');
 const managerLinked=/^\d+$/.test(telegramId);
 const dmitryUsername=String(dmitry?.telegramUsername||dmitry?.telegram||'').replace(/^@/,'').toLowerCase();
 let tgChat={ok:false,reason:managerLinked?'not_checked':'unlinked'};
@@ -65,7 +73,7 @@ const managerLeads=(state.leads||[]).filter(l=>String(l.manager||'')==='Дмит
 const result={
   mode:'readonly',requestedClient:'https://vk.ru/flyer_flyer',
   clientIdentity:{resolved:Boolean(client),id:client?.vkUserId||null,resolvedScreenName:client?.screenName||null,lookupStatus:profile.http,lookupError:client?null:profile.errorMessage||'not_found'},
-  dmitry:{teamRecordPresent:Boolean(dmitry),telegramUsername:dmitryUsername,hasTelegramUserId:managerLinked,telegramChat:tgChat},
+  dmitry:{teamRecordPresent:Boolean(dmitry),telegramUsername:dmitryUsername,hasTelegramUserId:managerLinked,pinExists:Boolean(pin),telegramChat:tgChat},
   api:{ok:health.ok===true,persistence:health.persistence,build:health.buildSha,vkAuth:health.vkAuth,vkMessaging:health.vkMessaging,telegramNotifications:health.telegramNotifications,telegramRoutableManagers:health.telegramRoutableManagers},
   vkConfig:{enabled:Boolean(vkConfig.enabled),messagingEnabled:Boolean(vkConfig.messagingEnabled),groupId:vkConfig.groupId||null},
   vkMessaging,
