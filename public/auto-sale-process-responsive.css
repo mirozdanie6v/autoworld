@@ -1,0 +1,23 @@
+/* AutoWorld process cards: avoid crushed five-up layout on compact desktops.
+   Between 901 and 1550px use balanced 3 + 2, centering the final row.
+   At >=1551px preserve the existing five-step single-row design.
+   At <=900px preserve existing two-column and single-column breakpoints. */
+@media (min-width:901px) and (max-width:1550px){
+  .auto-process-section .auto-process{
+    grid-template-columns:repeat(6,minmax(0,1fr));
+    gap:14px;
+  }
+  .auto-process-section .auto-process>.auto-step{
+    grid-column:span 2;
+    min-width:0;
+  }
+  .auto-process-section .auto-process>.auto-step:nth-child(4){
+    grid-column:2/span 2;
+  }
+  .auto-process-section .auto-process>.auto-step:nth-child(5){
+    grid-column:4/span 2;
+  }
+  .auto-process-section .auto-process .auto-step b{
+    font-size:clamp(21px,1.8vw,25px);
+  }
+}
