@@ -21,3 +21,8 @@
     font-size:clamp(21px,1.8vw,25px);
   }
 }
+
+/* Give Cyrillic glyphs enough vertical leading; original 1.06 clipped 3–4px. */
+.auto-process-section .auto-process .auto-step b{
+  line-height:1.34;
+}
