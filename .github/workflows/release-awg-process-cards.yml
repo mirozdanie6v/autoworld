@@ -1,0 +1,133 @@
+name: Release AWG process-step cards responsive fix (static only)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .production/awg-process-cards-release
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: awg-yandex-production-writer
+  cancel-in-progress: false
+
+env:
+  YC_FOLDER_ID: b1g8u8vqkgehvtbj8n13
+  YC_DEPLOY_SA_ID: ${{ vars.AWG_YC_DEPLOY_SA_ID || 'aje775bcl6hgp40eu8of' }}
+  AWG_STATIC_BUCKET: viiversion-autoworld-awg-static-b1g8u8vqkgehvtbj8n13
+
+jobs:
+  static-process-cards:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Validate single-use release, responsive CSS, full CI
+        run: |
+          set -euo pipefail
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          grep -Fx 'intent=awg-process-cards-static-20261015' .production/awg-process-cards-release
+          npm ci --ignore-scripts
+          npm run check
+          test -s dist/auto-sale-process-responsive.css
+          grep -F 'auto-sale-process-responsive.css?v=20261015-process-v1' dist/index.html
+          grep -F 'auto-sale-scroll-top.mjs?v=20261015-scrolltop-v1' dist/index.html
+          grep -F 'auto-sale-bootstrap.mjs?v=20261015-tg-deeplinks-v1' dist/index.html
+      - name: Request verified GitHub identity for Yandex federation
+        uses: actions/github-script@v7
+        id: oidc
+        with:
+          script: |
+            const token=await core.getIDToken('https://github.com/mirozdanie6v')
+            core.setSecret(token)
+            core.setOutput('token',token)
+      - name: Exchange Yandex OIDC and install official CLI
+        env:
+          GITHUB_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        run: |
+          set -euo pipefail
+          RESPONSE=$(curl --fail --silent --show-error --connect-timeout 10 --max-time 30 \
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            --data-urlencode 'grant_type=urn:ietf:params:oauth:grant-type:token-exchange' \
+            --data-urlencode 'requested_token_type=urn:ietf:params:oauth:token-type:access_token' \
+            --data-urlencode "audience=$YC_DEPLOY_SA_ID" \
+            --data-urlencode "subject_token=$GITHUB_OIDC_TOKEN" \
+            --data-urlencode 'subject_token_type=urn:ietf:params:oauth:token-type:id_token' \
+            https://auth.yandex.cloud/oauth/token)
+          TOKEN=$(printf '%s' "$RESPONSE" | jq -er '.access_token')
+          echo "::add-mask::$TOKEN"
+          echo "YC_IAM_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+          curl --fail --silent --show-error --connect-timeout 15 --max-time 90 \
+            https://storage.yandexcloud.net/yandexcloud-yc/release/yc_linux_amd64.tar.gz \
+            -o "$RUNNER_TEMP/yc.tar.gz"
+          mkdir -p "$RUNNER_TEMP/yc-dist" "$RUNNER_TEMP/yc-bin"
+          tar -xzf "$RUNNER_TEMP/yc.tar.gz" -C "$RUNNER_TEMP/yc-dist"
+          BIN=$(find "$RUNNER_TEMP/yc-dist" -type f -name yc -print -quit)
+          test -n "$BIN"
+          install -m 0755 "$BIN" "$RUNNER_TEMP/yc-bin/yc"
+          echo "$RUNNER_TEMP/yc-bin" >> "$GITHUB_PATH"
+      - name: Publish step-card CSS and index with guarded rollback and no backend writes
+        run: |
+          set -euo pipefail
+          umask 077
+          test "$YC_FOLDER_ID" = b1g8u8vqkgehvtbj8n13
+          test "$AWG_STATIC_BUCKET" = viiversion-autoworld-awg-static-b1g8u8vqkgehvtbj8n13
+          yc config set endpoint api.cloud.yandex.net:443
+          yc config set token "$YC_IAM_TOKEN"
+          yc config set folder-id "$YC_FOLDER_ID"
+
+          BEFORE=$(curl --fail --silent --show-error --connect-timeout 10 --max-time 35 https://awgcars.ru/api/health)
+          printf '%s' "$BEFORE" | jq -e '.ok==true and .persistence=="ydb-serverless" and .vkMessaging=="enabled" and .telegramNotifications=="enabled"' >/dev/null
+          BEFORE_SHA=$(printf '%s' "$BEFORE" | jq -er '.buildSha')
+
+          yc storage s3 cp "s3://$AWG_STATIC_BUCKET/index.html" "$RUNNER_TEMP/awg-process-index-before.html" --only-show-errors
+          test -s "$RUNNER_TEMP/awg-process-index-before.html"
+          INDEX_PUBLISHED=0
+          RELEASE_COMPLETE=0
+          cleanup(){
+            code=$?
+            trap - EXIT
+            if [ "$code" -ne 0 ] && [ "$INDEX_PUBLISHED" = 1 ] && [ "$RELEASE_COMPLETE" != 1 ]; then
+              echo "::warning::Process cards release smoke failed: restoring prior HTML index."
+              yc storage s3 cp "$RUNNER_TEMP/awg-process-index-before.html" "s3://$AWG_STATIC_BUCKET/index.html" \
+                --cache-control 'no-cache, no-store, must-revalidate' \
+                --content-type 'text/html; charset=utf-8' --only-show-errors || true
+            fi
+            rm -f "$RUNNER_TEMP/awg-process-index-before.html"
+            exit "$code"
+          }
+          trap cleanup EXIT
+
+          yc storage s3 cp dist/auto-sale-process-responsive.css "s3://$AWG_STATIC_BUCKET/auto-sale-process-responsive.css" \
+            --cache-control 'public, max-age=300, stale-while-revalidate=86400' \
+            --content-type 'text/css; charset=utf-8' --only-show-errors
+
+          INDEX_PUBLISHED=1
+          yc storage s3 cp dist/index.html "s3://$AWG_STATIC_BUCKET/index.html" \
+            --cache-control 'no-cache, no-store, must-revalidate' \
+            --content-type 'text/html; charset=utf-8' --only-show-errors
+
+          READY=0
+          for attempt in $(seq 1 12); do
+            HTML=$(curl -fsS --connect-timeout 10 --max-time 25 \
+              "https://awgcars.ru/?awg_process_probe=$GITHUB_SHA" 2>/dev/null || true)
+            if printf '%s' "$HTML" | grep -Fq 'auto-sale-process-responsive.css?v=20261015-process-v1'; then READY=1;break;fi
+            sleep 5
+          done
+          test "$READY" = 1 || { echo "::error::Process cards CSS index not visible" >&2; exit 1; }
+          curl --fail --silent --show-error --connect-timeout 10 --max-time 35 \
+            "https://awgcars.ru/auto-sale-process-responsive.css?v=20261015-process-v1" \
+            | grep -F 'grid-column:2/span 2' >/dev/null
+
+          AFTER=$(curl --fail --silent --show-error --connect-timeout 10 --max-time 35 https://awgcars.ru/api/health)
+          printf '%s' "$AFTER" | jq -e --arg sha "$BEFORE_SHA" \
+            '.ok==true and .buildSha==$sha and .vkMessaging=="enabled" and .telegramNotifications=="enabled"' >/dev/null
+
+          RELEASE_COMPLETE=1
+          echo "AWG_PROCESS_CARDS_RELEASE=success; backend unchanged; Telegram/VK preserved"
