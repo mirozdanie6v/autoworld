@@ -75,6 +75,9 @@ jobs:
           YDB=$(jq -er '.image.environment.YDB_CONNECTION_STRING|select(endswith("/etn00ojk5iv1u7dgpdar"))' "$RUNNER_TEMP/prod.json")
           echo "::add-mask::$YDB"
           echo "YDB_CONNECTION_STRING=$YDB" >> "$GITHUB_ENV"
+          CHAT_IDS=$(jq -r '.image.environment.AUTO_SALE_MANAGER_CHAT_IDS//""' "$RUNNER_TEMP/prod.json")
+          echo "::add-mask::$CHAT_IDS"
+          echo "AUTO_SALE_MANAGER_CHAT_IDS=$CHAT_IDS" >> "$GITHUB_ENV"
           for KEY in AUTO_SALE_API_KEY AUTO_SALE_TELEGRAM_BOT_TOKEN AUTO_SALE_VK_COMMUNITY_TOKEN; do
             VALUE=$(jq -er --arg key "$KEY" '.image.environment[$key]|select(length>0)' "$RUNNER_TEMP/prod.json")
             echo "::add-mask::$VALUE"
