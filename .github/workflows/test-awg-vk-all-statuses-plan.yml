@@ -1,0 +1,20 @@
+name: AWG VK lifecycle all statuses - dry run
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/test-awg-vk-all-statuses-plan.yml
+      - scripts/test-awg-vk-all-statuses.mjs
+permissions:
+  contents: read
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Simulate every VK status and validate notification keyboard/recipients
+        run: node scripts/test-awg-vk-all-statuses.mjs plan
