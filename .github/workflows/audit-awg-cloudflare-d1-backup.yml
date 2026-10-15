@@ -1,0 +1,44 @@
+name: AWG Cloudflare D1 backup feasibility (read only)
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/audit-awg-cloudflare-d1-backup.yml
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID || vars.CLOUDFLARE_ACCOUNT_ID || 'f4935962036fd500d34335e0b174b227' }}
+      BACKUP_KEY_PRESENT: ${{ secrets.AWG_BACKUP_ENCRYPTION_KEY != '' && 'yes' || 'no' }}
+    steps:
+      - name: Verify scoped account, D1 access and encryption secret without writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$CLOUDFLARE_ACCOUNT_ID" = f4935962036fd500d34335e0b174b227
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo 'AWG_D1_PREFLIGHT cloudflare_token=missing'
+            exit 1
+          fi
+          echo "AWG_D1_PREFLIGHT encryption_key_configured=$BACKUP_KEY_PRESENT"
+          status=$(curl -sS --connect-timeout 10 --max-time 25 \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            -o "$RUNNER_TEMP/awg-d1.json" -w '%{http_code}' \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/d1/database?per_page=100")
+          export D1_HTTP_STATUS="$status"
+          node --input-type=module <<'JS'
+          import {readFileSync} from 'node:fs';
+          const status=Number(process.env.D1_HTTP_STATUS||0);
+          const payload=JSON.parse(readFileSync(process.env.RUNNER_TEMP+'/awg-d1.json','utf8'));
+          const names=(payload.result||[]).map(x=>({name:x.name,id:x.uuid,version:x.version||null}));
+          console.log('AWG_D1_PREFLIGHT',JSON.stringify({
+            http:status,authorized:payload.success===true,
+            databases:names,backupDatabaseExists:names.some(x=>x.name==='awg-ydb-backup-archive'),
+            errors:(payload.errors||[]).map(x=>({code:x.code,message:String(x.message||'').slice(0,140)}))
+          }));
+          if(!payload.success)process.exitCode=1;
+          JS
