@@ -38,3 +38,15 @@ Read-only браузерный аудит публичной страницы в
 
 ## Защита production
 Выпуск **только статических** `index.html` + `auto-sale-desktop-fluid.css` в прежний Yandex Object Storage. Перед изменением бэкап текущего index.html; после — HTTP-smoke, проверка неизменности `/api/health` build SHA и VK/Telegram; rollback index при ошибке. YDB, Telegram webhook/relay, API Gateway, контейнер, секреты и клиентские данные не изменяются.
+
+
+## Production verification after CSS release
+
+- `main` PR [#44](https://github.com/mirozdanie6v/autoworld/pull/44) merged; static-only production [GitHub Actions #38702960143](https://github.com/mirozdanie6v/autoworld/actions/runs/38702960143) PASS.
+- Fresh browser session with **no inline stylesheet overrides** confirmed `auto-sale-desktop-fluid.css?v=20261015-fluid-v1` loaded and its CSS rule active.
+- On production: 1920px viewport: clientWidth = shellWidth = **1910px**, mainWidth = **1814px**; 1440px: clientWidth = shellWidth = **1430px**, mainWidth = **1358px**; 1366px: **1356px**; 1280px: **1270px**.
+- For 1024/768/430/390/320px, the shell stays at full browser client width with existing responsive layouts, no horizontal overflow; public catalog clippedCards = 0 at every tested viewport.
+- At 1920px the live catalog currently has only three rendered cards, so its `auto-fit` naturally renders **3** columns even though the same CSS accommodates more columns if additional cards are present; this is expected.
+- Existing translucent scroll-to-top button remains in DOM.
+- Native vertical scrollbar remains accessible and occupies ~10px on the desktop test browser; it blends into the dark theme rather than becoming a bright strip.
+- Automated and browser checks do not replace authorized manager/owner CRM forms and mobile overlay audits; those require test-role sessions.
