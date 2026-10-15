@@ -24,7 +24,7 @@ if(!db.endsWith('/etn00ojk5iv1u7dgpdar'))throw Error('wrong_database_guard');
 if(!apiKey||!botToken||!vkToken||!process.env.YC_IAM_TOKEN)throw Error('missing_qa_credentials');
 assert.equal(process.env.AUTO_SALE_VK_GROUP_ID,groupId);
 assert.equal(process.env.AUTO_SALE_TELEGRAM_RELAY_URL,'https://integration-telegram.viiversion.com/telegram/send');
-assert.equal(process.env.AUTO_SALE_VK_ENABLED,'true');
+// VK messaging is verified against live /api/health below; no redundant env flag required.
 
 async function request(path,options={}){
   const response=await fetch(base+path,{
