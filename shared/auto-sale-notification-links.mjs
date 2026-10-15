@@ -33,3 +33,30 @@ export function resolveNotificationTarget(target,state={},access={}){
   if(target.type==='quote'&&item.status==='Черновик')return null;
   return{leadId:item.leadId,[target.type+'Id']:item.id};
 }
+
+/**
+ * Deep-link a Telegram Web App button to a specific notification target.
+ * A query parameter survives Telegram's own WebApp launch hash fragments.
+ * The target never grants access: the Mini App rechecks authenticated state.
+ */
+export function telegramNotificationUrl(appUrl,item={}){
+  const target=notificationTarget(item);
+  const hash=notificationHash(target);
+  if(!hash)return'';
+  try{
+    const url=new URL(String(appUrl||''));
+    if(url.protocol!=='https:')return'';
+    url.searchParams.set('awg_notification',hash);
+    return url.toString();
+  }catch{return''}
+}
+
+export function resolveManagerNotificationTarget(target,state={},access={}){
+  if(access.authenticated!==true||access.role!=='admin'||!TYPES.has(target?.type))return null;
+  const leads=Array.isArray(state.leads)?state.leads:[];
+  if(target.type==='lead')return leads.some(x=>x.id===target.id)?{leadId:target.id}:null;
+  const items=Array.isArray(state[target.type==='quote'?'quotes':'orders'])?state[target.type==='quote'?'quotes':'orders']:[];
+  const item=items.find(x=>x.id===target.id);
+  if(!item||!leads.some(lead=>lead.id===item.leadId))return null;
+  return{leadId:item.leadId,[target.type+'Id']:item.id};
+}
