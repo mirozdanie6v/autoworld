@@ -1,19 +1,32 @@
-import {parseNotificationHash,resolveNotificationTarget} from './auto-sale-notification-links.mjs';
+import {parseNotificationHash,resolveNotificationTarget,resolveManagerNotificationTarget} from './auto-sale-notification-links.mjs?v=20261015-tg-deeplinks-v1';
 
 export function initializeNotificationNavigation(win=window,doc=document){
   let openedHash='',identityKey='';
   const read=(key,fallback)=>{try{return JSON.parse(win.localStorage.getItem(key)||'null')??fallback}catch{return fallback}};
   const open=()=>{
     const access=win.__AUTO_SALE_ACCESS__;
-    const nextIdentity=access?.authenticated===true?String(access.identity?.key||access.user?.id||''):'';
+    const nextIdentity=access?.authenticated===true?String(access.role||'')+':'+String(access.identity?.key||access.user?.id||access.member?.name||'admin'):'';
     if(nextIdentity!==identityKey){identityKey=nextIdentity;openedHash='';doc.querySelector('[data-client-detail-bg]')?.remove()}
-    const raw=win.location.hash||new URLSearchParams(win.location.search||'').get('vk_hash')||'';
+    const params=new URLSearchParams(win.location.search||'');
+    // Telegram injects its own tgWebAppData hash. The query survives that
+    // launch, while the old VK hash and vk_hash deep links remain supported.
+    const raw=params.get('awg_notification')||win.location.hash||params.get('vk_hash')||'';
     const target=parseNotificationHash(raw);
     if(!target||raw===openedHash)return;
-    // Wait for server hydration instead of trusting an unsigned launch URL.
-    if(access?.authenticated!==true||access.role!=='client'||!win.__AUTO_SALE_OPEN_CLIENT_DETAIL__)return;
+    // A URL selects an entity ONLY after signed Telegram/VK authentication,
+    // server hydration and role-specific visibility checks.
+    if(access?.authenticated!==true)return;
+    const isClient=access.role==='client',isManager=access.role==='admin';
+    if(!isClient&&!isManager)return;
+    if(isClient&&!win.__AUTO_SALE_OPEN_CLIENT_DETAIL__)return;
+    if(isManager&&!win.__AUTO_SALE_OPEN_MANAGER_NOTIFICATION__)return;
     const state={leads:read('auto-sale-leads-v2',[]),quotes:read('auto-sale-quotes-v2',[]),orders:read('auto-sale-orders-v2',[])};
-    const resolved=resolveNotificationTarget(target,state,access);
+    const resolved=isClient?resolveNotificationTarget(target,state,access):resolveManagerNotificationTarget(target,state,access);
+    if(isManager){
+      if(!resolved)return;
+      if(win.__AUTO_SALE_OPEN_MANAGER_NOTIFICATION__(target,resolved))openedHash=raw;
+      return;
+    }
     openedHash=raw;
     win.dispatchEvent(new win.CustomEvent('auto-sale-open-client-orders'));
     if(resolved){
