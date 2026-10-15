@@ -46,6 +46,7 @@ GitHub Actions: [AWG encrypted YDB backups to Cloudflare D1](../.github/workflow
 4. Проверьте появление `AWG_YDB_CLOUDFLARE_BACKUP_SUCCESS` и статус `verified=true` в журнале.
 5. Запустите `operation=verify-latest` без создания БД. Должна появиться строка `AWG_CLOUDFLARE_D1_RESTORE_DRILL` с `ok=true` и `restoredToProduction=false`.
 6. В GitHub → Settings → Secrets and variables → Actions → Variables создайте `AWG_CF_D1_BACKUP_ENABLED=true`. После этого задания пойдут автоматически по расписанию.
+7. Для аварийного скачивания без обращения к Яндексу вручную запустите `operation=download-latest` (без `create_database`). В артефактах GitHub Actions появится `awg-cloudflare-encrypted-recovery`, срок хранения **7 дней**. Внутри файл `.enc`, совместимый с форматом `awg-encrypted-recovery-v1`. Он остаётся зашифрованным; сохранить его и исходный ключ отдельно. Получение артефакта само по себе ничего не восстанавливает.
 
 GitHub secrets: https://github.com/mirozdanie6v/autoworld/settings/secrets/actions
 
@@ -63,3 +64,5 @@ GitHub variables: https://github.com/mirozdanie6v/autoworld/settings/variables/a
 - Если Yandex недоступен в момент запуска, новые копии не создаются; ранее проверенные D1-копии сохраняются.
 - После включения регулярно контролируйте квоту Cloudflare D1, историю успешных запусков и ключ шифрования.
 - Этот workflow не создаёт резервную копию **самого Cloudflare D1**; для долговременной защиты стоит добавить независимую периодическую копию в R2 или другой регион после проверки расходов.
+
+Проверка и скачивание уже существующей D1-копии **не используют Yandex IAM или YDB**: даже при полном отказе Яндекса можно получить и проверить последний успешно зашифрованный архив из Cloudflare. Операции записи в Cloudflare и скачивания нельзя выполнять без отдельного токена `AWG_CF_D1_BACKUP_TOKEN`. Срок GitHub-артефакта не заменяет срок хранения D1-версий.
