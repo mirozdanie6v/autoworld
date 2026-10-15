@@ -78,3 +78,5 @@ jobs:
           echo "Production runtime and YDB checked; no webhook config changes."
       - name: Audit actual Telegram webhook, relay, outbox and start handler
         run: node scripts/audit-awg-telegram-prod-webhook.mjs
+
+# Triggered 2026-10-15 for read-only AWG Telegram /start incident verification.
