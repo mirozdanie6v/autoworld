@@ -1,4 +1,4 @@
-import {parseNotificationHash,resolveNotificationTarget,resolveManagerNotificationTarget} from './auto-sale-notification-links.mjs';
+import {parseNotificationHash,resolveNotificationTarget,resolveManagerNotificationTarget} from './auto-sale-notification-links.mjs?v=20261015-tg-deeplinks-v1';
 
 export function initializeNotificationNavigation(win=window,doc=document){
   let openedHash='',identityKey='';
