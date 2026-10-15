@@ -14,7 +14,7 @@ export function timewebCloudInit(publicKey){
     users:[{name:'root',ssh_authorized_keys:[publicKey]}],disable_root:false,ssh_pwauth:false,
     runcmd:[['systemctl','enable','--now','docker'],['install','-d','-m','0700','/opt/awg/staging'],['ufw','default','deny','incoming'],['ufw','allow','22/tcp'],['ufw','allow','80/tcp'],['ufw','allow','443/tcp'],['ufw','--force','enable']]});
 }
-export async function prepareTimeweb({token,create=false,publicKey,maxPrice=1940,fetchImpl=fetch}={}){
+export async function prepareTimeweb({token,create=false,publicKey,maxPrice=1940,expectedPresetId=null,fetchImpl=fetch}={}){
   if(!token)throw new Error('TIMEWEB_CLOUD_TOKEN is required');
   async function request(path,method='GET',body){
     const response=await fetchImpl('https://api.timeweb.cloud/api/v1'+path,{method,headers:{authorization:`Bearer ${token}`,'content-type':'application/json'},
@@ -26,6 +26,7 @@ export async function prepareTimeweb({token,create=false,publicKey,maxPrice=1940
   const matches=(servers.servers||[]).filter(s=>s.name===serverName);
   if(matches.length>1)throw new Error('Duplicate staging server names: inspect before any mutation');
   const preset=chooseTimewebPreset(tariffs.server_presets||[],{maxPrice});
+  if(expectedPresetId!==null&&Number(preset.id)!==Number(expectedPresetId))throw new Error('approved_timeweb_preset_changed');
   const os=(systems.servers_os||[]).find(s=>/ubuntu/i.test(s.name||s.family||'')&&String(s.version).startsWith('24.04'));
   if(!os)throw new Error('Ubuntu 24.04 is not offered by the live API');
   const plan={name:serverName,availabilityZone:'spb-3',presetId:preset.id,baseMonthlyPrice:Number(preset.price),cpu:preset.cpu,ramMb:preset.ram,diskMb:preset.disk,osId:os.id,
