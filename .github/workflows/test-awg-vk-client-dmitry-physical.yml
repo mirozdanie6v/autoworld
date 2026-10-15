@@ -99,3 +99,5 @@ jobs:
 # Triggered 2026-10-15 for read-only AWG Telegram /start incident verification.
 
 # VII-172: verify read-only Telegram ingress after verified Cloudflare cutover, 2026-10-15.
+
+# Physical smoke retry after stricter credential guard fix. Previous attempt sent no messages.
