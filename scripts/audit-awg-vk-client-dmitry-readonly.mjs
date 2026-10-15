@@ -1,5 +1,6 @@
 import {AccessTokenCredentialsProvider} from '@ydbjs/auth/access-token';
 import {createYdbStateStore} from '../server/ydb-state.mjs';
+import {createTelegramService} from '../server/telegram-bot.mjs';
 
 const BASE='https://awgcars.ru';
 const vkToken=String(process.env.AWG_VK_COMMUNITY_TOKEN||'').trim();
@@ -70,6 +71,21 @@ if(client){
 }
 const leads=client?(state.leads||[]).filter(l=>String(l.clientProvider||'').toLowerCase()==='vk'&&String(l.clientProviderUserId||'')===client.vkUserId):[];
 const managerLeads=(state.leads||[]).filter(l=>String(l.manager||'')==='Дмитрий');
+const selected=leads.find(l=>l.manager==='Дмитрий')||null;
+const routedTeam=(state.team||[]).map(m=>{
+  const entry=pins.find(p=>String(p.username||'').replace(/^@/,'').toLowerCase()===String(m.telegramUsername||m.telegram||'').replace(/^@/,'').toLowerCase());
+  return {...m,telegramUserId:String(m.telegramUserId||entry?.telegramUserId||'')};
+});
+const planner=createTelegramService({token:botToken,managerChatIds:process.env.AUTO_SALE_MANAGER_CHAT_IDS||'',fetchImpl:async()=>{throw Error('forbidden_readonly_network_send')}});
+const recipients=selected?planner.managerIds(selected,{...state,team:routedTeam}):[];
+const deliveryRoute={
+  leadFound:Boolean(selected),
+  preferredManager:'Дмитрий',
+  recipientCount:recipients.length,
+  dmitryIncluded:Boolean(telegramId&&recipients.includes(telegramId)),
+  extraneousRecipientCount:recipients.filter(id=>id!==telegramId).length,
+  fallbackManagerCount:planner.fallbackManagerCount
+};
 const result={
   mode:'readonly',requestedClient:'https://vk.ru/flyer_flyer',
   clientIdentity:{resolved:Boolean(client),id:client?.vkUserId||null,resolvedScreenName:client?.screenName||null,lookupStatus:profile.http,lookupError:client?null:profile.errorMessage||'not_found'},
@@ -77,6 +93,7 @@ const result={
   api:{ok:health.ok===true,persistence:health.persistence,build:health.buildSha,vkAuth:health.vkAuth,vkMessaging:health.vkMessaging,telegramNotifications:health.telegramNotifications,telegramRoutableManagers:health.telegramRoutableManagers},
   vkConfig:{enabled:Boolean(vkConfig.enabled),messagingEnabled:Boolean(vkConfig.messagingEnabled),groupId:vkConfig.groupId||null},
   vkMessaging,
+  deliveryRoute,
   leads:{vkClientCount:leads.length,assignedToDmitry:leads.filter(l=>l.manager==='Дмитрий').length,latestStatuses:leads.slice(-3).map(l=>({status:l.status||null,manager:l.manager||null})),dmitryTotal:managerLeads.length},
   adminAccessVerified:access.role==='admin'
 };
