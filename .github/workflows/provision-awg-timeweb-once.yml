@@ -1,0 +1,90 @@
+name: Provision AWG Timeweb staging once
+
+on:
+  push:
+    branches:
+      - feature/awg-timeweb-fresh-install-20261014
+    paths:
+      - .github/workflows/provision-awg-timeweb-once.yml
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: awg-timeweb-staging-provision
+  cancel-in-progress: false
+
+jobs:
+  provision:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      TIMEWEB_CLOUD_TOKEN: ${{ secrets.TIMEWEB_CLOUD_TOKEN }}
+      AWG_TIMEWEB_PLAN_OUTPUT: ${{ runner.temp }}/awg-timeweb-server-report.json
+    steps:
+      - name: Checkout audited candidate
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Setup Node 22
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Resolve verified public SSH key
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/resolve-awg-timeweb-ssh-key.sh
+      - name: Read account and tariff without creating
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/prepare-awg-timeweb.mjs
+      - name: Validate precise approved staging configuration and price
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import {readFile} from 'node:fs/promises';
+          const report=JSON.parse(await readFile(process.env.AWG_TIMEWEB_PLAN_OUTPUT,'utf8'));
+          const p=report.plan||{};
+          if(!report.ok||p.availabilityZone!=='spb-3'||p.cpu!==1||p.ramMb!==2048||
+             p.diskMb!==30720||p.presetId!==2575||Number(p.baseMonthlyPrice)>1500||
+             Number(p.baseMonthlyPrice)<1||p.name!=='awg-timeweb-staging'){
+            throw new Error('Timeweb staging preset or price changed. Refusing billable order.');
+          }
+          if(!report.created && !report.existingServerId)console.log('Authorized to create one isolated Timeweb staging instance, base price RUB '+p.baseMonthlyPrice+'/month');
+          else console.log('Existing owned staging server detected; no additional server should be billed.');
+          NODE
+      - name: Create or reuse one owned Timeweb staging server
+        shell: bash
+        run: |
+          set -euo pipefail
+          # No retry on uncertain create responses. The provisioner itself checks for owned existing name.
+          node scripts/prepare-awg-timeweb.mjs --create
+      - name: Confirm sanitised result
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import {readFile} from 'node:fs/promises';
+          const report=JSON.parse(await readFile(process.env.AWG_TIMEWEB_PLAN_OUTPUT,'utf8'));
+          if(!report.ok||!(report.serverId||report.existingServerId)){
+            throw new Error('No confirmed Timeweb server ID. Inspect dashboard; never blindly retry POST.');
+          }
+          console.log(JSON.stringify({
+            ok:report.ok,created:report.created,
+            serverId:report.serverId||report.existingServerId,
+            status:report.status,
+            region:report.plan?.availabilityZone,
+            baseMonthlyRUB:report.plan?.baseMonthlyPrice,
+            dnsChanges:false,productionWebhookChanges:false
+          }));
+          NODE
+      - name: Retain report without credentials
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: awg-timeweb-provision-confirmation
+          path: ${{ runner.temp }}/awg-timeweb-server-report.json
+          retention-days: 7
+          if-no-files-found: error
