@@ -77,6 +77,26 @@ jobs:
           done
           echo "Production runtime and YDB checked; no webhook config changes."
           jq -c '{relayRouteConfigured:(.image.environment.AUTO_SALE_TELEGRAM_RELAY_URL=="https://integration-telegram.viiversion.com/telegram/send"),relaySigningKeyPresent:((.image.environment.AUTOWORLD_RELAY_SECRET//"")|length>0),notificationPumpConfigured:(.image.environment.AUTO_SALE_NOTIFICATION_PUMP_ENABLED//"default")}' "$RUNNER_TEMP/prod.json" | sed 's/^/AWG_PRODUCTION_TELEGRAM_DELIVERY_MODE /'
+      - name: Inspect sanitized production revision settings for safe notification hotfix
+        run: |
+          set -euo pipefail
+          jq -c '{
+            revisionId:.id,
+            imagePresent:((.image.image//"")|length>0),
+            imageTagKind:(.image.image//""|split("/")[-1]|split(":")[0]),
+            resources:.resources,
+            executionTimeout:.execution_timeout,
+            serviceAccountId:.service_account_id,
+            connectivity:.connectivity,
+            revisionKeys:keys,
+            imageKeys:(.image|keys),
+            imageEnvNames:(.image.environment|keys),
+            secretBindings:.image.secrets,
+            vkEnabled:(.image.environment.AUTO_SALE_VK_ENABLED=="true"),
+            vkWebEnabled:(.image.environment.AUTO_SALE_VK_WEB_ENABLED=="true"),
+            webhookAppUrl:.image.environment.AUTO_SALE_TELEGRAM_APP_URL,
+            staticBucket:.image.environment.AUTO_SALE_MEDIA_BUCKET
+          }' "$RUNNER_TEMP/prod.json" | sed 's/^/AWG_PRODUCTION_REVISION_SAFE_SNAPSHOT /'
       - name: Audit actual Telegram webhook, relay, outbox and start handler
         run: node scripts/audit-awg-telegram-prod-webhook.mjs
 
