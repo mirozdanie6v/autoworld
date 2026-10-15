@@ -5,7 +5,7 @@ import {createVkService} from '../server/vk.mjs';
 import {createTelegramService} from '../server/telegram-bot.mjs';
 
 const token=String(process.env.AUTO_SALE_TELEGRAM_BOT_TOKEN||'');
-const vkToken=String(process.env.AUTO_SALE_VK_COMMUNITY_TOKEN||'');
+const vkToken=String(process.env.AWG_VK_COMMUNITY_TOKEN||process.env.AUTO_SALE_VK_COMMUNITY_TOKEN||'');
 const vkAppSecret=String(process.env.AUTO_SALE_VK_APP_SECRET||'');
 const relaySecret=String(process.env.AUTOWORLD_RELAY_SECRET||'');
 const relayUrl=String(process.env.AUTO_SALE_TELEGRAM_RELAY_URL||'');
