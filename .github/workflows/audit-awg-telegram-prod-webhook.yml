@@ -76,6 +76,7 @@ jobs:
             echo "$KEY=$VALUE" >> "$GITHUB_ENV"
           done
           echo "Production runtime and YDB checked; no webhook config changes."
+          jq -c '{relayRouteConfigured:(.image.environment.AUTO_SALE_TELEGRAM_RELAY_URL=="https://integration-telegram.viiversion.com/telegram/send"),relaySigningKeyPresent:((.image.environment.AUTOWORLD_RELAY_SECRET//"")|length>0),notificationPumpConfigured:(.image.environment.AUTO_SALE_NOTIFICATION_PUMP_ENABLED//"default")}' "$RUNNER_TEMP/prod.json" | sed 's/^/AWG_PRODUCTION_TELEGRAM_DELIVERY_MODE /'
       - name: Audit actual Telegram webhook, relay, outbox and start handler
         run: node scripts/audit-awg-telegram-prod-webhook.mjs
 
