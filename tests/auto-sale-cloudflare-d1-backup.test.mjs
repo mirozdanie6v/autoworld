@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {randomBytes} from 'node:crypto';
+import {randomBytes,createHash} from 'node:crypto';
 import {fixtureBackup} from './fixtures/migration-backup.mjs';
 import {createRecoveryBackup} from '../server/migration-backup.mjs';
 import {
@@ -94,7 +94,7 @@ test('wrong keys, modified ciphertext and invalid encryption keys always fail',(
 
 test('chunk splitting, order and digest detect corruption before decryption',()=>{
   const {encoded}=encryptD1Recovery(sample(),KEY);
-  const hash=(await import('node:crypto')).createHash('sha256').update(encoded).digest('hex');
+  const hash=createHash('sha256').update(encoded).digest('hex');
   const chunks=splitD1Archive(encoded,128);
   assert.ok(chunks.length>1);
   assert.equal(joinD1Archive(chunks,chunks.length,hash),encoded);
@@ -128,7 +128,7 @@ test('D1 upload reads every encrypted chunk back before marking verified, and su
   const list=await client.listBackups(dbId,{limit:10});
   assert.equal(list.length,1);
   const retrieved=await client.getBackup(dbId,report.id,KEY);
-  assert.deepEqual(retrieved.backup,sample().snapshot.meta.sourceRevision?retrieved.backup:retrieved.backup);
+  assert.equal(retrieved.report.checksum,retrieved.meta.backup_checksum);
   assert.equal(retrieved.report.revision,10);
   assert.equal(retrieved.report.counts.leads,1);
   assert.equal(retrieved.backup.source.databaseId,SOURCE);
