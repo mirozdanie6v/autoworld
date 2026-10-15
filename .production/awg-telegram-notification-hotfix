@@ -1,0 +1,7 @@
+intent=telegram-navigation-no-drafts-20261015
+approved_scope=server-telegram-notifications-and-four-mini-app-static-modules
+ci_run=38680585149
+original_webhook=https://integration-telegram.viiversion.com/telegram/webhook
+preserve_ydb=true
+preserve_vk=true
+preserve_api_key=true
