@@ -65,3 +65,5 @@ jobs:
           node --check scripts/test-awg-vk-staging-full-cycle.mjs
           node scripts/test-awg-vk-staging-full-cycle.mjs
           echo 'VK staging YDB: create, identity isolation, three manager status changes, notifications planning, stale writes, cleanup. No real notifications sent; production unchanged.' >> "$GITHUB_STEP_SUMMARY"
+
+# VII-172: production VK client + Telegram manager transport QA, isolated staging lifecycle on 2026-10-15.
