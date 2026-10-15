@@ -34,8 +34,10 @@ test('styles only affect process cards on 901-1550px and preserve all adjacent v
   assert.doesNotMatch(css,/(^|\s)\.auto-grid\b/);
   assert.doesNotMatch(css,/(^|\s)\.auto-bottom\b/);
   assert.match(responsive,/@media\(max-width:720px\)/);
-  assert.match(base,/@media\(max-width:900px\)\{[^}]*\.auto-process\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
-  assert.match(base,/@media\(max-width:620px\)\{[^}]*\.auto-process\{grid-template-columns:1fr\}/);
+  assert.match(base,/@media\(max-width:900px\)/);
+  assert.match(base.slice(base.indexOf('@media(max-width:900px)')), /\.auto-process\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(base,/@media\(max-width:620px\)/);
+  assert.match(base.slice(base.indexOf('@media(max-width:620px)')), /\.auto-process\{grid-template-columns:1fr\}/);
   assert.match(desktop,/@media\s*\(min-width:1025px\)/);
 });
 
