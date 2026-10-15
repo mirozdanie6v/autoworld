@@ -1,0 +1,28 @@
+/* AutoWorld full-width desktop layout, 2026-10-15.
+   Keep <=1024px tablet/mobile breakpoints and controls unchanged.
+   Content fills the *layout viewport* instead of a fixed 1180px column. */
+@media (min-width:1025px) {
+  .auto-shell {
+    width:100%;
+    max-width:none;
+    margin-inline:0;
+    padding-inline:clamp(20px,2.5vw,56px);
+  }
+  /* Grow catalog columns naturally; avoid enormous three-card rows at 1920px. */
+  .auto-grid {
+    grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));
+  }
+  /* A native scrollbar remains operable, but no bright vertical stripe. */
+  html {
+    scrollbar-width:thin;
+    scrollbar-color:#344154 #07090c;
+  }
+  html::-webkit-scrollbar { width:11px; }
+  html::-webkit-scrollbar-track { background:#07090c; }
+  html::-webkit-scrollbar-thumb {
+    background:#344154;
+    border:3px solid #07090c;
+    border-radius:999px;
+  }
+  html::-webkit-scrollbar-thumb:hover { background:#53647a; }
+}
