@@ -1,5 +1,6 @@
 import {AccessTokenCredentialsProvider} from '@ydbjs/auth/access-token';
 import {createYdbStateStore} from '../server/ydb-state.mjs';
+import {createYdbDomainStore} from '../server/ydb-domain-store.mjs';
 import {createTelegramService} from '../server/telegram-bot.mjs';
 
 const BASE='https://awgcars.ru';
@@ -39,6 +40,18 @@ if(!client){
 const health=await fetch(BASE+'/api/health',{signal:timeout(25000)}).then(r=>r.json());
 const vkConfig=await fetch(BASE+'/api/auto-sale/vk/config',{signal:timeout(25000)}).then(r=>r.json());
 const state=await api('/api/auto-sale/state');
+const stateAgain=await api('/api/auto-sale/state');
+const parity=await api('/api/auto-sale/admin/read-parity');
+const directStore=await createYdbDomainStore({connectionString:ydb,credentialsProvider:creds,ensureSchema:false});
+let direct;
+try{direct=await directStore.loadState();}finally{await directStore.close();}
+const snapshot={
+  apiFirst:{revision:state.revision,initialized:state.initialized,leadCount:(state.leads||[]).length,quoteCount:(state.quotes||[]).length,orderCount:(state.orders||[]).length},
+  apiSecond:{revision:stateAgain.revision,initialized:stateAgain.initialized,leadCount:(stateAgain.leads||[]).length},
+  ydbNormalized:{revision:direct.revision,initialized:direct.initialized,leadCount:(direct.leads||[]).length,
+    clientVKCount:(direct.leads||[]).filter(l=>l.clientProvider==='vk'&&String(l.clientProviderUserId||'')==='26443041').length},
+  readParity:{configuredMode:parity.configuredMode,source:parity.source,authoritative:parity.authoritative,fallback:parity.fallback,reason:parity.reason,revision:parity.revision}
+};
 const access=state._access||{};
 if(access.role!=='admin')throw Error('api_key_did_not_resolve_admin');
 const managers=(state.team||[]).filter(m=>m?.active!==false&&m?.role==='Менеджер');
@@ -94,6 +107,7 @@ const result={
   vkConfig:{enabled:Boolean(vkConfig.enabled),messagingEnabled:Boolean(vkConfig.messagingEnabled),groupId:vkConfig.groupId||null},
   vkMessaging,
   deliveryRoute,
+  snapshot,
   leads:{vkClientCount:leads.length,assignedToDmitry:leads.filter(l=>l.manager==='Дмитрий').length,latestStatuses:leads.slice(-3).map(l=>({status:l.status||null,manager:l.manager||null})),dmitryTotal:managerLeads.length},
   adminAccessVerified:access.role==='admin'
 };
