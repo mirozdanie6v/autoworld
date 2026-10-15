@@ -616,4 +616,26 @@ window.addEventListener('auto-sale-client-decision',()=>{
 });
 render();
 
+function openManagerNotification(target,resolved){
+  if(access.authenticated!==true||access.role!=='admin'||!hasAdminAccess||!resolved?.leadId)return false;
+  if(!leads.some(item=>item.id===resolved.leadId))return false;
+  let nextRoute='leads',nextModal={type:'lead',id:resolved.leadId};
+  if(target?.type==='quote'){
+    const quote=quotes.find(item=>item.id===resolved.quoteId&&item.leadId===resolved.leadId);
+    if(!quote||quote.status==='Черновик')return false;
+    nextRoute='quotes';nextModal={type:'quote',id:quote.id};
+  }else if(target?.type==='order'){
+    const order=orders.find(item=>item.id===resolved.orderId&&item.leadId===resolved.leadId);
+    if(!order)return false;
+    nextRoute='shipping';nextModal={type:'order',id:order.id};
+  }else if(target?.type!=='lead')return false;
+  state.role='manager';
+  state.route=nextRoute;
+  state.modal=nextModal;
+  sessionStorage.setItem(KEYS.role,'manager');
+  render();
+  return true;
+}
+window.__AUTO_SALE_OPEN_MANAGER_NOTIFICATION__=openManagerNotification;
+
 window.addEventListener('auto-sale-open-client-orders',()=>{if(state.role==='client'){state.route='orders';state.modal=null;render()}});
