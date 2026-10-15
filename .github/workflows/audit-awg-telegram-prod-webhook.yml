@@ -83,7 +83,7 @@ jobs:
           jq -c '{
             revisionId:.id,
             imagePresent:((.image.image//"")|length>0),
-            imageTagKind:(.image.image//""|split("/")[-1]|split(":")[0]),
+            imageValueType:(.image.image|type),
             resources:.resources,
             executionTimeout:.execution_timeout,
             serviceAccountId:.service_account_id,
