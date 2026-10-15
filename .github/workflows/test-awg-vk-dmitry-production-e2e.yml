@@ -96,3 +96,5 @@ jobs:
         env:
           AWG_E2E_GUARD: VK26443041_DMITRY_TEST_ONLY_20261015
         run: node scripts/test-awg-vk-dmitry-production-e2e.mjs
+
+# Retry 2026-10-15: readiness via live health; prior run failed before any mutation.
