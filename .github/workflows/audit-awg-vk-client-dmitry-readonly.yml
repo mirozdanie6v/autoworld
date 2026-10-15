@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - .github/workflows/audit-awg-vk-client-dmitry-readonly.yml
+      - scripts/audit-awg-vk-client-dmitry-readonly.mjs
   workflow_dispatch:
 permissions:
   contents: read
@@ -56,6 +57,8 @@ jobs:
           test -n "$BIN"
           install -m 0755 "$BIN" "$RUNNER_TEMP/yc-bin/yc"
           echo "$RUNNER_TEMP/yc-bin" >> "$GITHUB_PATH"
+      - name: Install YDB client dependencies
+        run: npm ci --ignore-scripts
       - name: Read verified running production bot credentials without logging
         run: |
           set -euo pipefail
@@ -69,6 +72,9 @@ jobs:
           yc serverless container revision get "$RID" --format json > "$RUNNER_TEMP/prod.json"
           jq -e '.image.environment.YDB_CONNECTION_STRING|endswith("/etn00ojk5iv1u7dgpdar")' "$RUNNER_TEMP/prod.json" >/dev/null
           jq -e '.image.environment.AUTO_SALE_PUBLIC_DEMO_WRITE=="false"' "$RUNNER_TEMP/prod.json" >/dev/null
+          YDB=$(jq -er '.image.environment.YDB_CONNECTION_STRING|select(endswith("/etn00ojk5iv1u7dgpdar"))' "$RUNNER_TEMP/prod.json")
+          echo "::add-mask::$YDB"
+          echo "YDB_CONNECTION_STRING=$YDB" >> "$GITHUB_ENV"
           for KEY in AUTO_SALE_API_KEY AUTO_SALE_TELEGRAM_BOT_TOKEN AUTO_SALE_VK_COMMUNITY_TOKEN; do
             VALUE=$(jq -er --arg key "$KEY" '.image.environment[$key]|select(length>0)' "$RUNNER_TEMP/prod.json")
             echo "::add-mask::$VALUE"
