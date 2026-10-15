@@ -101,3 +101,5 @@ jobs:
           echo 'Worker deployed; existing bot and outbound signing keys preserved.'
       - name: Check signed Cloudflare ingress against actual production API
         run: node scripts/verify-awg-cloudflare-telegram-webhook.mjs
+
+# VII-172: redeploy previously tested Cloudflare Telegram ingress; retain outbound /telegram/send.
