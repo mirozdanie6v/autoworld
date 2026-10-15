@@ -1,4 +1,5 @@
 import {createHmac,timingSafeEqual} from 'node:crypto';
+import {notificationTarget,telegramNotificationUrl} from '../shared/auto-sale-notification-links.mjs';
 
 const clean=value=>String(value??'').trim();
 const arr=value=>Array.isArray(value)?value.filter(Boolean):[];
@@ -193,7 +194,15 @@ export function createTelegramService({
     const prevOrders=new Map(arr(previous.orders).map(x=>[clean(x.id),x]));
 
     const appUrl=clean(process.env.AUTO_SALE_TELEGRAM_APP_URL||'');
-    const actionMarkup=label=>appUrl?{inline_keyboard:[[{text:label,web_app:{url:appUrl}}]]}:null;
+    const notificationLabel=(meta,label)=>{
+      if(label)return label;
+      const type=notificationTarget(meta)?.type;
+      return type==='quote'?'Посмотреть расчёт':type==='order'?'Открыть заказ':'Открыть заявку';
+    };
+    const actionMarkup=(label,meta)=>{
+      const url=telegramNotificationUrl(appUrl,meta);
+      return url?{inline_keyboard:[[{text:notificationLabel(meta,label),web_app:{url}}]]}:null;
+    };
     const deliver=async(route,message,meta,replyMarkup=null)=>{
       const channel=clean(route?.channel)||'telegram';
       if((channel==='telegram'&&!telegramEnabled)||(channel==='vk'&&!vkEnabled))return;
@@ -203,11 +212,11 @@ export function createTelegramService({
       const routeFields=channel==='vk'?{channel:'vk',vkUserId:recipientId}:{channel:'telegram',chatId:recipientId};
       deliveries.push({...routeFields,message,replyMarkup,id:eventKey(meta)+':'+meta.target+':'+recipientKey,...meta});
     };
-    const toManagers=async(lead,message,meta,label='Открыть заявку')=>{
-      for(const chatId of managerIds(lead,fallbackManagers,next))await deliver({channel:'telegram',id:chatId},message,{target:'manager',...meta},actionMarkup(label));
+    const toManagers=async(lead,message,meta,label='')=>{
+      for(const chatId of managerIds(lead,fallbackManagers,next))await deliver({channel:'telegram',id:chatId},message,{target:'manager',...meta},actionMarkup(label,meta));
     };
-    const toClient=async(lead,message,meta,label='Открыть AUTO МИР')=>{
-      const route=clientRoute(lead);if(route)await deliver(route,message,{target:'client',...meta},actionMarkup(label));
+    const toClient=async(lead,message,meta,label='')=>{
+      const route=clientRoute(lead);if(route)await deliver(route,message,{target:'client',...meta},actionMarkup(label,meta));
     };
 
     for(const lead of arr(next?.leads)){
@@ -227,6 +236,9 @@ export function createTelegramService({
     }
 
     for(const quote of arr(next?.quotes)){
+      // Unpublished quotes are internal. Never notify Telegram or VK recipients
+      // about draft creation, edits, or transitions back to draft.
+      if(clean(quote.status)==='Черновик')continue;
       const before=prevQuotes.get(clean(quote.id));
       const decisionChanged=quote.clientDecision==='changes_requested'&&(before?.clientDecision!==quote.clientDecision||before?.clientDecisionAt!==quote.clientDecisionAt);
       if(before&&clean(before.status)===clean(quote.status)&&!decisionChanged)continue;
