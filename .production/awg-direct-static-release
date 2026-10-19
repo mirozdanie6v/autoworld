@@ -1,8 +1,9 @@
 release=direct-object-storage
-source=94215085196dafb2d1fec8780ffdbdb8b45459b6
+source=6418ca4f822cf28da41f1b1fc5a67404dd4577ff
+reason=VII-176-frontend-only-ydb-schema-unavailable
 preserve_backend=true
+preserve_ydb=true
 vk_auth=enabled
 vk_messaging=enabled
-probe_transport=curl-ipv4-retry
 stage_assets_before_health=true
-wait_for_cors_propagation=true
+browser_rollback_gate=true
