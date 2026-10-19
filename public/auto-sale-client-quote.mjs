@@ -6,7 +6,7 @@ const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const money=v=>'$'+new Intl.NumberFormat('en-US',{maximumFractionDigits:0}).format(Number(v)||0);
 const dateRu=v=>{if(!v)return'—';const d=new Date(`${v}T00:00:00`);return Number.isNaN(d.getTime())?String(v):d.toLocaleDateString('ru-RU',{day:'2-digit',month:'long',year:'numeric'})};
 const quoteFor=leadId=>read(K.quotes,[]).filter(q=>q.leadId===leadId).sort((a,b)=>(Number(b.version)||0)-(Number(a.version)||0))[0];
-const rows=[['lot','Цена лота'],['auction','Сбор аукциона'],['inland','Доставка по США'],['ocean','Морская доставка'],['customs','Таможня / оформление'],['repair','Ремонт / подготовка'],['service','Услуга компании']];
+const rows=[['lot','Цена лота'],['auction','Сбор аукциона'],['inland','Доставка по США'],['ocean','Морская доставка'],['customs','Таможня / оформление'],['georgiaDelivery','Доставка по Грузии'],['legalization','Легализация'],['recyclingFee','Утильсбор'],['repair','Ремонт / подготовка'],['service','Услуга компании']];
 
 function panel(leadId,q){
   if(!q||q.status==='Черновик')return'';
