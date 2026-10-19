@@ -9,11 +9,17 @@ import {
 
 const LEAD_STATUSES=['Новый','В работе','Расчёт','Ожидает клиента','Сделка','Отказ'];
 
-test('client request requires contact model realistic budget and valid year range',()=>{
-  assert.ok(validateClientRequest({name:'A',contact:'',model:'BMW X5',budget:40000}).length>0);
-  assert.ok(validateClientRequest({name:'A',contact:'@a',model:'BMW X5',budget:40000,yearFrom:2025,yearTo:2021}).length>0);
-  assert.equal(validateClientRequest({name:'A',contact:'@a',model:'BMW X5',origin:'США',budget:40000,yearFrom:2021,yearTo:2024}).length,0);
-  assert.ok(validateClientRequest({name:'A',contact:'@a',model:'BMW X5',origin:'Корея',budget:40000,yearFrom:2021,yearTo:2024}).length>0);
+test('client request validates general age bands and selected catalog vehicle independently',()=>{
+  const base={name:'A',contact:'@a',model:'BMW X5',origin:'США'};
+  assert.ok(validateClientRequest({...base,contact:'',ageRange:'1–3 года'}).length>0);
+  for(const ageRange of ['1–3 года','3–5 лет','5–10 лет','10+ лет']){
+    assert.deepEqual(validateClientRequest({...base,ageRange}),[]);
+  }
+  assert.ok(validateClientRequest({...base,ageRange:''}).length>0);
+  assert.ok(validateClientRequest({...base,ageRange:'unknown'}).length>0);
+  assert.deepEqual(validateClientRequest({...base,carId:'CAR-1',estimatedCostRub:2500000,year:2022,mileage:'34 000 км'}),[]);
+  assert.ok(validateClientRequest({...base,carId:'CAR-1',estimatedCostRub:-10}).length>0);
+  assert.ok(validateClientRequest({...base,origin:'Корея',ageRange:'1–3 года'}).length>0);
 });
 
 test('manager-created lead requires manager source and next action',()=>{
