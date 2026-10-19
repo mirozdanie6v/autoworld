@@ -22,10 +22,7 @@ test('validated client to handoff workflow preserves all business rules',async()
   set(form,'[name="contact"]','@validated_client');
   set(form,'[name="model"]','Audi Q5 2023');
   set(form,'[name="origin"]','США');
-  set(form,'[name="budget"]','41000');
-  set(form,'[name="yearFrom"]','2022');
-  set(form,'[name="yearTo"]','2024');
-  set(form,'[name="mileageMax"]','50000');
+  set(form,'[name="ageRange"]','3–5 лет');
   set(form,'[name="deliveryCity"]','Москва');
   submit(dom,form);
 
@@ -33,7 +30,7 @@ test('validated client to handoff workflow preserves all business rules',async()
   assert.ok(lead);
   assert.equal(lead.source,'Mini App');
   assert.equal(lead.clientCreated,true);
-  assert.equal(lead.yearFrom,'2022');
+  assert.equal(lead.ageRange,'3–5 лет');
 
   root.querySelector('[data-role="manager"]').click();
   root.querySelector('[data-go="leads"]').click();
