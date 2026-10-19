@@ -32,7 +32,7 @@ test('declined permission saves one request, shows a notice and supports explici
     await importFresh('auto-sale-vk.mjs');await importFresh('auto-sale-app-v3.mjs');
     document.querySelector('[data-open-request]').click();
     const form=document.querySelector('#requestForm');
-    for(const [key,value]of Object.entries({name:'Клиент',contact:'https://vk.com/id42',model:'Toyota',origin:'Грузия',budget:'20000'}))form.elements.namedItem(key).value=value;
+    for(const [key,value]of Object.entries({name:'Клиент',contact:'https://vk.com/id42',model:'Toyota',origin:'Грузия',ageRange:'3–5 лет'}))form.elements.namedItem(key).value=value;
     form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));
     await tick();assert.equal(form.querySelector('button[type="submit"]').disabled,true);
     form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));
