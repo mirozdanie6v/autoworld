@@ -76,5 +76,19 @@ jobs:
       - name: Inspect existing infrastructure without mutations
         run: node scripts/inspect-awg-static-infra.mjs
 
+
+      - name: Diagnose live API and Yandex container logs without mutations
+        run: |
+          set +e
+          echo '=== Live API status ==='
+          curl -4 -sS --connect-timeout 8 --max-time 20 -o /tmp/awg-live-health -w 'HTTP %{http_code} in %{time_total}s\\n' https://awgcars.ru/api/health
+          head -c 500 /tmp/awg-live-health | sed -E 's/"(token|secret|key|password)"[[:space:]]*:[[:space:]]*"[^"]*"/"\\1":"[redacted]"/g'
+          echo
+          echo '=== Container metadata ==='
+          yc serverless container get --name "$YC_CONTAINER_NAME" --folder-id "$YC_FOLDER_ID" --format json | jq '{id,name,status,created_at,updated_at}'
+          echo '=== Recent Yandex logs ==='
+          timeout 25s yc logging read --folder-id "$YC_FOLDER_ID" --since 20m --limit 60 --format json | jq -c '.[].message // empty' | cut -c 1-280
+          exit 0
+
       - name: Inspect prepared CDN routes without mutations
         run: node scripts/inspect-awg-cdn.mjs
