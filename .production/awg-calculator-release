@@ -1,8 +1,8 @@
-AutoWorld Georgia tariff calculator release
-Linear: VII-177
-PR: https://github.com/mirozdanie6v/autoworld/pull/49
-Feature SHA: 1e96aa16562f0b42c5c2ad6ec8e05041f49c8c73
-Scope: four routes, included service $500, crypto 3.5%, customs confirmation
-Guard: verify exact main SHA, preserve VK+Telegram, deploy backend first, immutable frontend second
-
-Retry after PR #50 safe VK Lockbox correction and read-only preflight (2026-10-20).
+AutoWorld Georgia audited quote release
+PR: https://github.com/mirozdanie6v/autoworld/pull/53
+Feature SHA: 0b98ac91858c40e566a8bc5cbfa04350d2d59aba
+Scope: four purchase routes, exact client expenses, invoice, age, TKS manual-source evidence and guarded zero duties
+Backend: server quote audit validation, preserve YDB and VK+Telegram
+Frontend: quote forms, RUBLE-USD conversion, old-quote compatibility
+Guard: exact main commit regression suite, existing VK auth and VK messaging, backend before immutable frontend, browser rollback
+External TKS AUTO.JSON: licensed key not configured, manual official TKS calculator link only
