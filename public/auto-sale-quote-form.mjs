@@ -16,7 +16,7 @@ export function quoteCostAuditFields(q={},esc=x=>String(x)){
  const countries=[['Россия','Россия'],['Грузия','Грузия'],['По согласованию','По согласованию']];
  const repair='<label>Где выполняется ремонт<select name="repairCountry">'+countries.map(x=>option(x[0],q.repairCountry||'Россия',x[1])).join('')+'</select></label>';
  const parts='<label>Где покупаются запчасти<select name="partsCountry">'+countries.map(x=>option(x[0],q.partsCountry||'По согласованию',x[1])).join('')+'</select></label>';
- return '<div class="full auto-form-divider">Подтверждение стоимости и работ</div>'+source+invoice+repair+parts;
+ return '<div class="full auto-form-divider">Подтверждение стоимости и работ</div>'+ '<p class="full auto-rule-hint">Источники стоимости: <a target="_blank" rel="noopener noreferrer" href="https://myauto.ge/ka">MyAuto</a> · <a target="_blank" rel="noopener noreferrer" href="https://www.copart.com/">Copart</a> · <a target="_blank" rel="noopener noreferrer" href="https://www.iaai.com/">IAAI</a> · <a target="_blank" rel="noopener noreferrer" href="https://bid.cars/en/">Bid.Cars</a>. Значение цены переносится менеджером и подтверждается ссылкой.</p>'+source+invoice+repair+parts+'<p id="quoteLogisticsHint" class="full auto-rule-hint"></p>';
 }
 
 export function quoteCustomsFields(q={},esc=x=>String(x)){
