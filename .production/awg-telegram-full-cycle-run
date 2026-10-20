@@ -1,0 +1,8 @@
+test=telegram-physical-full-cycle
+client=Flyer_kg
+manager=Дмитрий
+mode=full_cycle
+preserve_existing_leads=true
+cleanup_test_scenario=true
+source_ref=6968ccd865af12c991a41d702e207808bf034d5d
+requested=2026-10-20
