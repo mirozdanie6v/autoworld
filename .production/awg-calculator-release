@@ -1,0 +1,6 @@
+AutoWorld Georgia tariff calculator release
+Linear: VII-177
+PR: https://github.com/mirozdanie6v/autoworld/pull/49
+Feature SHA: 1e96aa16562f0b42c5c2ad6ec8e05041f49c8c73
+Scope: four routes, included service $500, crypto 3.5%, customs confirmation
+Guard: verify exact main SHA, preserve VK+Telegram, deploy backend first, immutable frontend second
