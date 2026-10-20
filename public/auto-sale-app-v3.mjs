@@ -557,6 +557,7 @@ function syncQuoteScenario(form){
   for(const id of ['quoteCryptoConfirmed','quoteRepairReviewed']){
     const node=form.querySelector('#'+id);if(node)node.classList.toggle('auto-conditional-hidden',georgia);
   }
+  const hint=form.querySelector('#quoteLogisticsHint');if(hint)hint.textContent=georgia?'Логистика по Грузии — местная доставка. Доп. доставка по Грузии — только отдельная услуга, не включайте один и тот же маршрут дважды. Доставка до РФ — отдельная статья. Срок ориентировочно 5–10 дней.':'Логистика до Тбилиси и брокеры — ориентир $3 100–3 600 (по умолчанию $3 350), уточняется менеджером. Доставка по США до порта указана отдельно. Срок ориентировочно 2,5–3,5 месяца.';
   const labels={lot:georgia?'Стоимость автомобиля в Грузии':'Стоимость лота',inland:georgia?'Логистика по Грузии':'Доставка по США',ocean:georgia?'Доставка из Грузии в Россию':'Логистика до Тбилиси с брокерами'};
   for(const [key,value] of Object.entries(labels)){const el=form.querySelector('[data-quote-label="'+key+'"]');if(el)el.textContent=value}
   if(form.elements.transportMode&&origin)form.elements.transportMode.value=defaultTransportMode(origin);
