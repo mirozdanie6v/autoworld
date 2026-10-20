@@ -47,10 +47,10 @@ jobs:
         run: |
           set -euo pipefail
           before="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow deploy-awg-production.yml --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
-          gh workflow run deploy-awg-production.yml --repo "$GITHUB_REPOSITORY" --ref main -f vk_enable=true -f telegram_lifecycle=false
+          gh workflow run deploy-awg-production.yml --repo "$GITHUB_REPOSITORY" --ref main -f vk_enable=true
           id=''
           for attempt in $(seq 1 30); do
-            id="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow deploy-awg-production.yml --event workflow_dispatch --limit 5 --json databaseId,headSha --jq '.[0] | select(.headSha == env.GITHUB_SHA) | .databaseId // ""' || true)"
+            id="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow deploy-awg-production.yml --event workflow_dispatch --limit 5 --json databaseId,headSha | jq -r --arg sha "$GITHUB_SHA" '[.[] | select(.headSha == $sha)][0].databaseId // empty' || true)"
             if [ -n "$id" ] && [ "$id" != "$before" ]; then break; fi
             sleep 5
           done
@@ -67,7 +67,7 @@ jobs:
           gh workflow run deploy-awg-direct-statics.yml --repo "$GITHUB_REPOSITORY" --ref main
           id=''
           for attempt in $(seq 1 30); do
-            id="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow deploy-awg-direct-statics.yml --event workflow_dispatch --limit 5 --json databaseId,headSha --jq '.[0] | select(.headSha == env.GITHUB_SHA) | .databaseId // ""' || true)"
+            id="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow deploy-awg-direct-statics.yml --event workflow_dispatch --limit 5 --json databaseId,headSha | jq -r --arg sha "$GITHUB_SHA" '[.[] | select(.headSha == $sha)][0].databaseId // empty' || true)"
             if [ -n "$id" ] && [ "$id" != "$before" ]; then break; fi
             sleep 5
           done
