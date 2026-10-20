@@ -13,11 +13,11 @@ export const seedQuotes = () => [];
 export const seedOrders = () => [];
 
 export function calculateQuote(parts = {}) {
-  return ['lot','auction','inland','ocean','customs','repair','service','georgiaDelivery','legalization','recyclingFee'].reduce((sum,key)=>sum+n(parts[key]),0);
+  return ['lot','auction','inland','ocean','customs','repair','service','georgiaDelivery','legalization','recyclingFee','cryptoFee','partsCost'].reduce((sum,key)=>sum+n(parts[key]),0);
 }
 
 export function quoteCost(parts = {}) {
-  return ['lot','auction','inland','ocean','customs','repair','georgiaDelivery','legalization','recyclingFee'].reduce((sum,key)=>sum+n(parts[key]),0);
+  return ['lot','auction','inland','ocean','customs','repair','georgiaDelivery','legalization','recyclingFee','cryptoFee','partsCost'].reduce((sum,key)=>sum+n(parts[key]),0);
 }
 
 export function orderMargin(order = {}) {
