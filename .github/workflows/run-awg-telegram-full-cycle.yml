@@ -39,8 +39,6 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
-        with:
-          ref: 6968ccd865af12c991a41d702e207808bf034d5d
       - uses: actions/setup-node@v5
         with:
           node-version: 22
