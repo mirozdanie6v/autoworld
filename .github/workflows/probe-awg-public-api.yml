@@ -1,0 +1,42 @@
+name: Probe AWG Public API (read-only)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/probe-awg-public-api.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Probe AWG public root and API without mutations
+        shell: bash
+        run: |
+          set -uo pipefail
+          echo '=== DNS A record ==='
+          getent ahostsv4 awgcars.ru | head -n 4 || true
+          for round in 1 2; do
+            echo "=== round $round ==="
+            for route in '/' '/api/health' '/api/auto-sale/state' '/api/auto-sale/vk/config'; do
+              out="${RUNNER_TEMP}/awg-probe-response"
+              metrics=$(curl -4 -L -sS -H 'Cache-Control: no-cache' \
+                --connect-timeout 8 --max-time 28 \
+                -o "$out" -w '%{http_code} %{time_starttransfer} %{time_total} %{remote_ip}' \
+                "https://awgcars.ru$route" 2>&1) || true
+              echo "route=$route metrics=$metrics"
+              if [ "$route" = /api/health ] && jq -e 'type=="object"' "$out" >/dev/null 2>&1; then
+                jq -c '{ok,error,vkAuth,vkMessaging,buildSha}' "$out" || true
+              fi
+              if [ "$route" = / ]; then
+                grep -Eo 'releases/[a-f0-9]{40}/|auto-sale-static-release' "$out" | head -n 4 || true
+              fi
+            done
+            [ "$round" = 1 ] && sleep 15
+          done
+          echo 'Read-only diagnostic completed. HTTP errors do not stop this probe.'
