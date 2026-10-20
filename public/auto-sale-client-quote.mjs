@@ -1,3 +1,4 @@
+import {quoteCostRows,quoteRowsTotal} from './auto-sale-quote-audit.mjs';
 import {validateQuote} from './auto-sale-business-rules.mjs';
 const K={quotes:'auto-sale-quotes-v2',notes:'auto-sale-notes-v2'};
 const read=(key,fallback)=>{try{return JSON.parse(localStorage.getItem(key)||'null')??fallback}catch{return fallback}};
@@ -6,7 +7,6 @@ const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const money=v=>'$'+new Intl.NumberFormat('en-US',{maximumFractionDigits:0}).format(Number(v)||0);
 const dateRu=v=>{if(!v)return'—';const d=new Date(`${v}T00:00:00`);return Number.isNaN(d.getTime())?String(v):d.toLocaleDateString('ru-RU',{day:'2-digit',month:'long',year:'numeric'})};
 const quoteFor=leadId=>read(K.quotes,[]).filter(q=>q.leadId===leadId).sort((a,b)=>(Number(b.version)||0)-(Number(a.version)||0))[0];
-const rows=[['lot','Цена лота'],['auction','Сбор аукциона'],['inland','Доставка по США'],['ocean','Морская доставка'],['customs','Таможня / оформление'],['georgiaDelivery','Доставка по Грузии'],['legalization','Легализация'],['recyclingFee','Утильсбор'],['repair','Ремонт / подготовка'],['service','Услуга компании']];
 
 function panel(leadId,q){
   if(!q||q.status==='Черновик')return'';
@@ -16,8 +16,8 @@ function panel(leadId,q){
   const changes=q.clientDecision==='changes_requested';
   return `<section class="auto-client-quote" data-client-quote="${esc(q.id)}" data-lead="${esc(leadId)}">
     <div class="auto-client-quote-head"><div><span>РАСЧЁТ · ${esc(q.id)} · V${Number(q.version)||1}</span><h3>${esc(q.model||'Расчёт автомобиля')}</h3></div><b class="auto-status ${agreed?'good':''}">${esc(q.status)}</b></div>
-    <div class="auto-client-quote-lines">${rows.map(([key,label])=>`<div><span>${label}</span><strong>${money(q[key])}</strong></div>`).join('')}</div>
-    <div class="auto-client-quote-total"><span><b>Итого под ключ</b><small>Расчёт действует до ${dateRu(q.validUntil)}</small></span><strong>${money(q.total)}</strong></div>
+    <div class="auto-client-quote-lines">${quoteCostRows(q).map(({label,value})=>`<div><span>${esc(label)}</span><strong>${money(value)}</strong></div>`).join('')}</div>
+    ${q.customsSource?`<div class="auto-client-quote-note">Таможня: ${esc(q.customsSource)} · ${esc(q.customsCheckedAt||"дата не указана")}. Суммы предварительные до подтверждения ФТС.</div>`:""}${Math.abs(quoteRowsTotal(q)-(Number(q.total)||0))>0.02?`<div class="auto-client-quote-note warn">Сумма статей отличается от итога. Свяжитесь с менеджером.</div>`:""}<div class="auto-client-quote-total"><span><b>Итого под ключ</b><small>Расчёт действует до ${dateRu(q.validUntil)}</small></span><strong>${money(q.total)}</strong></div>
     ${outdated?'<div class="auto-client-decision warn"><b>Предыдущая версия расчёта</b><span>Актуальный расчёт доступен при открытии карточки заявки.</span></div>':''}
     ${agreed?(saving?'<div role="status" class="auto-client-decision"><b>Сохраняем решение…</b></div>':'<div class="auto-client-decision good"><b>Расчёт согласован</b><span>Решение сохранено. Следующий шаг — депозит и оформление заказа.</span></div>'):''}
     ${changes?`<div class="auto-client-decision warn"><b>Запрошены изменения</b><span>${esc(q.clientComment||'Менеджер получил ваш запрос и подготовит следующую версию расчёта.')}</span></div>`:''}
