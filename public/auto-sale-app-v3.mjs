@@ -548,6 +548,9 @@ function syncQuoteScenario(form){
     if(form.elements.cryptoBaseConfirmed)form.elements.cryptoBaseConfirmed.checked=false;
     if(form.elements.repairReviewed)form.elements.repairReviewed.checked=false;
   }
+  const invoiceField=form.querySelector('#quoteInvoiceField');if(invoiceField)invoiceField.classList.toggle('auto-conditional-hidden',!(origin==='США'&&age==='under3'));
+  if(form.elements.repairCountry)form.elements.repairCountry.value=defaultRepairCountry(origin,age);
+  if(form.elements.partsCountry)form.elements.partsCountry.value=defaultPartsCountry(origin,age);
   const auctionField=form.querySelector('#quoteAuctionField');
   if(auctionField)auctionField.classList.toggle('auto-conditional-hidden',georgia);
   if(georgia&&form.elements.auction)form.elements.auction.value='0';
