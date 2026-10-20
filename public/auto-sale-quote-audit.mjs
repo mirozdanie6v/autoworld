@@ -28,5 +28,10 @@ export function quoteAuditErrors(q={}){
  if(!field(q.customsSource))err.push('Укажите источник оценки таможни.');
  if(!/^\d{4}-\d{2}-\d{2}$/.test(field(q.customsCheckedAt)))err.push('Укажите дату проверки таможни и утильсбора.');
  if((positive(q.customsRub)||positive(q.recyclingRub))&&!positive(q.usdRubRate))err.push('Укажите проверенный курс руб./USD.');
- return err;
+ for(const [key,reason,label] of [['customs','customsZeroReason','Таможня'],['recyclingFee','recyclingZeroReason','Утильсбор']]){
+  if(Number(q[key]||0)===0&&field(q[reason]).length<10)err.push(label+': для нулевой суммы требуется обоснование (от 10 символов).');
+ }
+ if(!q.customsConfirmed)err.push('Подтвердите таможенную оценку.');
+ if(!q.recyclingConfirmed)err.push('Подтвердите утильсбор.');
+ return [...new Set(err)];
 }
