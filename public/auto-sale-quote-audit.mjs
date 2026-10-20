@@ -35,3 +35,5 @@ export function quoteAuditErrors(q={}){
  if(!q.recyclingConfirmed)err.push('Подтвердите утильсбор.');
  return [...new Set(err)];
 }
+
+export function ageCategoryForMonth(month,at){if(!/^\d{4}-\d{2}$/.test(String(month||'')))return '';const start=ageCategoryForDate(month+'-01',at),lastDay=new Date(Date.UTC(Number(month.slice(0,4)),Number(month.slice(5,7)),0)).getUTCDate(),end=ageCategoryForDate(month+'-'+lastDay,at);return start&&start===end?start:''}
