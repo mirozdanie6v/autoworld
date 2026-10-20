@@ -10,3 +10,6 @@ export function quoteCostRows(q={}){
 }
 export function quoteRowsTotal(q){return quoteCostRows(q).reduce((sum,x)=>sum+x.value,0)}
 export function rubToUsd(rub,rate){if(!(Number(rate)>0)||!Number.isFinite(Number(rub))||Number(rub)<0)return null;return Math.round(Number(rub)/Number(rate)*100)/100}
+
+export function ageCategoryForDate(value,asOf){const d=new Date(value+'T00:00:00Z'),now=new Date((asOf||new Date().toISOString().slice(0,10))+'T00:00:00Z');if(!Number.isFinite(d.getTime())||!Number.isFinite(now.getTime())||d>now)return '';const months=(now.getUTCFullYear()-d.getUTCFullYear())*12+now.getUTCMonth()-d.getUTCMonth()-(now.getUTCDate()<d.getUTCDate()?1:0);return months<36?'under3':months<60?'3to5':'other'}
+export function ageCategoryForYear(year,asOf){const y=Number(year);if(!Number.isInteger(y)||y<1900||y>2100)return '';const a=ageCategoryForDate(y+'-01-01',asOf),b=ageCategoryForDate(y+'-12-31',asOf);return a&&a===b?a:''}
