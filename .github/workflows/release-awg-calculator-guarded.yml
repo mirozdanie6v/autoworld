@@ -1,0 +1,84 @@
+name: Release AWG tariff calculator (guarded)
+on:
+  push:
+    branches: [main]
+    paths:
+      - .production/awg-calculator-release
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: awg-calculator-orchestrator
+  cancel-in-progress: false
+
+jobs:
+  verified-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - name: Wait for tests on the exact release commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          result=''
+          for attempt in $(seq 1 100); do
+            result="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow verify-autoworld.yml --commit "$GITHUB_SHA" --limit 5 --json status,conclusion --jq '.[0].conclusion // ""')"
+            if [ "$result" = success ]; then break; fi
+            if [ "$result" = failure ] || [ "$result" = cancelled ]; then
+              echo "::error::Exact main commit failed Verify AutoWorld"
+              exit 1
+            fi
+            sleep 15
+          done
+          test "$result" = success || { echo "::error::Timed out waiting for required checks"; exit 1; }
+
+      - name: Verify existing production VK/Telegram is enabled before release
+        run: |
+          set -euo pipefail
+          curl -4fsS --retry 4 --max-time 30 'https://awgcars.ru/api/health' |
+            jq -e '.ok == true and .vkAuth == "enabled" and .vkMessaging == "enabled"'
+
+      - name: Run existing guarded server release with VK explicitly preserved
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          before="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow deploy-awg-production.yml --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
+          gh workflow run deploy-awg-production.yml --repo "$GITHUB_REPOSITORY" --ref main -f vk_enable=true -f telegram_lifecycle=false
+          id=''
+          for attempt in $(seq 1 30); do
+            id="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow deploy-awg-production.yml --event workflow_dispatch --limit 5 --json databaseId,headSha --jq '.[0] | select(.headSha == env.GITHUB_SHA) | .databaseId // ""' || true)"
+            if [ -n "$id" ] && [ "$id" != "$before" ]; then break; fi
+            sleep 5
+          done
+          test -n "$id" && test "$id" != "$before"
+          echo "Backend release: https://github.com/$GITHUB_REPOSITORY/actions/runs/$id"
+          gh run watch "$id" --repo "$GITHUB_REPOSITORY" --exit-status
+
+      - name: Release immutable frontend with browser rollback gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          before="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow deploy-awg-direct-statics.yml --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
+          gh workflow run deploy-awg-direct-statics.yml --repo "$GITHUB_REPOSITORY" --ref main
+          id=''
+          for attempt in $(seq 1 30); do
+            id="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow deploy-awg-direct-statics.yml --event workflow_dispatch --limit 5 --json databaseId,headSha --jq '.[0] | select(.headSha == env.GITHUB_SHA) | .databaseId // ""' || true)"
+            if [ -n "$id" ] && [ "$id" != "$before" ]; then break; fi
+            sleep 5
+          done
+          test -n "$id" && test "$id" != "$before"
+          echo "Frontend release: https://github.com/$GITHUB_REPOSITORY/actions/runs/$id"
+          gh run watch "$id" --repo "$GITHUB_REPOSITORY" --exit-status
+
+      - name: Confirm current production points to the new release
+        run: |
+          set -euo pipefail
+          curl -4fsS --retry 4 --max-time 30 'https://awgcars.ru/api/health' |
+            jq -e '.ok == true and .vkAuth == "enabled" and .vkMessaging == "enabled"'
+          curl -4fsS --retry 4 --max-time 30 'https://awgcars.ru/' |
+            grep -F "releases/$GITHUB_SHA/"
