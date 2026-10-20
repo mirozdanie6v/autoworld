@@ -9,7 +9,7 @@ const ACTIVE_LEAD_STATUSES=['Новый','В работе','Расчёт','Ож�
 const text=v=>typeof v==='string'?v.trim():'';
 const num=v=>Number(v)||0;
 const records=v=>Array.isArray(v)?v.filter(x=>x&&typeof x==='object'):[];
-const quoteSum=q=>['lot','auction','inland','ocean','customs','repair','service'].reduce((sum,key)=>sum+num(q[key]),0);
+const quoteSum=q=>['lot','auction','inland','ocean','customs','repair','service','georgiaDelivery','legalization','recyclingFee','cryptoFee','partsCost'].reduce((sum,key)=>sum+num(q[key]),0);
 const PAYMENT_STAGE_IDS=['auction_deposit','auction_balance','logistics_legalization','customs_fts'];
 
 const verification=value=>value&&typeof value==='object'?value:{};
@@ -72,10 +72,19 @@ export function validateQuote(quote){
   if(!QUOTE_STATUSES.includes(status))errors.push('invalid_quote_status');
   if(status!=='Черновик'){
     for(const key of ['lot','service'])if(num(quote[key])<=0)errors.push(`${key}_positive_required`);
-    for(const key of ['auction','inland','ocean','customs','repair'])if(num(quote[key])<0)errors.push(`${key}_nonnegative_required`);
+    for(const key of ['auction','inland','ocean','customs','repair','georgiaDelivery','legalization','recyclingFee','cryptoFee','partsCost'])if(num(quote[key])<0)errors.push(`${key}_nonnegative_required`);
     if(num(quote.total)<=0)errors.push('positive_total_required');
     if(num(quote.total)!==quoteSum(quote))errors.push('quote_total_mismatch');
     if(!text(quote.validUntil))errors.push('valid_until_required');
+    if(quote.tariffVersion==='2026-10-20'){
+      if(!['under3','3to5'].includes(quote.ageCategory))errors.push('age_category_required');
+      if(!quote.customsConfirmed)errors.push('customs_unconfirmed');
+      if(!quote.recyclingConfirmed)errors.push('recycling_unconfirmed');
+      if(quote.origin==='США'&&!quote.cryptoBaseConfirmed)errors.push('crypto_base_unconfirmed');
+      if(quote.origin==='США'&&!quote.repairReviewed)errors.push('repair_unreviewed');
+      const packageUsd=num(quote.service)+num(quote.legalization);
+      if(num(quote.service)!==500||packageUsd!==(quote.origin==='США'&&quote.ageCategory==='under3'?6500:5000))errors.push('legalization_package_mismatch');
+    }
   }
   return [...new Set(errors)];
 }
