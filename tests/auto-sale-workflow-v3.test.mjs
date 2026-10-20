@@ -68,6 +68,7 @@ test('validated client to handoff workflow preserves all business rules',async()
   set(form,'[name="verificationPhotos"]','["https://example.com/audi-q5-before.jpg"]');
   // Preserve the existing legacy quote journey: new tariff confirmations are covered separately.
   set(form,'[name="tariffVersion"]','');
+  set(form,'[name="quoteSchema"]','');
   set(form,'[name="legalization"]','0');
   set(form,'[name="status"]','Отправлен');
   submit(dom,form);

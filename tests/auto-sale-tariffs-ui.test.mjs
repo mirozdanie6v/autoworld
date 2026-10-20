@@ -25,6 +25,7 @@ test('new USA quote auto-fills included service and blocks incomplete fees until
  assert.equal(Number(form.elements.service.value),500);
  assert.equal(Number(form.elements.ocean.value),3350);
  form.elements.model.value='Test US 2022';
+ form.elements.engineCc.value='2000';form.elements.powerHp.value='150';form.elements.engineType.value='petrol';form.elements.importerType.value='nat';form.elements.priceSource.value='Copart';form.elements.customsSource.value='TKS';form.elements.customsCheckedAt.value='2026-10-20';
  form.elements.lot.value='10000';form.elements.auction.value='800';form.elements.inland.value='400';
  form.elements.lot.dispatchEvent(new dom.window.Event('input',{bubbles:true}));
  assert.equal(Number(form.elements.cryptoFee.value),392);

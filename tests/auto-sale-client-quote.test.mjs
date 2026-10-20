@@ -12,7 +12,7 @@ test('client can see and approve a sent quote from the client card',async()=>{
   await new Promise(resolve=>setTimeout(resolve,0));
   const panel=document.querySelector('.auto-client-quote');
   assert.ok(panel);
-  assert.match(panel.textContent,/Цена лота/);
+  assert.match(panel.textContent,/Автомобиль в Грузии/);
   assert.match(panel.textContent,/Итого под ключ/);
   assert.ok(panel.querySelector('[data-client-quote-agree="Q-507"]'));
   assert.match(document.querySelector('.auto-guide span').textContent,/Согласовать расчёт/);

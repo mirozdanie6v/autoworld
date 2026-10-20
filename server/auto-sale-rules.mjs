@@ -1,3 +1,4 @@
+import {quoteAuditErrors} from '../public/auto-sale-quote-audit.mjs';
 export const LEAD_STATUSES=['Новый','В работе','Расчёт','Ожидает клиента','Сделка','Отказ'];
 export const QUOTE_STATUSES=['Черновик','Отправлен','На согласовании','Согласован','Отказ'];
 export const ORDER_STAGES=['Запрос','Подбор','Расчёт','Согласование','Выкуп','Подготовка к отправке','В пути','Таможня','Доставка','Выдача'];
@@ -86,7 +87,7 @@ export function validateQuote(quote){
       if(num(quote.service)!==500||packageUsd!==(quote.origin==='США'&&quote.ageCategory==='under3'?6500:5000))errors.push('legalization_package_mismatch');
     }
   }
-  return [...new Set(errors)];
+  return [...new Set([...errors,...quoteAuditErrors(quote)])];
 }
 
 export function validateOrder(order,previousStage=''){
