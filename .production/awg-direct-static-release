@@ -1,9 +1,10 @@
 release=direct-object-storage
-source=6418ca4f822cf28da41f1b1fc5a67404dd4577ff
-reason=VII-176-retry-after-production-api-recovered
+source=7ddad0ac90ffe24bbdf2bc8beb79988b26ff3f41
+reason=quote-manager-labels-power-unit-conversion-PR-51
 preserve_backend=true
 preserve_ydb=true
+preserve_telegram=true
 vk_auth=enabled
 vk_messaging=enabled
-health_verified_by=public-api-probe-39393646199
+verified_run=39422448208
 browser_rollback_gate=true
