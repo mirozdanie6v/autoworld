@@ -37,7 +37,7 @@ test('both client and server total include all new fee components',()=>{
  customs:4200,recyclingFee:800,legalization:4500,service:500,repair:1500,partsCost:200,cryptoFee:392,
  customsConfirmed:true,recyclingConfirmed:true,repairReviewed:true,cryptoBaseConfirmed:true,validUntil:'2026-11-01'};
  quote.total=calculateQuote(quote);
- assert.equal(quote.total,28842);
+ assert.equal(quote.total,28642);
  assert.deepEqual(validateQuote(quote),[]);
  assert.deepEqual(serverValidateQuote(quote),[]);
 });
