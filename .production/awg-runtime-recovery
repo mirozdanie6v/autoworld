@@ -1,0 +1,4 @@
+AWG emergency runtime recovery after PR #54
+Trigger: repair API 502 after previous release package lacked quote audit module
+Verified production runtime code: https://github.com/mirozdanie6v/autoworld/commit/2ab8d4f1896ff3b5ac2a05129d43e1cf2cb068a8
+Safety: invoke existing deploy-awg-production.yml with vk_enable=true; keep VK + Telegram, preserve YDB; run browser/API checks
