@@ -15,3 +15,18 @@ export function ageCategoryForDate(value,asOf){const d=new Date(value+'T00:00:00
 export function ageCategoryForYear(year,asOf){const y=Number(year);if(!Number.isInteger(y)||y<1900||y>2100)return '';const a=ageCategoryForDate(y+'-01-01',asOf),b=ageCategoryForDate(y+'-12-31',asOf);return a&&a===b?a:''}
 
 export function tksParameters(q={}){return {cost:Math.round(Math.max(0,Number(q.invoiceUsd||q.lot)||0)),volume:Math.round(Math.max(0,Number(q.engineCc)||0)),currency:840,power:Math.round(Math.max(0,Number(q.powerHp)||0)),power_edizm:'ls',engine_type:q.engineType||'petrol',age:q.ageCategory==='under3'?3:q.ageCategory==='3to5'?35:57,face:q.importerType||'nat',ts_type:'00_8703'}}
+
+export function quoteAuditErrors(q={}){
+ if(q.quoteSchema!==QUOTE_AUDIT_SCHEMA||q.status==='Черновик')return [];
+ const err=[],positive=x=>Number(x)>0,field=x=>String(x??'').trim();
+ if(!['under3','3to5'].includes(q.ageCategory))err.push('Уточните возраст автомобиля для выбранного тарифа.');
+ if(!['electric','no_engine'].includes(q.engineType)&&!positive(q.engineCc))err.push('Укажите объём двигателя.');
+ if(!positive(q.powerHp))err.push('Укажите мощность двигателя.');
+ if(!['nat','jur'].includes(q.importerType))err.push('Выберите статус импортёра.');
+ if(!field(q.priceSource))err.push('Укажите источник цены автомобиля.');
+ if(q.origin==='США'&&q.ageCategory==='under3'&&!positive(q.invoiceUsd))err.push('Укажите стоимость по инвойсу для США до 3 лет.');
+ if(!field(q.customsSource))err.push('Укажите источник оценки таможни.');
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(field(q.customsCheckedAt)))err.push('Укажите дату проверки таможни и утильсбора.');
+ if((positive(q.customsRub)||positive(q.recyclingRub))&&!positive(q.usdRubRate))err.push('Укажите проверенный курс руб./USD.');
+ return err;
+}
