@@ -18,3 +18,29 @@
 .catalog-photo-hint{margin:0}
 .auto-detail-gallery,.auto-car-detail-gallery{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:10px 0 16px}
 .auto-detail-gallery img,.auto-car-detail-gallery img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:12px;background:#e2e8f0}
+
+
+/* Quote editor: keep field titles and their currency/unit together.
+   Do not change other forms or long confirmation checkbox labels. */
+#quoteForm > label:not(.full) { min-width:0; white-space:nowrap; }
+#quoteForm > label:not(.full) > small { white-space:normal; }
+#quoteForm .auto-quote-caption { display:block; min-width:0; white-space:nowrap; }
+#quoteForm .auto-quote-power-heading {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  flex-wrap:wrap;
+  gap:8px;
+  min-width:0;
+}
+#quoteForm .auto-quote-power-heading > select {
+  width:auto;
+  min-width:82px;
+  min-height:36px;
+  padding:0 9px;
+  font-size:inherit;
+}
+@media(max-width:720px) {
+  #quoteForm > label:not(.full) { white-space:normal; }
+  #quoteForm .auto-quote-caption { white-space:normal; }
+}
