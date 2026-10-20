@@ -1,10 +1,10 @@
 release=direct-object-storage
-source=7ddad0ac90ffe24bbdf2bc8beb79988b26ff3f41
-reason=quote-manager-labels-power-unit-conversion-PR-51
+source=5f1acb396bc6dd73bfb15641553ff2557728aac7
+reason=manager-quote-legalization-caption-no-extra-linebreaks-PR-52
 preserve_backend=true
 preserve_ydb=true
 preserve_telegram=true
 vk_auth=enabled
 vk_messaging=enabled
-verified_run=39422448208
+verified_run=39428561846
 browser_rollback_gate=true
