@@ -56,7 +56,19 @@ jobs:
           done
           test -n "$id" && test "$id" != "$before"
           echo "Backend release: https://github.com/$GITHUB_REPOSITORY/actions/runs/$id"
-          gh run watch "$id" --repo "$GITHUB_REPOSITORY" --exit-status
+          # GitHub sometimes returns transient HTTP 500 from workflow metadata.
+          # Treat those as retryable, but never treat an unknown result as success.
+          result=''
+          for attempt in $(seq 1 240); do
+            json="$(gh run view "$id" --repo "$GITHUB_REPOSITORY" --json status,conclusion 2>/dev/null || true)"
+            if [ -n "$json" ]; then
+              status="$(printf '%s' "$json" | jq -r '.status // empty')"
+              result="$(printf '%s' "$json" | jq -r '.conclusion // empty')"
+              if [ "$status" = completed ]; then break; fi
+            fi
+            sleep 15
+          done
+          test "$result" = success || { echo "::error::Release run $id did not complete successfully: $result"; exit 1; }
 
       - name: Release immutable frontend with browser rollback gate
         env:
@@ -73,7 +85,19 @@ jobs:
           done
           test -n "$id" && test "$id" != "$before"
           echo "Frontend release: https://github.com/$GITHUB_REPOSITORY/actions/runs/$id"
-          gh run watch "$id" --repo "$GITHUB_REPOSITORY" --exit-status
+          # GitHub sometimes returns transient HTTP 500 from workflow metadata.
+          # Treat those as retryable, but never treat an unknown result as success.
+          result=''
+          for attempt in $(seq 1 240); do
+            json="$(gh run view "$id" --repo "$GITHUB_REPOSITORY" --json status,conclusion 2>/dev/null || true)"
+            if [ -n "$json" ]; then
+              status="$(printf '%s' "$json" | jq -r '.status // empty')"
+              result="$(printf '%s' "$json" | jq -r '.conclusion // empty')"
+              if [ "$status" = completed ]; then break; fi
+            fi
+            sleep 15
+          done
+          test "$result" = success || { echo "::error::Release run $id did not complete successfully: $result"; exit 1; }
 
       - name: Confirm current production points to the new release
         run: |

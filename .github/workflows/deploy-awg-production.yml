@@ -60,7 +60,7 @@ env:
   AUTO_SALE_VK_WEB_CLIENT_ID: "54811927"
   AUTO_SALE_VK_WEB_ORIGIN: https://awgcars.ru
   AUTO_SALE_VK_WEB_ENABLED: "true"
-  AWG_VK_WEB_LOCKBOX_SECRET_ID: ${{ vars.AWG_VK_WEB_LOCKBOX_SECRET_ID || 'e6qg57io19p3ggq73q7g' }}
+  AWG_VK_WEB_LOCKBOX_SECRET_ID: ${{ vars.AWG_VK_WEB_LOCKBOX_SECRET_ID || 'e6qg57io19p3gqg73q7g' }}
   AWG_VK_WEB_LOCKBOX_VERSION_ID: ${{ vars.AWG_VK_WEB_LOCKBOX_VERSION_ID || 'e6qdt07qpf86abl8d9d8' }}
 
 
@@ -196,6 +196,18 @@ jobs:
           yc config set folder-id "$YC_FOLDER_ID"
           yc config get endpoint | grep -Fx 'api.cloud.yandex.net:443'
           yc config get folder-id | grep -Fx "$YC_FOLDER_ID"
+
+      - name: Validate existing VK Lockbox secret metadata before any production write
+        run: |
+          set -euo pipefail
+          test -n "$AWG_VK_WEB_LOCKBOX_SECRET_ID"
+          test -n "$AWG_VK_WEB_LOCKBOX_VERSION_ID"
+          # Only metadata is read, no credential payload is logged.
+          yc lockbox secret get --id "$AWG_VK_WEB_LOCKBOX_SECRET_ID" --format json |
+            jq -e '.id != null' >/dev/null
+          yc lockbox secret list-versions --id "$AWG_VK_WEB_LOCKBOX_SECRET_ID" --format json |
+            jq -e --arg version "$AWG_VK_WEB_LOCKBOX_VERSION_ID" 'any(.[]; .id==$version and (.status=="ACTIVE" or .status=="Active"))' >/dev/null
+          echo "Existing VK cookie signing secret and pinned active version verified."
 
       - name: Publish static frontend to Yandex Object Storage
         run: |
