@@ -29,9 +29,23 @@ test('new records reopen with exact original power and unit; old records use PS'
 test('manager quote preserves field labels and switches without an API request', () => {
   const app=readFileSync(new URL('../public/auto-sale-app-v3.mjs',import.meta.url),'utf8');
   assert.match(app,/\['service','Услуга компании'\]/);
-  assert.match(app,/\['legalization','Легализация \$500'\]/);
+  assert.match(app,/\['legalization','Легализация'\]/);
   assert.match(app,/name="powerUnit"/);
   assert.match(app,/convertPowerInput\(input.value,t.dataset.previousUnit,t.value\)/);
   assert.match(app,/powerHp:toMetricHorsepower\(data.powerHp,data.powerUnit\)/);
   assert.match(app,/powerInput:Number\(data.powerHp\)\|\|0/);
+});
+
+test('manager quote headings keep currency on same grid row; mobile remains responsive', () => {
+  const app=readFileSync(new URL('../public/auto-sale-app-v3.mjs',import.meta.url),'utf8');
+  const css=readFileSync(new URL('../public/auto-sale-admin.css',import.meta.url),'utf8');
+  for(const field of ['lot','inland','ocean']){
+    assert.match(app,new RegExp('class="auto-quote-caption"><span data-quote-label="'+field+'"'));
+    assert.match(app,new RegExp('</span>, \\$</span><input name="'+field+'"'));
+  }
+  assert.match(app,/class="auto-quote-caption">Сбор аукциона, \$<\/span><input name="auction"/);
+  assert.match(app,/class="auto-quote-power-heading">Мощность двигателя<select name="powerUnit"/);
+  assert.match(css,/#quoteForm > label:not\(\.full\)/);
+  assert.match(css,/@media\(max-width:720px\)/);
+  assert.doesNotMatch(app,/Легализация \$500/);
 });
