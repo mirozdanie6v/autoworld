@@ -502,6 +502,20 @@ function modal(){const m=state.modal;if(!m)return'';if(m.type==='request')return
 function page(){if(state.role==='client')return state.route==='catalog'?catalog():state.route==='orders'?clientOrders():state.route==='about'?about():home();if(state.role==='manager')return state.route==='leads'?managerLeads():state.route==='quotes'?managerQuotes():state.route==='catalogAdmin'?managerCatalog():state.route==='shipping'?managerShipping():managerWork();return state.route==='pipeline'?ownerPipeline():state.route==='finance'?ownerFinance():state.route==='ordersAdmin'?ownerOrders():ownerOverview()}
 function render(){root.innerHTML=shell(page());if(state.role==='client')window.__AUTO_SALE_RENDER_VK_MESSAGES_HINT__?.()}
 function focusAfterRender(id){render();queueMicrotask(()=>{const el=document.getElementById(id);if(el){el.focus();if('selectionStart'in el){const n=el.value.length;el.setSelectionRange(n,n)}}})}
+function syncQuoteCurrency(form,changed){
+ if(!form)return;
+ if(changed==='customs'&&form.elements.customsRub)form.elements.customsRub.value='0';
+ if(changed==='recyclingFee'&&form.elements.recyclingRub)form.elements.recyclingRub.value='0';
+ const rate=Number(form.elements.usdRubRate?.value)||0;
+ if(rate>0)for(const [ruble,dollar] of [['customsRub','customs'],['recyclingRub','recyclingFee']]){
+   const rub=Number(form.elements[ruble]?.value)||0;
+   if(rub>0&&form.elements[dollar])form.elements[dollar].value=String(rubToUsd(rub,rate));
+ }
+ if(['usdRubRate','customsRub','recyclingRub','customs','recyclingFee'].includes(changed)){
+   if(form.elements.customsConfirmed)form.elements.customsConfirmed.checked=false;
+   if(form.elements.recyclingConfirmed)form.elements.recyclingConfirmed.checked=false;
+ }
+}
 function updateQuotePreview(form){
   if(!form)return;
   const origin=form.elements.origin?.value||'',data=Object.fromEntries(new FormData(form).entries());
