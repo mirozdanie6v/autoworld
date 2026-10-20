@@ -1,5 +1,5 @@
 import {awgTariff,awgCryptoFee,awgPendingItems,awgPackageUsd,AWG_TARIFF_VERSION,AWG_US_LOGISTICS} from './auto-sale-tariffs.mjs';
-import {quoteCostRows,quoteRowsTotal,ageCategoryForDate,ageCategoryForYear,defaultRepairCountry,defaultPartsCountry,rubToUsd,TKS_CALCULATOR_URL,QUOTE_AUDIT_SCHEMA,tksParameters} from './auto-sale-quote-audit.mjs';
+import {quoteCostRows,quoteRowsTotal,ageCategoryForDate,ageCategoryForMonth,ageCategoryForYear,defaultRepairCountry,defaultPartsCountry,rubToUsd,TKS_CALCULATOR_URL,QUOTE_AUDIT_SCHEMA,tksParameters} from './auto-sale-quote-audit.mjs';
 import {quoteVehicleFields,quoteCostAuditFields,quoteCustomsFields} from './auto-sale-quote-form.mjs';
 import {normalizePowerUnit,toMetricHorsepower,quotePowerInput,convertPowerInput} from './auto-sale-power-units.mjs';
 import {
@@ -511,6 +511,9 @@ function updateQuotePreview(form){
   }
   const total=form.querySelector('#quoteTotal');
   if(total)total.textContent=money(calculateQuote(data));
+  const cost=form.querySelector('#quoteCostPreview');if(cost)cost.textContent='себестоимость без услуги: '+money(quoteCost(data));
+  const tks=form.querySelector('#quoteTksParameters');if(tks){const params=tksParameters({...data,powerHp:toMetricHorsepower(data.powerHp,data.powerUnit)});tks.textContent='Для ТКС: стоимость '+params.cost+' USD · объём '+params.volume+' см³ · мощность '+params.power+' л.с. · возраст '+(data.ageCategory==='under3'?'до 3 лет':data.ageCategory==='3to5'?'3–5 лет':'уточнить')+'. Значения необходимо проверить в ТКС вручную.';}
+  const ageHint=form.querySelector('#quoteAgeHint');if(ageHint&&form.elements.manufactureDate?.value)ageHint.textContent=ageCategoryForMonth(form.elements.manufactureDate.value,today)?'Возраст определён автоматически по месяцу выпуска (проверьте дату для пограничного срока).':'Возраст попадает на границу 3 или 5 лет, уточните точный день выпуска и выберите категорию вручную.';
   const warning=form.querySelector('#quoteTariffWarning');
   if(warning){
     const reviewed={...data,customsConfirmed:!!form.elements.customsConfirmed?.checked,recyclingConfirmed:!!form.elements.recyclingConfirmed?.checked,cryptoBaseConfirmed:!!form.elements.cryptoBaseConfirmed?.checked,repairReviewed:!!form.elements.repairReviewed?.checked};
