@@ -13,3 +13,5 @@ export function rubToUsd(rub,rate){if(!(Number(rate)>0)||!Number.isFinite(Number
 
 export function ageCategoryForDate(value,asOf){const d=new Date(value+'T00:00:00Z'),now=new Date((asOf||new Date().toISOString().slice(0,10))+'T00:00:00Z');if(!Number.isFinite(d.getTime())||!Number.isFinite(now.getTime())||d>now)return '';const months=(now.getUTCFullYear()-d.getUTCFullYear())*12+now.getUTCMonth()-d.getUTCMonth()-(now.getUTCDate()<d.getUTCDate()?1:0);return months<36?'under3':months<60?'3to5':'other'}
 export function ageCategoryForYear(year,asOf){const y=Number(year);if(!Number.isInteger(y)||y<1900||y>2100)return '';const a=ageCategoryForDate(y+'-01-01',asOf),b=ageCategoryForDate(y+'-12-31',asOf);return a&&a===b?a:''}
+
+export function tksParameters(q={}){return {cost:Math.round(Math.max(0,Number(q.invoiceUsd||q.lot)||0)),volume:Math.round(Math.max(0,Number(q.engineCc)||0)),currency:840,power:Math.round(Math.max(0,Number(q.powerHp)||0)),power_edizm:'ls',engine_type:q.engineType||'petrol',age:q.ageCategory==='under3'?3:q.ageCategory==='3to5'?35:57,face:q.importerType||'nat',ts_type:'00_8703'}}
