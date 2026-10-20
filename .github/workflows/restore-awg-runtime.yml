@@ -1,0 +1,26 @@
+name: Restore AWG API via guarded production workflow
+on:
+  push:
+    branches: [main]
+    paths:
+      - .production/awg-runtime-recovery
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: awg-runtime-recovery-dispatch
+  cancel-in-progress: false
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Dispatch existing production workflow with VK explicitly enabled
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = 'mirozdanie6v/autoworld'
+          test "$GITHUB_REF_NAME" = 'main'
+          gh workflow run deploy-awg-production.yml --repo "$GITHUB_REPOSITORY" --ref main -f vk_enable=true
+          echo "Dispatched recovery through existing workflow with VK enabled. This job alone does not claim success."
