@@ -107,6 +107,16 @@ export async function verifyPostgresRuntimeHttp(databaseUrl){
     assert.equal(agreed.total,26657.02,'client cannot modify previously offered total');
     assert.equal(agreed.cryptoFee,556.52,'server protects transfer fee from client tampering');
     assert.equal(agreed.turnkeyDeliveryUsd,900.50,'server protects delivery from client tampering');
+    const agreedQuoteVersion=approved.data.rowVersions?.['quote:'+qid];
+    assert.ok(Number(agreedQuoteVersion)>0);
+    const changedAfterAgreement=await request('/api/auto-sale/entities/batch',{method:'POST',headers:adminHeaders,
+      body:{operations:[{resource:'quote',operation:'patch',id:qid,baseRowVersion:agreedQuoteVersion,
+        input:{exchangeRateSource:'bank'}}]}});
+    assert.equal(changedAfterAgreement.status,400,JSON.stringify(changedAfterAgreement.data));
+    assert.equal(changedAfterAgreement.data.error,'locked_quote_changed');
+    assert.equal(changedAfterAgreement.data.field,'exchangeRateSource');
+    const afterDenied=await request('/api/auto-sale/state',{headers:adminHeaders});
+    assert.equal(afterDenied.data.quotes.find(x=>x.id===qid).exchangeRateSource,'cbr');
     const leadVersion=adminView.data._rowVersions?.['lead:L-RUNTIME-VK']||created.data.revision;
     const removed=await request('/api/auto-sale/leads/L-RUNTIME-VK?cascade=1',{method:'DELETE',headers:adminHeaders,body:{baseRowVersion:leadVersion}});
     assert.equal(removed.status,200,JSON.stringify(removed.data));
