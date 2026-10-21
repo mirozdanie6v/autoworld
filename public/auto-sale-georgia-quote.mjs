@@ -22,17 +22,18 @@ export function georgiaDraftForEditing(q={}){
   return {...migrated,...georgiaQuoteAmounts(migrated),total:0};
 }
 
-export const georgiaTransferFee = (lot,percent=3.5) => Math.round(pos(lot)*pos(percent))/100;
+export const georgiaTransferFee = (lot,percent=3.5,deliveryUsd=0) => Math.round((pos(lot)+pos(deliveryUsd))*pos(percent))/100;
 export function georgiaQuoteAmounts(data={}){
   const rate=pos(data.usdRubRate);
   const customsRub=pos(data.customsRub);
   const recyclingRub=pos(data.recyclingRub);
+  const deliveryUsd=data.transportMode==='Доставка под ключ'?pos(data.turnkeyDeliveryUsd):0;
   return {
     lot:pos(data.lot),
     auction:0,inland:0,ocean:0,repair:0,partsCost:0,georgiaDelivery:0,
-    turnkeyDeliveryUsd:data.transportMode==='Доставка под ключ'?pos(data.turnkeyDeliveryUsd):0,
+    turnkeyDeliveryUsd:deliveryUsd,
     legalization:pos(data.legalization),service:pos(data.service),
-    cryptoFee:georgiaTransferFee(data.lot,data.internationalTransferPercent),
+    cryptoFee:georgiaTransferFee(data.lot,data.internationalTransferPercent,deliveryUsd),
     customs:rate>0?Math.round(customsRub/rate*100)/100:0,
     recyclingFee:rate>0?Math.round(recyclingRub/rate*100)/100:0
   };
@@ -99,7 +100,7 @@ export function georgiaQuoteForm(q,leads,statuses,esc,money){
     ${numberField('customsRub','Таможня РФ','₽')}
     ${numberField('recyclingRub','Утильсбор РФ','₽')}
     ${numberField('internationalTransferPercent','Международный перевод','%','0.01')}
-    <p class="full auto-rule-hint">Предварительно 3,5% от стоимости автомобиля. База международного перевода подлежит согласованию с заказчиком.</p>
+    <p class="full auto-rule-hint">Международный перевод: 3,5% по умолчанию от стоимости автомобиля плюс стоимость доставки под ключ (если выбрана). Для самовывоза доставка в базе равна 0 $. Процент можно изменить.</p>
     <div class="full auto-form-divider">Курс для расчёта</div>
     ${numberField('usdRubRate','Курс RUB за 1 USD','₽','0.0001')}
     <label>Дата курса<input type="date" name="exchangeRateDate" value="${safe(q.exchangeRateDate||'')}"></label>
