@@ -1,8 +1,8 @@
-AutoWorld Georgia controlled production release: catalog vehicle lead details and zero-on-focus
-source-pr=57
-source-merge-sha=dfc7ea13ccc10de25f8500d421f1ef01f442c6e5
-validation-pr-ci=https://github.com/mirozdanie6v/autoworld/actions/runs/39648958413
-scope=preserve source catalog vehicle snapshot in new client leads; show year mileage engine drive pricing photo and delivery in manager CRM and client orders; numeric zero clears on focus in all edit forms
-guard=wait-exact-main-ci; verify-live-vk-telegram-health; enable-vk-during-release; deploy-runtime; immutable-static-browser-smoke-and-rollback; confirm-production-build
+AutoWorld Georgia controlled production release: preserve selected catalog vehicle in manager CRM
+source-pr=58
+source-merge-sha=bed026ba2674152811c90df0a47ea16ffa184d20
+validation-pr-ci=https://github.com/mirozdanie6v/autoworld/actions/runs/39661803819
+scope=year mileage engine drive catalog specifications and source RUB listing price; recover unique legacy client lead; rounded 500 USD budget from dated validated exchange rate; allow manager manual FX fallback; preserve client submission when FX unavailable
+guard=wait-exact-main-ci; verify-live-vk-telegram-health; preserve-vk-enabled; backend-then-immutable-static; rollback-on-static-smoke-fail
 real-message-tests=false
-production-approval=2026-10-22 user requested safe release of PR57
+production-approval=2026-10-22 user requested fix of missing year mileage and budget for selected catalog car
