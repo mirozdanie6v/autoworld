@@ -493,7 +493,7 @@ function modalGeorgiaQuote(q,lead){
   const base=q?georgiaDraftForEditing(q):{
     id:'',leadId:lead?.id||'',model:lead?.model||'',origin:'Грузия',
     version:1,status:'Черновик',tariffVersion:AWG_GEORGIA_TARIFF_VERSION,
-    ageCategory:facts?.ageCategory||age,transportMode:'Самовывоз — Владикавказ',
+    ageCategory:linked.car?(facts?.ageCategory||''):age,transportMode:'Самовывоз — Владикавказ',
     manufactureDate:facts?.manufactureDate||'',engineCc:facts?.engineCc||0,powerHp:facts?.powerHp||0,
     powerInput:facts?.powerHp||0,powerUnit:'ps',engineType:facts?.engineType||'',
     catalogSourceId:linked.car?.id||'',catalogVin:facts?.vin||'',catalogYear:facts?.year||'',
