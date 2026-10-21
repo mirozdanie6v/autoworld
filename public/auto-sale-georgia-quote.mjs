@@ -85,7 +85,8 @@ export function georgiaQuoteForm(q,leads,statuses,esc,money){
     <label>Способ получения<select name="transportMode">${modeSelect}</select></label>
     ${numberField('lot','Стоимость автомобиля','$','0.01')}
     ${numberField('legalization','Легализация','$','0.01')}
-    ${numberField('service','Услуга компании','
+    ${numberField('service','Услуга компании','$','0.01')}
+    <p class="full auto-rule-hint">Для возраста старше 5 лет требуется индивидуальная оценка: стандартный тариф не допускается к отправке.</p>
     ${numberField('customsRub','Таможня РФ','₽')}
     ${numberField('recyclingRub','Утильсбор РФ','₽')}
     ${numberField('internationalTransferPercent','Международный перевод','%','0.01')}
