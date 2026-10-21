@@ -1,8 +1,8 @@
-AWG guarded Yandex Cloud release: customer-visible comments on Georgian vehicle quotes
-source-pr=59
-source-merge-sha=7fe5f4240b59a6d414e760917c320b71017553a1
-validation-ci=https://github.com/mirozdanie6v/autoworld/actions/runs/39666554341
-scope=Georgia-only publicComment field in manager quote; client quote panel displays public comment when quote sent; preserve all legacy comment notes as internal; lock comment on approved/rejected quotes
-safety=full regression suite, release production VK/Telegram guard, backend then immutable direct static assets, browser desktop/mobile smoke, rollback
+AWG guarded production release: catalog quote customs prefill and source vehicle identity integrity
+source-pr=60
+source-merge-sha=0ceec10f32f7b25e5b814efd4dac5a700b28d315
+validation-ci=https://github.com/mirozdanie6v/autoworld/actions/runs/39670593697
+scope=selected catalog lead immutable snapshot and server invariant; verified engine cc/power/fuel/month VIN autofill to Georgian customs quotation; no guessed charges or unsupported metadata
+safety=exact-main-ci; guard-existing-VK-Telegram; Yandex YDB and API production integration; direct static browser rollback gate
 real-message-tests=false
-production-approval=2026-10-22 user requested public customer-facing comment in manager quote
+production-approval=2026-10-22 user requested fix selected catalog binding and customs field autofill
