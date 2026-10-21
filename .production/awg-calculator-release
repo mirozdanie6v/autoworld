@@ -1,10 +1,8 @@
-AutoWorld Georgia quote controlled release VII-179
-source-pr-55=103b946371ecbba695ebdcfd0475909bd4a95f30
-source-pr-56=77f519e60b86cd1a4047eca800d051ef913bc93c
-validation-full-ci=https://github.com/mirozdanie6v/autoworld/actions/runs/39619116606
-validation-browser=https://github.com/mirozdanie6v/autoworld/actions/runs/39618106080
-validation-ydb-staging=https://github.com/mirozdanie6v/autoworld/actions/runs/39612300969
-scope=Georgia quote editor and paid turnkey delivery, transfer percent from vehicle+delivery, client approval, accurate cents
-guard=wait-exact-main-ci; verify-vk-telegram-health; preserve-vk-enabled; backend-then-immutable-static; rollback-on-static-smoke-fail
+AutoWorld Georgia controlled production release: catalog vehicle lead details and zero-on-focus
+source-pr=57
+source-merge-sha=dfc7ea13ccc10de25f8500d421f1ef01f442c6e5
+validation-pr-ci=https://github.com/mirozdanie6v/autoworld/actions/runs/39648958413
+scope=preserve source catalog vehicle snapshot in new client leads; show year mileage engine drive pricing photo and delivery in manager CRM and client orders; numeric zero clears on focus in all edit forms
+guard=wait-exact-main-ci; verify-live-vk-telegram-health; enable-vk-during-release; deploy-runtime; immutable-static-browser-smoke-and-rollback; confirm-production-build
 real-message-tests=false
-production-approval=2026-10-21 user requested guarded release after browser smoke
+production-approval=2026-10-22 user requested safe release of PR57
