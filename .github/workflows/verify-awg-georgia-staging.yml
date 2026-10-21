@@ -17,7 +17,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  YC_STAGING_VERIFY_SA_ID: ${{ vars.AWG_YC_STAGING_VERIFY_SA_ID }}
+  YC_STAGING_VERIFY_SA_ID: aje0hvomk86tu5lbs5rk
   YDB_CONNECTION_STRING: grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1ggsmuiq7tb2d27f89q/etnhujtu1t6f89tdtohs
 
 jobs:
