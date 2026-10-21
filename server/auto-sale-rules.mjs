@@ -11,7 +11,7 @@ const ACTIVE_LEAD_STATUSES=['Новый','В работе','Расчёт','Ож�
 const text=v=>typeof v==='string'?v.trim():'';
 const num=v=>Number(v)||0;
 const records=v=>Array.isArray(v)?v.filter(x=>x&&typeof x==='object'):[];
-const quoteSum=q=>['lot','auction','inland','ocean','customs','repair','service','georgiaDelivery','legalization','recyclingFee','cryptoFee','partsCost'].reduce((sum,key)=>sum+num(q[key]),0);
+const quoteSum=q=>['lot','auction','inland','ocean','customs','repair','service','georgiaDelivery','turnkeyDeliveryUsd','legalization','recyclingFee','cryptoFee','partsCost'].reduce((sum,key)=>sum+num(q[key]),0);
 const PAYMENT_STAGE_IDS=['auction_deposit','auction_balance','logistics_legalization','customs_fts'];
 
 const verification=value=>value&&typeof value==='object'?value:{};
