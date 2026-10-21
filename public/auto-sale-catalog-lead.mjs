@@ -56,3 +56,32 @@ export function renderCatalogLeadVehicle(lead={}, {escape=String,money=v=>'$'+v,
     '<div class="auto-catalog-lead-content">'+mainImage+'<div class="auto-catalog-lead-fields">'+fields+'</div></div>'+
     '</section>';
 }
+
+
+// A legacy lead may have been created by the older request form without carId.
+// Use a catalog match only when a client request has one exact candidate. A price,
+// year or origin mismatch must never attach a different car.
+export function catalogCarForLead(lead={},cars=[]){
+  const linked=String(lead.carId||lead.catalogVehicle?.id||'').trim();
+  if(linked){
+    const found=cars.find(c=>String(c.id)===linked);
+    return{car:lead.catalogVehicle||found||null,linked:true,matchedBy:'id'};
+  }
+  if(!lead.clientCreated||!String(lead.model||'').trim())return{car:null,linked:false,matchedBy:''};
+  const norm=s=>String(s||'').trim().toLocaleLowerCase('ru-RU').replace(/\s+/g,' ');
+  const target=norm(lead.model),origin=String(lead.origin||'').trim();
+  const matches=cars.filter(car=>norm([car.brand,car.model].filter(Boolean).join(' '))===target
+    &&(!origin||origin==='Уточняется'||String(car.origin||'')===origin)
+    &&(!lead.year||String(lead.year)===String(car.year))
+    &&(!lead.estimatedCostRub||!Number(car.priceRub)||Number(lead.estimatedCostRub)===Number(car.priceRub)));
+  return{car:matches.length===1?matches[0]:null,linked:false,matchedBy:matches.length===1?'unique-name':''};
+}
+
+export function catalogPriceRub(car){
+  return Number(car?.priceRub)||Number(car?.priceAfterDiscountRub)||0;
+}
+export function catalogBudgetUsd(car,rubPerUsd,step=500){
+  const usd=Number(car?.price)>0?Number(car.price):catalogPriceRub(car)/Number(rubPerUsd);
+  if(!(usd>0&&Number.isFinite(usd))||!(Number(step)>0))return 0;
+  return Math.max(step,Math.round(usd/step)*step);
+}
