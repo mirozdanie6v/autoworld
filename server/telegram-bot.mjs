@@ -1,5 +1,6 @@
 import {createHmac,timingSafeEqual} from 'node:crypto';
 import {notificationTarget,telegramNotificationUrl} from '../shared/auto-sale-notification-links.mjs';
+import {AWG_GEORGIA_TARIFF_VERSION,formatGeorgiaUsd} from '../public/auto-sale-georgia-quote.mjs';
 
 const clean=value=>String(value??'').trim();
 const arr=value=>Array.isArray(value)?value.filter(Boolean):[];
@@ -249,7 +250,7 @@ export function createTelegramService({
         await toManagers(lead,message,{event:'quote_changes_requested',leadId:lead.id,quoteId:quote.id});
         continue;
       }
-      const total=num(quote.total)?`\nСтоимость: ${money(quote.total)}`:'';
+      const total=num(quote.total)?`\nСтоимость: ${quote.origin==='Грузия'&&quote.tariffVersion===AWG_GEORGIA_TARIFF_VERSION?formatGeorgiaUsd(quote.total):money(quote.total)}`:'';
       const clientMsg=`💰 AUTO МИР · расчёт\n\n${clean(quote.model)||leadTitle(lead)}\nСтатус: ${clean(quote.status)}${total}\n\n${clean(quote.status)==='Отправлен'?'Расчёт готов. Откройте AUTO МИР, чтобы увидеть итоговую стоимость и детали.':clean(quote.status)==='Согласован'?'Расчёт согласован. Менеджер переходит к оформлению заказа.':'Следующее важное изменение мы также пришлём сюда.'}`;
       const managerMsg=`💰 AUTO МИР · расчёт\nКлиент: ${clean(lead.name)||'—'}\nАвтомобиль: ${clean(quote.model)||leadTitle(lead)}\nСтатус: ${clean(quote.status)}${total}`;
       await toClient(lead,clientMsg,{event:'quote_status',leadId:lead.id,quoteId:quote.id},'Посмотреть расчёт');
