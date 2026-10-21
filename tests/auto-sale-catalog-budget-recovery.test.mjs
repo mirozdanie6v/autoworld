@@ -49,6 +49,8 @@ test('client chooses catalog card → submitted lead persists original year, mil
     assert.equal(form.elements.carId.value,selected.id);
     form.elements.name.value='Клиент';
     form.elements.contact.value='@exampleclient';
+    await tick();await tick(); // Rate arrives while the customer fills the form.
+    assert.equal(form.elements.catalogUsdRubRate.value,'100');
     form.querySelector('[type="submit"]').click();
     await tick();await tick();await tick();
     const saved=JSON.parse(localStorage.getItem('auto-sale-leads-v2')).find(l=>l.carId===selected.id);
