@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {JSDOM} from 'jsdom';
-import {AWG_GEORGIA_TARIFF_VERSION,AWG_GEORGIA_QUOTE_SCHEMA,GEORGIA_MODES,georgiaTransferFee,georgiaQuoteAmounts,georgiaQuoteErrors,georgiaQuoteForm,georgiaDraftForEditing} from '../public/auto-sale-georgia-quote.mjs';
+import {AWG_GEORGIA_TARIFF_VERSION,AWG_GEORGIA_QUOTE_SCHEMA,GEORGIA_MODES,georgiaTransferFee,georgiaQuoteAmounts,georgiaQuoteErrors,georgiaQuoteForm,georgiaDraftForEditing,formatGeorgiaUsd} from '../public/auto-sale-georgia-quote.mjs';
 import {awgTariff,AWG_TARIFF_VERSION} from '../public/auto-sale-tariffs.mjs';
 import {calculateQuote} from '../public/auto-sale-core.mjs';
 import {quoteCostRows,quoteRowsTotal} from '../public/auto-sale-quote-audit.mjs';
@@ -143,7 +143,7 @@ test('manager creates Georgia quote after scenario switch, zero clears, save use
  nextForm.elements.importerType.value='nat';
  nextForm.elements.status.value='Отправлен';
  nextForm.elements.turnkeyDeliveryUsd.dispatchEvent(new dom.window.Event('input',{bubbles:true}));
- assert.match(nextForm.querySelector('#quoteTotal').textContent,/26,626|26,625/);
+ assert.equal(nextForm.querySelector('#quoteTotal').textContent,'$26,625.50');
  nextForm.dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true}));
  await tick();await tick();
  const turnkey=JSON.parse(localStorage.getItem('auto-sale-quotes-v2')).find(x=>x.transportMode==='Доставка под ключ'&&x.tariffVersion===AWG_GEORGIA_TARIFF_VERSION);
@@ -151,13 +151,15 @@ test('manager creates Georgia quote after scenario switch, zero clears, save use
  assert.equal(turnkey.turnkeyDeliveryUsd,900.50);
  assert.equal(turnkey.total,26625.50);
  assert.deepEqual(serverValidateQuote(turnkey),[]);
+ assert.match(root.querySelector('.auto-quote-list').textContent,/\$900.50/);
+ assert.match(root.querySelector('.auto-quote-list').textContent,/\$26,625.50/);
  dom.window.close();
 });
 
 test('client sees Georgia RUB amounts, saved rate date, comment and no expiry',async()=>{
  const dom=new JSDOM('<!doctype html><html><body><div data-client-detail-bg><div class="auto-tg-modal"><div class="auto-client-order-grid"></div><div class="auto-guide"><span></span></div><button data-tg-manager="L-GEO">Менеджер</button></div></div></body></html>',{url:'https://auto-sale.viiversion.com/'});
  Object.assign(globalThis,{window:dom.window,document:dom.window.document,localStorage:dom.window.localStorage,MutationObserver:dom.window.MutationObserver,CustomEvent:dom.window.CustomEvent});
- const clientQuoteInput={...valid('3to5'),transportMode:'Доставка под ключ',turnkeyDeliveryUsd:875};
+ const clientQuoteInput={...valid('3to5'),transportMode:'Доставка под ключ',turnkeyDeliveryUsd:875.25};
  const clientQuote={...clientQuoteInput,...georgiaQuoteAmounts(clientQuoteInput)};
  clientQuote.total=calculateQuote(clientQuote);
  localStorage.setItem('auto-sale-quotes-v2',JSON.stringify([{...clientQuote,id:'Q-GEO',version:1}]));
@@ -171,8 +173,8 @@ test('client sees Georgia RUB amounts, saved rate date, comment and no expiry',a
  assert.match(panel.textContent,/21 октября 2026/);
  assert.match(panel.textContent,/100 ₽ за \$1/);
  assert.match(panel.textContent,/Доставка под ключ/);
- assert.match(panel.textContent,/\$875/);
- assert.match(panel.textContent,/\$26,600/);
+ assert.match(panel.textContent,/\$875.25/);
+ assert.match(panel.textContent,/\$26,600.25/);
  assert.doesNotMatch(panel.textContent,/Владик/);
  assert.doesNotMatch(panel.textContent,/Расчёт действует до/);
  const approve=panel.querySelector('[data-client-quote-agree="Q-GEO"]');
@@ -251,4 +253,10 @@ test('new Georgian form retains technical data needed for manual customs lookup'
  const html=georgiaQuoteForm(valid('3to5'),[{id:'L-GEO',name:'Test',model:'Camry',status:'Расчёт'}],['Отправлен'],x=>String(x),x=>'$'+x);
  for(const name of ['engineCc','powerHp','powerUnit','engineType','importerType','manufactureDate','exchangeRateSource','turnkeyDeliveryUsd'])assert.match(html,new RegExp('name="'+name+'"'));
  assert.match(html,/не виден клиенту/);
+});
+
+test('Georgia USD display preserves cents without changing whole-dollar formatting',()=>{
+ assert.equal(formatGeorgiaUsd(26625.5),'$26,625.50');
+ assert.equal(formatGeorgiaUsd(25725),'$25,725');
+ assert.equal(formatGeorgiaUsd(900.01),'$900.01');
 });
