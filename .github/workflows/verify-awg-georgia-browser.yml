@@ -24,7 +24,9 @@ jobs:
           npm ci
           npm run build
           npm install --no-save --ignore-scripts playwright@1.56.1
-          npx playwright install --with-deps chromium
+          CHROME=$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)
+          test -n "$CHROME" || { echo '::error::System Chrome missing on runner'; exit 1; }
+          echo "AWG_CHROME_BIN=$CHROME" >> "$GITHUB_ENV"
       - name: Chromium manager and mini app preview smoke
         run: |
           set -euo pipefail
