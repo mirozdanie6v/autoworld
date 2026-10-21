@@ -52,6 +52,7 @@ jobs:
           GITHUB_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
         run: |
           set -euo pipefail
+          node -e 'const p=JSON.parse(Buffer.from(process.env.GITHUB_OIDC_TOKEN.split(".")[1],"base64url")); console.log("Verified non-secret GitHub OIDC claims:",JSON.stringify({iss:p.iss,aud:p.aud,sub:p.sub,repository:p.repository,ref:p.ref}));'
           RESPONSE=$(curl -sS --connect-timeout 10 --max-time 30 -w '\n%{http_code}' \
             -H 'Content-Type: application/x-www-form-urlencoded' \
             --data-urlencode 'grant_type=urn:ietf:params:oauth:grant-type:token-exchange' \
@@ -61,7 +62,11 @@ jobs:
             --data-urlencode 'subject_token_type=urn:ietf:params:oauth:token-type:id_token' \
             https://auth.yandex.cloud/oauth/token)
           CODE=$(printf '%s' "$RESPONSE" | tail -n1)
-          test "$CODE" = 200 || { echo "::error::OIDC exchange denied HTTP $CODE"; exit 1; }
+          if [ "$CODE" != 200 ]; then
+            printf '%s' "$RESPONSE" | sed '$d' | jq -r '{error: .error, code: .code, description: (.error_description // .message // "" | tostring | .[0:220])}' 2>/dev/null || true
+            echo "::error::OIDC exchange denied HTTP $CODE"
+            exit 1
+          fi
           TOKEN=$(printf '%s' "$RESPONSE" | sed '$d' | jq -r '.access_token // empty')
           test -n "$TOKEN"
           echo "::add-mask::$TOKEN"
