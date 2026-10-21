@@ -30,6 +30,9 @@ test('does not invent exact cm³ from 2.5L, diesel/fuel from unspecified hybrid,
  assert.equal(facts.manufactureDate,'');
  assert.equal(facts.ageCategory,'');
  assert.ok(facts.missing.length>=4);
+ const conflicting=catalogCustomsFacts({year:2023,manufactureDate:'2022-09',engineCc:1800,powerHp:120,engineType:'petrol'},'2026-10-22');
+ assert.equal(conflicting.manufactureDate,'','mismatched source year and month must not be trusted');
+ assert.equal(conflicting.ageCategory,'','uncertain year boundary requires manual review');
 });
 test('explicit source attributes win and snapshots survive catalog updates and disappearance',()=>{
  const raw={...CAR,engine:'2.5 Hybrid',engineCc:2487,powerHp:178,engineType:'petrol_electric'};
