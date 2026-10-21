@@ -1,5 +1,6 @@
 import {quoteCostRows,quoteRowsTotal} from './auto-sale-quote-audit.mjs';
 import {validateQuote} from './auto-sale-business-rules.mjs';
+import {AWG_GEORGIA_TARIFF_VERSION} from './auto-sale-georgia-quote.mjs';
 const K={quotes:'auto-sale-quotes-v2',notes:'auto-sale-notes-v2'};
 const read=(key,fallback)=>{try{return JSON.parse(localStorage.getItem(key)||'null')??fallback}catch{return fallback}};
 const write=(key,value)=>{if(window.__AUTO_SALE_CACHE_WRITE__)window.__AUTO_SALE_CACHE_WRITE__(key,value);else localStorage.setItem(key,JSON.stringify(value))};
@@ -14,10 +15,12 @@ function panel(leadId,q){
   const actionable=!outdated&&['Отправлен','На согласовании'].includes(q.status);
   const agreed=q.status==='Согласован';
   const changes=q.clientDecision==='changes_requested';
+  const georgiaNew=q.origin==='Грузия'&&q.tariffVersion===AWG_GEORGIA_TARIFF_VERSION;
   return `<section class="auto-client-quote" data-client-quote="${esc(q.id)}" data-lead="${esc(leadId)}">
     <div class="auto-client-quote-head"><div><span>РАСЧЁТ · ${esc(q.id)} · V${Number(q.version)||1}</span><h3>${esc(q.model||'Расчёт автомобиля')}</h3></div><b class="auto-status ${agreed?'good':''}">${esc(q.status)}</b></div>
-    <div class="auto-client-quote-lines">${quoteCostRows(q).map(({label,value})=>`<div><span>${esc(label)}</span><strong>${money(value)}</strong></div>`).join('')}</div>
-    ${q.customsSource?`<div class="auto-client-quote-note">Таможня: ${esc(q.customsSource)} · ${esc(q.customsCheckedAt||"дата не указана")}. Суммы предварительные до подтверждения ФТС.</div>`:""}${Math.abs(quoteRowsTotal(q)-(Number(q.total)||0))>0.02?`<div class="auto-client-quote-note warn">Сумма статей отличается от итога. Свяжитесь с менеджером.</div>`:""}<div class="auto-client-quote-total"><span><b>Итого под ключ</b><small>Расчёт действует до ${dateRu(q.validUntil)}</small></span><strong>${money(q.total)}</strong></div>
+    <div class="auto-client-quote-lines">${quoteCostRows(q).map(({label,value,displayValue})=>`<div><span>${esc(label)}</span><strong>${esc(displayValue||money(value))}</strong></div>`).join('')}</div>
+    ${georgiaNew?`<div class="auto-client-quote-note">Расчёт выполнен по курсу ${esc(q.usdRubRate)} ₽ за $1 на ${esc(dateRu(q.exchangeRateDate))}. Таможня и утильсбор указаны в рублях.</div>${q.comment?`<div class="auto-client-quote-note">Комментарий: ${esc(q.comment)}</div>`:''}`:''}
+    ${!georgiaNew&&q.customsSource?`<div class="auto-client-quote-note">Таможня: ${esc(q.customsSource)} · ${esc(q.customsCheckedAt||"дата не указана")}. Суммы предварительные до подтверждения ФТС.</div>`:""}${Math.abs(quoteRowsTotal(q)-(Number(q.total)||0))>0.02?`<div class="auto-client-quote-note warn">Сумма статей отличается от итога. Свяжитесь с менеджером.</div>`:""}<div class="auto-client-quote-total"><span><b>Итого под ключ</b>${georgiaNew?'':`<small>Расчёт действует до ${dateRu(q.validUntil)}</small>`}</span><strong>${money(q.total)}</strong></div>
     ${outdated?'<div class="auto-client-decision warn"><b>Предыдущая версия расчёта</b><span>Актуальный расчёт доступен при открытии карточки заявки.</span></div>':''}
     ${agreed?(saving?'<div role="status" class="auto-client-decision"><b>Сохраняем решение…</b></div>':'<div class="auto-client-decision good"><b>Расчёт согласован</b><span>Решение сохранено. Следующий шаг — депозит и оформление заказа.</span></div>'):''}
     ${changes?`<div class="auto-client-decision warn"><b>Запрошены изменения</b><span>${esc(q.clientComment||'Менеджер получил ваш запрос и подготовит следующую версию расчёта.')}</span></div>`:''}
