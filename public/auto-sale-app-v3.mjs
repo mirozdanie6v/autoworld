@@ -570,7 +570,7 @@ function syncQuoteScenario(form){
   const tariff=awgTariff(origin,age);
   if(form.elements.tariffVersion?.value===AWG_TARIFF_VERSION){
     if(form.elements.service)form.elements.service.value='500';
-    if(form.elements.legalization)form.elements.legalization.value=String(tariff?.legalization||0);
+    if(form.elements.legalization)form.elements.legalization.value=String(origin==='Грузия'?4500:(tariff?.legalization||0));
     if(form.elements.ocean)form.elements.ocean.value=String(tariff?.ocean||0);
     if(form.elements.customsConfirmed)form.elements.customsConfirmed.checked=false;
     if(form.elements.recyclingConfirmed)form.elements.recyclingConfirmed.checked=false;
@@ -613,6 +613,15 @@ async function quoteAction(id,status){
 async function cloneQuote(id){
   const old=quotes.find(x=>x.id===id);if(!old)return;
   const q={...old,id:nextId('Q',quotes),version:(old.version||1)+1,status:'Черновик',validUntil:addDays(today,7),updatedAt:new Date().toISOString(),revisionOf:old.id};
+  // A new version of a historical Georgia quote adopts current Georgia tariffs
+  // without mutating the immutable original quote.
+  if(old.origin==='Грузия'&&old.tariffVersion!==AWG_GEORGIA_TARIFF_VERSION){
+    Object.assign(q,{tariffVersion:AWG_GEORGIA_TARIFF_VERSION,quoteSchema:'awg-quote-georgia-2026-10-21',legalization:4000,service:1000,
+      customsRub:0,recyclingRub:0,usdRubRate:0,exchangeRateDate:'',internationalTransferPercent:3.5,
+      comment:'',transportMode:'Самовывоз — Владикавказ',validUntil:''});
+    Object.assign(q,georgiaQuoteAmounts(q));
+    q.total=calculateQuote(q);
+  }
   delete q.sentAt;delete q.agreedAt;
   const saved=window.__AUTO_SALE_ENTITY_BATCH__?await commitEntities([{resource:'quote',operation:'create',id:q.id,input:q}]):{ok:true,localOnly:true};if(!saved)return;
   quotes.push(q);saveAll();state.modal={type:'quote',id:q.id};render();
