@@ -110,6 +110,12 @@ function quoteRules(form){
   for(const name of ['lot','auction','inland','ocean','customs','service']){
     const el=get(form,name);if(!el)continue;ensureTag(el,required);if(required&&num(el)<=0)addBlocker(el,'Для отправки расчёта сумма должна быть больше 0.');
   }
+  if(form.dataset.georgiaQuote==='true'){
+    for(const name of ['engineCc','powerHp','customsRub','recyclingRub','usdRubRate','exchangeRateDate','exchangeRateSource','engineType','importerType']){
+      const el=get(form,name);if(!el)continue;ensureTag(el,required);
+      if(required&&(!text(el)||(['engineCc','powerHp','customsRub','recyclingRub','usdRubRate'].includes(name)&&num(el)<=0)))addBlocker(el,'Укажите данные для окончательного расчёта Грузии.');
+    }
+  }
   const validUntil=get(form,'validUntil');if(validUntil){ensureTag(validUntil,required);if(required&&!text(validUntil))addBlocker(validUntil,'Укажите срок действия расчёта.');}
 }
 function normalizeOrderPayment(form){
