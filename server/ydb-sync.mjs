@@ -79,6 +79,18 @@ export async function syncYdbState(store,input,{includePrevious=false,prepareNot
         for(const key of ['leadId','model','lot','auction','inland','ocean','customs','repair','service','total','version','validUntil']){
           if(!same(before[key],quote[key]))return bad('locked_quote_changed',{id:quote.id,field:key});
         }
+        // Approved Georgian quotes are immutable in every price and tariff input, not only the legacy fields.
+        // Otherwise a balanced transfer/delivery change could silently rewrite a client-approved breakdown.
+        if(text(before.origin)==='Грузия'&&text(before.tariffVersion)==='2026-10-21-georgia'){
+          for(const key of [
+            'tariffVersion','quoteSchema','transportMode','turnkeyDeliveryUsd','cryptoFee','recyclingFee',
+            'customsRub','recyclingRub','usdRubRate','exchangeRateDate','exchangeRateSource',
+            'internationalTransferPercent','ageCategory','manufactureDate','engineCc','powerHp',
+            'powerInput','powerUnit','engineType','importerType','comment'
+          ]){
+            if(!same(before[key],quote[key]))return bad('locked_quote_changed',{id:quote.id,field:key});
+          }
+        }
         if(!sameJson(before.verification,quote.verification))return bad('locked_quote_changed',{id:quote.id,field:'verification'});
       }
     }else if(initialized&&!quoteTransitionAllowed('',text(quote.status))){
