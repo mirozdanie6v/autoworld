@@ -134,6 +134,12 @@ test('client sees Georgia RUB amounts, saved rate date, comment and no expiry',a
  assert.match(panel.textContent,/100 ₽ за \$1/);
  assert.doesNotMatch(panel.textContent,/Владик/);
  assert.doesNotMatch(panel.textContent,/Расчёт действует до/);
+ const approve=panel.querySelector('[data-client-quote-agree="Q-GEO"]');
+ assert.ok(approve);
+ approve.click();await tick();await tick();
+ const updated=JSON.parse(localStorage.getItem('auto-sale-quotes-v2')).find(x=>x.id==='Q-GEO');
+ assert.equal(updated.status,'Согласован');
+ assert.equal(updated.clientDecision,'agreed');
  dom.window.close();
 });
 
