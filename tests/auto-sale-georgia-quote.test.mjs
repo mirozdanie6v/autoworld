@@ -67,7 +67,7 @@ test('Georgia rejects hidden legacy fees rather than silently including them',()
 test('Georgia editor has requested fields and not the removed old blocks',()=>{
  const q={...valid('3to5'),status:'Черновик'};
  const html=georgiaQuoteForm(q,[{id:'L-GEO',name:'Test',model:'Camry',status:'Расчёт'}],['Черновик','Отправлен'],x=>String(x),x=>'$'+x);
- for(const label of ['Самовывоз — Владикавказ','Доставка под ключ','Комментарий','Утильсбор РФ','Таможня РФ','Международный перевод','Дата курса'])assert.ok(html.includes(label),label);
+ for(const label of ['Самовывоз — Владикавказ','Доставка под ключ','Общедоступный комментарий','Утильсбор РФ','Таможня РФ','Международный перевод','Дата курса'])assert.ok(html.includes(label),label);
  for(const old of ['Досье проверки автомобиля','Ссылка на лот / объявление','Фото до покупки','Действует до','Источник цены','Логистика по Грузии','Доставка из Грузии в Россию','Запчасти (США до 3 лет)','Ремонт / подготовка','Подтверждение предварительных расходов','Таможенная оценка и утильсбор'])assert.equal(html.includes(old),false,old);
 });
 const tick=()=>new Promise(r=>setTimeout(r,0));
