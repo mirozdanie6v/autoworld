@@ -1,6 +1,6 @@
 import {quoteCostRows,quoteRowsTotal} from './auto-sale-quote-audit.mjs';
 import {validateQuote} from './auto-sale-business-rules.mjs';
-import {AWG_GEORGIA_TARIFF_VERSION} from './auto-sale-georgia-quote.mjs';
+import {AWG_GEORGIA_TARIFF_VERSION,formatGeorgiaUsd} from './auto-sale-georgia-quote.mjs';
 const K={quotes:'auto-sale-quotes-v2',notes:'auto-sale-notes-v2'};
 const read=(key,fallback)=>{try{return JSON.parse(localStorage.getItem(key)||'null')??fallback}catch{return fallback}};
 const write=(key,value)=>{if(window.__AUTO_SALE_CACHE_WRITE__)window.__AUTO_SALE_CACHE_WRITE__(key,value);else localStorage.setItem(key,JSON.stringify(value))};
@@ -16,11 +16,12 @@ function panel(leadId,q){
   const agreed=q.status==='Согласован';
   const changes=q.clientDecision==='changes_requested';
   const georgiaNew=q.origin==='Грузия'&&q.tariffVersion===AWG_GEORGIA_TARIFF_VERSION;
+  const displayMoney=georgiaNew?formatGeorgiaUsd:money;
   return `<section class="auto-client-quote" data-client-quote="${esc(q.id)}" data-lead="${esc(leadId)}">
     <div class="auto-client-quote-head"><div><span>РАСЧЁТ · ${esc(q.id)} · V${Number(q.version)||1}</span><h3>${esc(q.model||'Расчёт автомобиля')}</h3></div><b class="auto-status ${agreed?'good':''}">${esc(q.status)}</b></div>
-    <div class="auto-client-quote-lines">${quoteCostRows(q).map(({label,value,displayValue})=>`<div><span>${esc(label)}</span><strong>${esc(displayValue||money(value))}</strong></div>`).join('')}</div>
+    <div class="auto-client-quote-lines">${quoteCostRows(q).map(({label,value,displayValue})=>`<div><span>${esc(label)}</span><strong>${esc(displayValue||displayMoney(value))}</strong></div>`).join('')}</div>
     ${georgiaNew?`<div class="auto-client-quote-note">Расчёт выполнен по курсу ${esc(q.usdRubRate)} ₽ за $1 на ${esc(dateRu(q.exchangeRateDate))} (${esc({'cbr':'ЦБ РФ','bank':'Банк / провайдер','agreed':'Согласованный курс'}[q.exchangeRateSource]||'источник не указан')}). Таможня и утильсбор указаны в рублях.</div>`:''}
-    ${!georgiaNew&&q.customsSource?`<div class="auto-client-quote-note">Таможня: ${esc(q.customsSource)} · ${esc(q.customsCheckedAt||"дата не указана")}. Суммы предварительные до подтверждения ФТС.</div>`:""}${Math.abs(quoteRowsTotal(q)-(Number(q.total)||0))>0.02?`<div class="auto-client-quote-note warn">Сумма статей отличается от итога. Свяжитесь с менеджером.</div>`:""}<div class="auto-client-quote-total"><span><b>${georgiaNew?'Итого по выбранному способу получения':'Итого под ключ'}</b>${georgiaNew?'':`<small>Расчёт действует до ${dateRu(q.validUntil)}</small>`}</span><strong>${money(q.total)}</strong></div>
+    ${!georgiaNew&&q.customsSource?`<div class="auto-client-quote-note">Таможня: ${esc(q.customsSource)} · ${esc(q.customsCheckedAt||"дата не указана")}. Суммы предварительные до подтверждения ФТС.</div>`:""}${Math.abs(quoteRowsTotal(q)-(Number(q.total)||0))>0.02?`<div class="auto-client-quote-note warn">Сумма статей отличается от итога. Свяжитесь с менеджером.</div>`:""}<div class="auto-client-quote-total"><span><b>${georgiaNew?'Итого по выбранному способу получения':'Итого под ключ'}</b>${georgiaNew?'':`<small>Расчёт действует до ${dateRu(q.validUntil)}</small>`}</span><strong>${displayMoney(q.total)}</strong></div>
     ${outdated?'<div class="auto-client-decision warn"><b>Предыдущая версия расчёта</b><span>Актуальный расчёт доступен при открытии карточки заявки.</span></div>':''}
     ${agreed?(saving?'<div role="status" class="auto-client-decision"><b>Сохраняем решение…</b></div>':'<div class="auto-client-decision good"><b>Расчёт согласован</b><span>Решение сохранено. Следующий шаг — депозит и оформление заказа.</span></div>'):''}
     ${changes?`<div class="auto-client-decision warn"><b>Запрошены изменения</b><span>${esc(q.clientComment||'Менеджер получил ваш запрос и подготовит следующую версию расчёта.')}</span></div>`:''}
@@ -135,7 +136,7 @@ const style=document.createElement('style');style.id='auto-client-quote-style';s
 new MutationObserver(enhance).observe(document.documentElement,{childList:true,subtree:true});
 document.addEventListener('click',event=>{
   const syntheticCore=event.target.closest?.('[data-quote-action]');if(syntheticCore)return;
-  const agree=event.target.closest?.('[data-client-quote-agree]');if(agree){event.preventDefault();const q=read(K.quotes,[]).find(x=>x.id===agree.dataset.clientQuoteAgree);if(!q)return;const ok=typeof confirm==='function'?confirm(`Согласовать расчёт на ${money(q.total)}?`):true;if(ok)saveDecision(q.id,'agreed');return}
+  const agree=event.target.closest?.('[data-client-quote-agree]');if(agree){event.preventDefault();const q=read(K.quotes,[]).find(x=>x.id===agree.dataset.clientQuoteAgree);if(!q)return;const ok=typeof confirm==='function'?confirm(`Согласовать расчёт на ${q.tariffVersion===AWG_GEORGIA_TARIFF_VERSION?formatGeorgiaUsd(q.total):money(q.total)}?`):true;if(ok)saveDecision(q.id,'agreed');return}
   const change=event.target.closest?.('[data-client-quote-change]');if(change){event.preventDefault();const p=change.closest('.auto-client-quote')?.querySelector('[data-client-change-panel]');if(p){p.hidden=false;p.querySelector('textarea')?.focus()}return}
   const cancel=event.target.closest?.('[data-client-quote-cancel-change]');if(cancel){event.preventDefault();const p=cancel.closest('[data-client-change-panel]');if(p)p.hidden=true;return}
   const send=event.target.closest?.('[data-client-quote-send-change]');if(send){event.preventDefault();const p=send.closest('[data-client-change-panel]'),comment=String(p?.querySelector('[data-client-quote-comment]')?.value||'').trim();if(!comment){const area=p?.querySelector('[data-client-quote-comment]');area?.focus();area?.setAttribute('placeholder','Напишите, что нужно изменить в расчёте');return}saveDecision(send.dataset.clientQuoteSendChange,'changes_requested',comment);return}
