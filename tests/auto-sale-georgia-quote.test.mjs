@@ -113,3 +113,21 @@ test('manager creates Georgia quote after scenario switch, zero clears, save use
  assert.equal(q.ocean,0);
  dom.window.close();
 });
+
+test('client sees Georgia RUB amounts, saved rate date, comment and no expiry',async()=>{
+ const dom=new JSDOM('<!doctype html><html><body><div data-client-detail-bg><div class="auto-tg-modal"><div class="auto-client-order-grid"></div><div class="auto-guide"><span></span></div><button data-tg-manager="L-GEO">Менеджер</button></div></div></body></html>',{url:'https://auto-sale.viiversion.com/'});
+ Object.assign(globalThis,{window:dom.window,document:dom.window.document,localStorage:dom.window.localStorage,MutationObserver:dom.window.MutationObserver,CustomEvent:dom.window.CustomEvent});
+ localStorage.setItem('auto-sale-quotes-v2',JSON.stringify([{...valid('3to5'),id:'Q-GEO',version:1}]));
+ localStorage.setItem('auto-sale-notes-v2',JSON.stringify({}));
+ await import('../public/auto-sale-client-quote.mjs?georgia-display='+Date.now());
+ await tick();
+ const panel=document.querySelector('.auto-client-quote');
+ assert.ok(panel,'client quote panel');
+ assert.match(panel.textContent,/420\s*000\s*₽/);
+ assert.match(panel.textContent,/100\s*000\s*₽/);
+ assert.match(panel.textContent,/21 октября 2026/);
+ assert.match(panel.textContent,/100 ₽ за \$1/);
+ assert.match(panel.textContent,/Комментарий: Владик/);
+ assert.doesNotMatch(panel.textContent,/Расчёт действует до/);
+ dom.window.close();
+});
