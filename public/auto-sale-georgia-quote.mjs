@@ -47,7 +47,7 @@ export function georgiaQuoteForm(q,leads,statuses,esc,money){
   <div class="auto-modal-head"><div><span class="auto-eyebrow">${id||'НОВЫЙ РАСЧЁТ'} · v${Number(q.version)||1} · Грузия</span><h2>${safe(q.model||'Расчёт автомобиля')}</h2></div><button class="auto-close" data-close>×</button></div>
   <form class="auto-form" id="quoteForm" data-georgia-quote="true">
     <input type="hidden" name="id" value="${id}"><input type="hidden" name="version" value="${Number(q.version)||1}">
-    <input type="hidden" name="origin" value="Грузия"><input type="hidden" name="tariffVersion" value="${AWG_GEORGIA_TARIFF_VERSION}">
+    <label>Сценарий покупки<select name="origin" id="quoteOrigin"><option value="Грузия" selected>Авто в Грузии</option><option value="США">Аукцион США</option></select></label><input type="hidden" name="tariffVersion" value="${AWG_GEORGIA_TARIFF_VERSION}">
     <input type="hidden" name="quoteSchema" value="${AWG_GEORGIA_QUOTE_SCHEMA}">
     <label>Лид<select name="leadId" required>${leadSelect}</select></label>
     <label>Автомобиль<input name="model" required value="${safe(q.model||'')}"></label>
