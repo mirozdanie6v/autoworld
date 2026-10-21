@@ -106,6 +106,7 @@ test('manager creates Georgia quote after scenario switch, zero clears, save use
  form.elements.status.value='Отправлен';
  form.elements.lot.dispatchEvent(new dom.window.Event('input',{bubbles:true}));
  assert.match(form.querySelector('#quoteTotal').textContent,/25,725/);
+ assert.equal(form.querySelector('#quoteTurnkeyDeliveryField').classList.contains('auto-conditional-hidden'),true);
  form.dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true}));
  await tick();await tick();
  const q=JSON.parse(localStorage.getItem('auto-sale-quotes-v2')).find(x=>x.tariffVersion===AWG_GEORGIA_TARIFF_VERSION);
@@ -116,13 +117,50 @@ test('manager creates Georgia quote after scenario switch, zero clears, save use
  assert.equal(q.exchangeRateDate,'2026-10-21');
  assert.equal(q.inland,0);
  assert.equal(q.ocean,0);
+ assert.equal(q.turnkeyDeliveryUsd,0);
+
+ root.querySelector('[data-new-quote]').click();
+ let nextForm=root.querySelector('#quoteForm');
+ if(nextForm.dataset.georgiaQuote!=='true'){
+  nextForm.elements.origin.value='Грузия';
+  nextForm.elements.origin.dispatchEvent(new dom.window.Event('change',{bubbles:true}));
+  nextForm=root.querySelector('#quoteForm');
+ }
+ assert.equal(nextForm.dataset.georgiaQuote,'true');
+ nextForm.elements.transportMode.value='Доставка под ключ';
+ nextForm.elements.transportMode.dispatchEvent(new dom.window.Event('change',{bubbles:true}));
+ assert.equal(nextForm.querySelector('#quoteTurnkeyDeliveryField').classList.contains('auto-conditional-hidden'),false);
+ nextForm.elements.turnkeyDeliveryUsd.value='900.50';
+ nextForm.elements.lot.value='15000';
+ nextForm.elements.customsRub.value='420000';
+ nextForm.elements.recyclingRub.value='100000';
+ nextForm.elements.usdRubRate.value='100';
+ nextForm.elements.exchangeRateDate.value='2026-10-21';
+ nextForm.elements.exchangeRateSource.value='cbr';
+ nextForm.elements.engineCc.value='2000';
+ nextForm.elements.powerHp.value='150';
+ nextForm.elements.engineType.value='petrol';
+ nextForm.elements.importerType.value='nat';
+ nextForm.elements.status.value='Отправлен';
+ nextForm.elements.turnkeyDeliveryUsd.dispatchEvent(new dom.window.Event('input',{bubbles:true}));
+ assert.match(nextForm.querySelector('#quoteTotal').textContent,/26,626|26,625/);
+ nextForm.dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true}));
+ await tick();await tick();
+ const turnkey=JSON.parse(localStorage.getItem('auto-sale-quotes-v2')).find(x=>x.transportMode==='Доставка под ключ'&&x.tariffVersion===AWG_GEORGIA_TARIFF_VERSION);
+ assert.ok(turnkey,'turnkey quote saved');
+ assert.equal(turnkey.turnkeyDeliveryUsd,900.50);
+ assert.equal(turnkey.total,26625.50);
+ assert.deepEqual(serverValidateQuote(turnkey),[]);
  dom.window.close();
 });
 
 test('client sees Georgia RUB amounts, saved rate date, comment and no expiry',async()=>{
  const dom=new JSDOM('<!doctype html><html><body><div data-client-detail-bg><div class="auto-tg-modal"><div class="auto-client-order-grid"></div><div class="auto-guide"><span></span></div><button data-tg-manager="L-GEO">Менеджер</button></div></div></body></html>',{url:'https://auto-sale.viiversion.com/'});
  Object.assign(globalThis,{window:dom.window,document:dom.window.document,localStorage:dom.window.localStorage,MutationObserver:dom.window.MutationObserver,CustomEvent:dom.window.CustomEvent});
- localStorage.setItem('auto-sale-quotes-v2',JSON.stringify([{...valid('3to5'),id:'Q-GEO',version:1}]));
+ const clientQuoteInput={...valid('3to5'),transportMode:'Доставка под ключ',turnkeyDeliveryUsd:875};
+ const clientQuote={...clientQuoteInput,...georgiaQuoteAmounts(clientQuoteInput)};
+ clientQuote.total=calculateQuote(clientQuote);
+ localStorage.setItem('auto-sale-quotes-v2',JSON.stringify([{...clientQuote,id:'Q-GEO',version:1}]));
  localStorage.setItem('auto-sale-notes-v2',JSON.stringify({}));
  await import('../public/auto-sale-client-quote.mjs?georgia-display='+Date.now());
  await tick();
@@ -132,6 +170,9 @@ test('client sees Georgia RUB amounts, saved rate date, comment and no expiry',a
  assert.match(panel.textContent,/100\s*000\s*₽/);
  assert.match(panel.textContent,/21 октября 2026/);
  assert.match(panel.textContent,/100 ₽ за \$1/);
+ assert.match(panel.textContent,/Доставка под ключ/);
+ assert.match(panel.textContent,/\$875/);
+ assert.match(panel.textContent,/\$26,600/);
  assert.doesNotMatch(panel.textContent,/Владик/);
  assert.doesNotMatch(panel.textContent,/Расчёт действует до/);
  const approve=panel.querySelector('[data-client-quote-agree="Q-GEO"]');
@@ -150,10 +191,35 @@ test('Georgia older than five years: draft allowed but sending a standard tariff
  assert.ok(serverValidateQuote(q).length>0);
  assert.deepEqual(validateQuote({...q,status:'Черновик'}),[]);
 });
-test('turnkey shipping without a verified tariff or inclusion rule is not publishable',()=>{
- const q={...valid('3to5'),transportMode:GEORGIA_MODES[1]};
- assert.ok(validateQuote(q).some(e=>e.includes('доставки под ключ')));
- assert.ok(serverValidateQuote(q).some(e=>e.includes('доставки под ключ')));
+test('turnkey delivery is entered separately and included in both server and client totals',()=>{
+ const fields={...valid('3to5'),transportMode:GEORGIA_MODES[1],turnkeyDeliveryUsd:900.50};
+ const q={...fields,...georgiaQuoteAmounts(fields)};
+ q.total=calculateQuote(q);
+ assert.equal(q.turnkeyDeliveryUsd,900.50);
+ assert.equal(q.total,26625.50);
+ assert.equal(quoteRowsTotal(q),q.total);
+ assert.deepEqual(validateQuote(q),[]);
+ assert.deepEqual(serverValidateQuote(q),[]);
+ assert.equal(quoteCostRows(q).find(x=>x.key==='turnkeyDeliveryUsd').label,'Доставка под ключ');
+ assert.equal(quoteCostRows(q).find(x=>x.key==='turnkeyDeliveryUsd').value,900.50);
+});
+test('turnkey delivery amount is required and cannot be zero, negative or omitted on sending',()=>{
+ for(const charge of [undefined,0,-100,'not-a-number']){
+  const fields={...valid('3to5'),transportMode:GEORGIA_MODES[1],turnkeyDeliveryUsd:charge};
+  const q={...fields,...georgiaQuoteAmounts(fields)};
+  q.total=calculateQuote(q);
+  assert.ok(validateQuote(q).some(e=>e.includes('стоимость доставки под ключ')),'rejected '+charge);
+  assert.ok(serverValidateQuote(q).some(e=>e.includes('стоимость доставки под ключ')),'server rejected '+charge);
+  assert.deepEqual(validateQuote({...q,status:'Черновик'}),[]);
+ }
+});
+test('pickup excludes the delivery fee; old Georgia and USA quotes remain unaffected',()=>{
+ const input={...valid('3to5'),transportMode:GEORGIA_MODES[0],turnkeyDeliveryUsd:900};
+ const totals=georgiaQuoteAmounts(input);
+ assert.equal(totals.turnkeyDeliveryUsd,0);
+ assert.equal(calculateQuote(totals),25725);
+ assert.equal(quoteCostRows({...input,...totals}).some(row=>row.key==='turnkeyDeliveryUsd'),false);
+ assert.ok(validateQuote({...input,total:calculateQuote(input)}).some(e=>e.includes('самовывоза')));
 });
 test('exchange-rate source is mandatory, empty/future dates cannot validate',()=>{
  const q={...valid('3to5'),exchangeRateSource:'',exchangeRateDate:'2099-01-01'};
@@ -183,6 +249,6 @@ test('legacy Georgian drafts are converted for editing without mutating original
 });
 test('new Georgian form retains technical data needed for manual customs lookup',()=>{
  const html=georgiaQuoteForm(valid('3to5'),[{id:'L-GEO',name:'Test',model:'Camry',status:'Расчёт'}],['Отправлен'],x=>String(x),x=>'$'+x);
- for(const name of ['engineCc','powerHp','powerUnit','engineType','importerType','manufactureDate','exchangeRateSource'])assert.match(html,new RegExp('name="'+name+'"'));
+ for(const name of ['engineCc','powerHp','powerUnit','engineType','importerType','manufactureDate','exchangeRateSource','turnkeyDeliveryUsd'])assert.match(html,new RegExp('name="'+name+'"'));
  assert.match(html,/не виден клиенту/);
 });
