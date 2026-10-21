@@ -48,6 +48,9 @@ test('USA 3–5 and under3 tariffs are not changed',()=>{
 test('Georgia percent is editable and correct even with decimals',()=>{
  assert.equal(georgiaTransferFee(15000,3.5),525);
  assert.equal(georgiaTransferFee(15000,5),750);
+ assert.equal(georgiaTransferFee(15000,3.5,900.50),556.52);
+ assert.equal(georgiaTransferFee(15000,3.5,875.25),555.63);
+ assert.equal(georgiaTransferFee(15000,3.5,0),525);
 });
 test('Georgia quote cannot be sent with missing exchange-rate evidence or customs and recycling amounts',()=>{
  const q=valid('3to5');
@@ -143,16 +146,17 @@ test('manager creates Georgia quote after scenario switch, zero clears, save use
  nextForm.elements.importerType.value='nat';
  nextForm.elements.status.value='Отправлен';
  nextForm.elements.turnkeyDeliveryUsd.dispatchEvent(new dom.window.Event('input',{bubbles:true}));
- assert.equal(nextForm.querySelector('#quoteTotal').textContent,'$26,625.50');
+ assert.equal(nextForm.querySelector('#quoteTotal').textContent,'$26,657.02');
  nextForm.dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true}));
  await tick();await tick();
  const turnkey=JSON.parse(localStorage.getItem('auto-sale-quotes-v2')).find(x=>x.transportMode==='Доставка под ключ'&&x.tariffVersion===AWG_GEORGIA_TARIFF_VERSION);
  assert.ok(turnkey,'turnkey quote saved');
  assert.equal(turnkey.turnkeyDeliveryUsd,900.50);
- assert.equal(turnkey.total,26625.50);
+ assert.equal(turnkey.cryptoFee,556.52);
+ assert.equal(turnkey.total,26657.02);
  assert.deepEqual(serverValidateQuote(turnkey),[]);
  assert.match(root.querySelector('.auto-quote-list').textContent,/\$900.50/);
- assert.match(root.querySelector('.auto-quote-list').textContent,/\$26,625.50/);
+ assert.match(root.querySelector('.auto-quote-list').textContent,/\$26,657.02/);
  dom.window.close();
 });
 
@@ -174,7 +178,9 @@ test('client sees Georgia RUB amounts, saved rate date, comment and no expiry',a
  assert.match(panel.textContent,/100 ₽ за \$1/);
  assert.match(panel.textContent,/Доставка под ключ/);
  assert.match(panel.textContent,/\$875.25/);
- assert.match(panel.textContent,/\$26,600.25/);
+ assert.match(panel.textContent,/\$26,630.88/);
+ assert.match(panel.textContent,/авто \+ доставка/);
+ assert.match(panel.textContent,/\$555.63/);
  assert.doesNotMatch(panel.textContent,/Владик/);
  assert.doesNotMatch(panel.textContent,/Расчёт действует до/);
  const approve=panel.querySelector('[data-client-quote-agree="Q-GEO"]');
@@ -198,12 +204,17 @@ test('turnkey delivery is entered separately and included in both server and cli
  const q={...fields,...georgiaQuoteAmounts(fields)};
  q.total=calculateQuote(q);
  assert.equal(q.turnkeyDeliveryUsd,900.50);
- assert.equal(q.total,26625.50);
+ assert.equal(q.cryptoFee,556.52);
+ assert.equal(q.total,26657.02);
  assert.equal(quoteRowsTotal(q),q.total);
  assert.deepEqual(validateQuote(q),[]);
  assert.deepEqual(serverValidateQuote(q),[]);
  assert.equal(quoteCostRows(q).find(x=>x.key==='turnkeyDeliveryUsd').label,'Доставка под ключ');
  assert.equal(quoteCostRows(q).find(x=>x.key==='turnkeyDeliveryUsd').value,900.50);
+ assert.match(quoteCostRows(q).find(x=>x.key==='cryptoFee').label,/авто \+ доставка/);
+ const tampered={...q,cryptoFee:525};
+ assert.ok(validateQuote(tampered).some(e=>e.includes('cryptoFee')));
+ assert.ok(serverValidateQuote(tampered).some(e=>e.includes('cryptoFee')));
 });
 test('turnkey delivery amount is required and cannot be zero, negative or omitted on sending',()=>{
  for(const charge of [undefined,0,-100,'not-a-number']){
@@ -219,6 +230,7 @@ test('pickup excludes the delivery fee; old Georgia and USA quotes remain unaffe
  const input={...valid('3to5'),transportMode:GEORGIA_MODES[0],turnkeyDeliveryUsd:900};
  const totals=georgiaQuoteAmounts(input);
  assert.equal(totals.turnkeyDeliveryUsd,0);
+ assert.equal(totals.cryptoFee,525);
  assert.equal(calculateQuote(totals),25725);
  assert.equal(quoteCostRows({...input,...totals}).some(row=>row.key==='turnkeyDeliveryUsd'),false);
  assert.ok(validateQuote({...input,total:calculateQuote(input)}).some(e=>e.includes('самовывоза')));
@@ -256,7 +268,27 @@ test('new Georgian form retains technical data needed for manual customs lookup'
 });
 
 test('Georgia USD display preserves cents without changing whole-dollar formatting',()=>{
- assert.equal(formatGeorgiaUsd(26625.5),'$26,625.50');
+ assert.equal(formatGeorgiaUsd(26657.02),'$26,657.02');
  assert.equal(formatGeorgiaUsd(25725),'$25,725');
  assert.equal(formatGeorgiaUsd(900.01),'$900.01');
+});
+
+test('Georgia transfer percentage uses car + delivery, never legalisation or customs',()=>{
+ const pickup=valid('3to5');
+ const delivery={...pickup,transportMode:GEORGIA_MODES[1],turnkeyDeliveryUsd:1500,internationalTransferPercent:5};
+ const costs=georgiaQuoteAmounts(delivery);
+ assert.equal(costs.cryptoFee,825);
+ assert.equal(costs.turnkeyDeliveryUsd,1500);
+ assert.equal(costs.customs,4200);
+ assert.equal(costs.recyclingFee,1000);
+ const repriced=georgiaQuoteAmounts({...delivery,legalization:8000,service:2000,customsRub:620000});
+ assert.equal(repriced.cryptoFee,costs.cryptoFee);
+ const pickupOnly=georgiaQuoteAmounts({...delivery,transportMode:GEORGIA_MODES[0]});
+ assert.equal(pickupOnly.cryptoFee,750);
+ assert.equal(pickupOnly.turnkeyDeliveryUsd,0);
+});
+test('Georgia editor explains the agreed international transfer base',()=>{
+ const html=georgiaQuoteForm({...valid('3to5'),status:'Черновик'},[{id:'L-GEO',name:'Test',model:'Camry',status:'Расчёт'}],['Черновик','Отправлен'],x=>String(x),x=>'$'+x);
+ assert.match(html,/от стоимости автомобиля плюс стоимость доставки под ключ/);
+ assert.doesNotMatch(html,/База международного перевода подлежит согласованию/);
 });
