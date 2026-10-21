@@ -55,6 +55,7 @@ export async function syncYdbState(store,input,{includePrevious=false,prepareNot
     if(errors.length)return bad('invalid_lead',{id:lead.id,details:errors});
     const before=previousLeads.get(text(lead.id));
     if(initialized&&before){
+      if(before.catalogRequest===true&&(lead.catalogRequest!==true||!same(before.carId,lead.carId)||!sameJson(before.catalogVehicle,lead.catalogVehicle)))return bad('catalog_car_binding_locked',{id:lead.id});
       const agreed=quotes.some(q=>text(q.leadId)===text(lead.id)&&text(q.status)==='Согласован');
       if(!leadTransitionAllowed(text(before.status),text(lead.status),{hasAgreedQuote:agreed,deposit:num(lead.deposit)})){
         return bad('invalid_lead_transition',{id:lead.id,from:before.status,to:lead.status});
@@ -86,7 +87,8 @@ export async function syncYdbState(store,input,{includePrevious=false,prepareNot
             'tariffVersion','quoteSchema','transportMode','turnkeyDeliveryUsd','cryptoFee','recyclingFee',
             'customsRub','recyclingRub','usdRubRate','exchangeRateDate','exchangeRateSource',
             'internationalTransferPercent','ageCategory','manufactureDate','engineCc','powerHp',
-            'powerInput','powerUnit','engineType','importerType','comment','publicComment'
+            'powerInput','powerUnit','engineType','importerType','comment','publicComment',
+            'catalogSourceId','catalogVin','catalogYear','catalogEngine','catalogMileage'
           ]){
             if(!same(before[key],quote[key]))return bad('locked_quote_changed',{id:quote.id,field:key});
           }

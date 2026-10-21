@@ -63,6 +63,9 @@ export function validateLead(lead){
   if(!LEAD_STATUSES.includes(status))errors.push('invalid_lead_status');
   if(ACTIVE_LEAD_STATUSES.includes(status)&&!text(lead.nextAction))errors.push('next_action_required');
   if(status==='Отказ'&&!text(lead.lostReason))errors.push('lost_reason_required');
+  // Only requests explicitly created from a chosen catalog card are subject to
+  // this invariant. Generic requests and historical records remain supported.
+  if(lead.catalogRequest===true&&(!text(lead.carId)||!text(lead.catalogVehicle?.id)||text(lead.carId)!==text(lead.catalogVehicle.id)))errors.push('catalog_car_binding_required');
   return errors;
 }
 
