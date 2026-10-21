@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {JSDOM} from 'jsdom';
-import {AWG_GEORGIA_TARIFF_VERSION,AWG_GEORGIA_QUOTE_SCHEMA,GEORGIA_MODES,georgiaTransferFee,georgiaQuoteAmounts,georgiaQuoteErrors,georgiaQuoteForm} from '../public/auto-sale-georgia-quote.mjs';
+import {AWG_GEORGIA_TARIFF_VERSION,AWG_GEORGIA_QUOTE_SCHEMA,GEORGIA_MODES,georgiaTransferFee,georgiaQuoteAmounts,georgiaQuoteErrors,georgiaQuoteForm,georgiaDraftForEditing} from '../public/auto-sale-georgia-quote.mjs';
 import {awgTariff,AWG_TARIFF_VERSION} from '../public/auto-sale-tariffs.mjs';
 import {calculateQuote} from '../public/auto-sale-core.mjs';
 import {quoteCostRows,quoteRowsTotal} from '../public/auto-sale-quote-audit.mjs';
@@ -11,9 +11,9 @@ import {seedLeads,seedQuotes,seedOrders,seedTeam} from './fixtures/auto-sale-bus
 
 const valid=age=>{
  const fields={origin:'Грузия',tariffVersion:AWG_GEORGIA_TARIFF_VERSION,quoteSchema:AWG_GEORGIA_QUOTE_SCHEMA,
-  leadId:'L-GEO',model:'Toyota Camry',status:'Отправлен',ageCategory:age,transportMode:GEORGIA_MODES[0],
+  leadId:'L-GEO',model:'Toyota Camry',status:'Отправлен',ageCategory:age,transportMode:GEORGIA_MODES[0],engineCc:2000,powerHp:150,engineType:'petrol',importerType:'nat',manufactureDate:'2022-05',
   lot:15000,legalization:4000,service:1000,internationalTransferPercent:3.5,
-  customsRub:420000,recyclingRub:100000,usdRubRate:100,exchangeRateDate:'2026-10-21',comment:'Владик'};
+  customsRub:420000,recyclingRub:100000,usdRubRate:100,exchangeRateDate:'2026-10-21',exchangeRateSource:'cbr',comment:'Владик'};
  const q={...fields,...georgiaQuoteAmounts(fields)};
  q.total=calculateQuote(q);
  return q;
@@ -90,6 +90,8 @@ test('manager creates Georgia quote after scenario switch, zero clears, save use
  }
  assert.equal(form.dataset.georgiaQuote,'true');
  assert.equal(form.elements.service.value,'1000');
+ assert.ok(form.elements.engineCc);
+ assert.ok(form.elements.powerHp);
  assert.equal(form.elements.legalization.value,'4000');
  form.elements.customsRub.dispatchEvent(new dom.window.Event('focusin',{bubbles:true}));
  assert.equal(form.elements.customsRub.value,'');
@@ -97,6 +99,9 @@ test('manager creates Georgia quote after scenario switch, zero clears, save use
  form.elements.customsRub.value='420000';
  form.elements.recyclingRub.value='100000';
  form.elements.usdRubRate.value='100';
+ form.elements.exchangeRateSource.value='cbr';
+ form.elements.engineCc.value='2000';form.elements.powerHp.value='150';
+ form.elements.engineType.value='petrol';form.elements.importerType.value='nat';
  form.elements.exchangeRateDate.value='2026-10-21';
  form.elements.status.value='Отправлен';
  form.elements.lot.dispatchEvent(new dom.window.Event('input',{bubbles:true}));
@@ -127,7 +132,51 @@ test('client sees Georgia RUB amounts, saved rate date, comment and no expiry',a
  assert.match(panel.textContent,/100\s*000\s*₽/);
  assert.match(panel.textContent,/21 октября 2026/);
  assert.match(panel.textContent,/100 ₽ за \$1/);
- assert.match(panel.textContent,/Комментарий: Владик/);
+ assert.doesNotMatch(panel.textContent,/Владик/);
  assert.doesNotMatch(panel.textContent,/Расчёт действует до/);
  dom.window.close();
+});
+
+test('Georgia older than five years: draft allowed but sending a standard tariff refused',()=>{
+ const q=valid('other');
+ assert.ok(georgiaQuoteErrors(q).some(e=>e.includes('старше 5 лет')));
+ assert.ok(validateQuote(q).length>0);
+ assert.ok(serverValidateQuote(q).length>0);
+ assert.deepEqual(validateQuote({...q,status:'Черновик'}),[]);
+});
+test('turnkey shipping without a verified tariff or inclusion rule is not publishable',()=>{
+ const q={...valid('3to5'),transportMode:GEORGIA_MODES[1]};
+ assert.ok(validateQuote(q).some(e=>e.includes('доставки под ключ')));
+ assert.ok(serverValidateQuote(q).some(e=>e.includes('доставки под ключ')));
+});
+test('exchange-rate source is mandatory, empty/future dates cannot validate',()=>{
+ const q={...valid('3to5'),exchangeRateSource:'',exchangeRateDate:'2099-01-01'};
+ assert.ok(georgiaQuoteErrors(q).some(e=>e.includes('источник')));
+ assert.ok(georgiaQuoteErrors(q).some(e=>e.includes('дату курса')));
+});
+test('legacy Georgian drafts are converted for editing without mutating original saved version',()=>{
+ const source={...valid('3to5'),id:'Q-old',tariffVersion:'2026-10-20',quoteSchema:'awg-quote-audit-2026-10',
+   status:'Черновик',service:500,legalization:4500,transportMode:'Автовоз',inland:300,ocean:400,repair:100,
+   cryptoFee:0,customs:2500,customsRub:0,recyclingFee:300,recyclingRub:0,exchangeRateDate:'',exchangeRateSource:''};
+ const raw=JSON.stringify(source);
+ const converted=georgiaDraftForEditing(source);
+ assert.equal(source.tariffVersion,'2026-10-20');
+ assert.equal(JSON.stringify(source),raw);
+ assert.equal(converted.tariffVersion,AWG_GEORGIA_TARIFF_VERSION);
+ assert.equal(converted.id,source.id);
+ assert.equal(converted.status,'Черновик');
+ assert.equal(converted.legalization,4000);
+ assert.equal(converted.service,1000);
+ assert.equal(converted.inland,0);
+ assert.equal(converted.ocean,0);
+ assert.equal(converted.repair,0);
+ assert.equal(converted.transportMode,'');
+ assert.equal(converted.customsRub,250000);
+ assert.ok(converted.migrationPending);
+ assert.equal(georgiaDraftForEditing({...source,status:'Отправлен'}).tariffVersion,'2026-10-20');
+});
+test('new Georgian form retains technical data needed for manual customs lookup',()=>{
+ const html=georgiaQuoteForm(valid('3to5'),[{id:'L-GEO',name:'Test',model:'Camry',status:'Расчёт'}],['Отправлен'],x=>String(x),x=>'$'+x);
+ for(const name of ['engineCc','powerHp','powerUnit','engineType','importerType','manufactureDate','exchangeRateSource'])assert.match(html,new RegExp('name="'+name+'"'));
+ assert.match(html,/не виден клиенту/);
 });
