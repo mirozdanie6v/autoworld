@@ -18,7 +18,7 @@ export function georgiaDraftForEditing(q={}){
     customsRub:pos(q.customsRub)||(rate>0?Math.round(pos(q.customs)*rate):0),
     recyclingRub:pos(q.recyclingRub)||(rate>0?Math.round(pos(q.recyclingFee)*rate):0),
     exchangeRateDate:'',exchangeRateSource:'',internationalTransferPercent:3.5,
-    comment:String(q.comment||''),validUntil:'',migrationPending:true};
+    comment:String(q.comment||''),publicComment:String(q.publicComment||''),validUntil:'',migrationPending:true};
   return {...migrated,...georgiaQuoteAmounts(migrated),total:0};
 }
 
@@ -106,7 +106,8 @@ export function georgiaQuoteForm(q,leads,statuses,esc,money){
     <label>Дата курса<input type="date" name="exchangeRateDate" value="${safe(q.exchangeRateDate||'')}"></label>
     <label>Источник курса<select name="exchangeRateSource">${rateSourceOptions}</select></label>
     <p class="full auto-rule-hint">В итоговом расчёте клиент увидит курс и дату. Значение указывает менеджер, автоматический курс не подставляется.</p>
-    <label class="full">Комментарий менеджера (не виден клиенту)<textarea name="comment" rows="3" placeholder="Внутренняя информация для менеджера">${safe(q.comment||'')}</textarea></label>
+    <label class="full">Общедоступный комментарий (виден клиенту)<textarea name="publicComment" rows="3" maxlength="3000" placeholder="Пояснения для клиента к расчёту, срокам доставки или оплате">${safe(q.publicComment||'')}</textarea></label>
+    ${q.comment?'<div class="full auto-note"><b>Старый внутренний комментарий (клиенту не показывается)</b><p>'+safe(q.comment)+'</p><small>Если эта информация предназначена клиенту, внесите её в общедоступный комментарий выше.</small></div>':''}
     ${q.migrationPending?'<p class="full auto-rule-hint">Это ранее сохранённый черновик. Прежние логистические статьи удалены из предварительной суммы; заново проверьте тариф, способ получения, таможню, утильсбор и курс перед отправкой.</p>':''}
     <label>Статус<select name="status">${statusSelect}</select></label>
     <div class="auto-quote-total full"><span>Предварительная сумма статей в USD</span><b id="quoteTotal">${money(total)}</b>
