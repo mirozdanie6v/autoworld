@@ -11,6 +11,7 @@ export function quoteCostRows(q={}){
      {key:'lot',label:'Стоимость автомобиля',value:amount(q.lot)},
      {key:'legalization',label:'Легализация',value:amount(q.legalization)},
      {key:'service',label:'Услуга компании',value:amount(q.service)},
+     ...(q.transportMode==='Доставка под ключ'?[{key:'turnkeyDeliveryUsd',label:'Доставка под ключ',value:amount(q.turnkeyDeliveryUsd)}]:[]),
      {key:'cryptoFee',label:'Международный перевод, '+(Number(q.internationalTransferPercent)||0)+'%',value:amount(q.cryptoFee)},
      {key:'customs',label:'Таможня РФ',value:amount(q.customs),displayValue:rub(q.customsRub)},
      {key:'recyclingFee',label:'Утильсбор РФ',value:amount(q.recyclingFee),displayValue:rub(q.recyclingRub)}
