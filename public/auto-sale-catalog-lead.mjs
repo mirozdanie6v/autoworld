@@ -9,7 +9,15 @@ export function catalogVehicleSnapshot(car){
     id:str(car.id),brand:str(car.brand),model:str(car.model),origin:str(car.origin),
     year:str(car.year),mileage:str(car.mileage),engine:str(car.engine),drive:str(car.drive),
     auction:str(car.auction),auctionDate:str(car.auctionDate),delivery:str(car.delivery),
-    tag:str(car.tag),vin:str(car.vin),image:str(car.image),
+    tag:str(car.tag),vin:str(car.vin),image:str(car.image),source:str(car.source),
+    body:str(car.body),trim:str(car.trim),transmission:str(car.transmission),
+    interior:str(car.interior),damage:str(car.damage),safety:str(car.safety),
+    sourceUrl:str(car.sourceUrl),sourcePostId:str(car.sourcePostId),
+    lot:str(car.lot),power:str(car.power),seats:str(car.seats),
+    efficiency:str(car.efficiency),publishedAt:str(car.publishedAt),
+    calculationDate:str(car.calculationDate),customsRub:num(car.customsRub),
+    highlights:Array.isArray(car.highlights)?car.highlights.filter(x=>typeof x==='string').slice(0,20):[],
+    bestFor:str(car.bestFor),
     price:num(car.price),estimatedBidUsd:num(car.estimatedBidUsd),priceRub:num(car.priceRub),
     priceBeforeDiscountRub:num(car.priceBeforeDiscountRub),
     priceAfterDiscountRub:num(car.priceAfterDiscountRub),
@@ -49,10 +57,51 @@ export function renderCatalogLeadVehicle(lead={}, {escape=String,money=v=>'$'+v,
     ...(str(s.delivery)?[label('Срок доставки',s.delivery)]:[]),
     ...(str(s.tag)?[label('Метка',s.tag)]:[]),
     ...(str(s.vin)?[label('VIN',s.vin)]:[]),
+    ...(str(s.body)?[label('Кузов',s.body)]:[]),
+    ...(str(s.trim)?[label('Комплектация',s.trim)]:[]),
+    ...(str(s.transmission)?[label('Коробка передач',s.transmission)]:[]),
+    ...(str(s.interior)?[label('Салон',s.interior)]:[]),
+    ...(str(s.damage)?[label('Повреждения',s.damage)]:[]),
+    ...(str(s.safety)?[label('Безопасность',s.safety)]:[]),
+    ...(str(s.power)?[label('Мощность',s.power)]:[]),
+    ...(num(s.customsRub)>0?[label('Таможня в источнике',rubMoney(s.customsRub))]:[]),
+    ...(str(s.lot)?[label('Лот',s.lot)]:[]),
+    ...(str(s.calculationDate)?[label('Дата расчёта источника',s.calculationDate)]:[]),
+    ...(Array.isArray(s.highlights)?s.highlights.map(x=>label('Характеристика',x)):[]),
+    ...(str(s.sourceUrl)&&/^https:\/\//i.test(s.sourceUrl)?['<div class="auto-catalog-lead-field"><span>Объявление</span><a href="'+escape(s.sourceUrl)+'" target="_blank" rel="noopener noreferrer">Открыть первоисточник</a></div>']:[]),
     label('ID карточки',str(lead.carId||s.id))
   ].join('');
   return '<section class="full auto-note auto-catalog-lead-details" data-catalog-lead-details>'+
     '<h3>Автомобиль, выбранный из каталога</h3>'+
     '<div class="auto-catalog-lead-content">'+mainImage+'<div class="auto-catalog-lead-fields">'+fields+'</div></div>'+
     '</section>';
+}
+
+
+// A legacy lead may have been created by the older request form without carId.
+// Use a catalog match only when a client request has one exact candidate. A price,
+// year or origin mismatch must never attach a different car.
+export function catalogCarForLead(lead={},cars=[]){
+  const linked=String(lead.carId||lead.catalogVehicle?.id||'').trim();
+  if(linked){
+    const found=cars.find(c=>String(c.id)===linked);
+    return{car:lead.catalogVehicle||found||null,linked:true,matchedBy:'id'};
+  }
+  if(!lead.clientCreated||!String(lead.model||'').trim())return{car:null,linked:false,matchedBy:''};
+  const norm=s=>String(s||'').trim().toLocaleLowerCase('ru-RU').replace(/\s+/g,' ');
+  const target=norm(lead.model),origin=String(lead.origin||'').trim();
+  const matches=cars.filter(car=>norm([car.brand,car.model].filter(Boolean).join(' '))===target
+    &&(!origin||origin==='Уточняется'||String(car.origin||'')===origin)
+    &&(!lead.year||String(lead.year)===String(car.year))
+    &&(!lead.estimatedCostRub||!Number(car.priceRub)||Number(lead.estimatedCostRub)===Number(car.priceRub)));
+  return{car:matches.length===1?matches[0]:null,linked:false,matchedBy:matches.length===1?'unique-name':''};
+}
+
+export function catalogPriceRub(car){
+  return Number(car?.priceRub)||Number(car?.priceAfterDiscountRub)||0;
+}
+export function catalogBudgetUsd(car,rubPerUsd,step=500){
+  const usd=Number(car?.price)>0?Number(car.price):catalogPriceRub(car)/Number(rubPerUsd);
+  if(!(usd>0&&Number.isFinite(usd))||!(Number(step)>0))return 0;
+  return Math.max(step,Math.round(usd/step)*step);
 }
