@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {JSDOM} from 'jsdom';
 import {catalogCustomsFacts,catalogCustomsForLead} from '../public/auto-sale-catalog-customs.mjs';
 import {catalogVehicleSnapshot} from '../public/auto-sale-catalog-lead.mjs';
+import {validateLead as validateServerLead} from '../server/auto-sale-rules.mjs';
 
 const CAR={id:'AWG-CUSTOMS-39',brand:'Toyota',model:'Camry',origin:'Грузия',
   year:2022,manufactureDate:'2022-06',mileage:'51 000 км',
@@ -64,6 +65,20 @@ test('catalog selected request must preserve original id and cannot silently bec
  await tick();await tick();
  assert.match(form.textContent,/Связь с выбранным автомобилем потеряна/);
  assert.equal(JSON.parse(localStorage.getItem('auto-sale-leads-v2')||'[]').filter(x=>x.name==='Клиент').length,0);
+ form.elements.carId.value=CAR.id;
+ form.elements.model.value='Модель клиента, отличающаяся от каталога';
+ form.elements.year.value='2019';
+ form.elements.mileage.value='999999';
+ form.dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true}));
+ await tick();await tick();
+ const saved=JSON.parse(localStorage.getItem('auto-sale-leads-v2')||'[]').find(x=>x.name==='Клиент');
+ assert.ok(saved,'catalog request saved after restoring id');
+ assert.equal(saved.catalogRequest,true);
+ assert.equal(saved.carId,CAR.id);
+ assert.equal(saved.catalogVehicle.id,CAR.id);
+ assert.equal(saved.model,'Toyota Camry');
+ assert.equal(saved.year,'2022');
+ assert.equal(saved.mileage,'51 000 км');
  dom.window.close();
 });
 test('manager Georgia calculation autofills customs parameters from linked lead, without fabricated customs fees',async()=>{
@@ -96,4 +111,13 @@ test('manager Georgia calculation autofills customs parameters from linked lead,
  assert.equal(form.elements.recyclingRub.value,'0');
  assert.match(form.querySelector('[data-customs-catalog-source]').textContent,/JTNB11HK0J3000001/);
  dom.window.close();
+});
+
+
+test('backend rejects new catalog requests with lost or mismatched card snapshot, but not generic or historical leads',()=>{
+ const base={id:'L-BIND-1',name:'Клиент',contact:'@client',model:'Toyota Camry',origin:'Грузия',status:'Новый',nextAction:'2026-10-22'};
+ assert.deepEqual(validateServerLead({...base,catalogRequest:true,carId:CAR.id,catalogVehicle:catalogVehicleSnapshot(CAR)}),[]);
+ assert.ok(validateServerLead({...base,catalogRequest:true,carId:'',catalogVehicle:null}).includes('catalog_car_binding_required'));
+ assert.ok(validateServerLead({...base,catalogRequest:true,carId:'ANOTHER',catalogVehicle:catalogVehicleSnapshot(CAR)}).includes('catalog_car_binding_required'));
+ assert.deepEqual(validateServerLead({...base,clientCreated:true,carId:''}),[]);
 });
