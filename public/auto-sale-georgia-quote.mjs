@@ -7,7 +7,9 @@ const pos = v => Math.max(0,num(v));
 export function formatGeorgiaUsd(value){
   const amount=Number(value)||0;
   const fraction=Math.abs(Math.round(amount*100))%100;
-  return ' q?.origin==='Грузия'&&q?.tariffVersion===AWG_GEORGIA_TARIFF_VERSION;
+  return '$'+new Intl.NumberFormat('en-US',{minimumFractionDigits:fraction?2:0,maximumFractionDigits:2}).format(amount);
+}
+export const isNewGeorgiaQuote = q => q?.origin==='Грузия'&&q?.tariffVersion===AWG_GEORGIA_TARIFF_VERSION;
 export function georgiaDraftForEditing(q={}){
   if(!q||q.status!=='Черновик'||q.origin!=='Грузия'||isNewGeorgiaQuote(q))return q;
   const rate=pos(q.usdRubRate);
