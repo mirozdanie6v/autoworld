@@ -85,8 +85,15 @@ export function georgiaQuoteForm(q,leads,statuses,esc,money){
     <label>Автомобиль<input name="model" required value="${safe(q.model||'')}"></label>
     <label>Возраст автомобиля<select name="ageCategory">${ageSelect}</select></label>
     <div class="full auto-form-divider">Параметры автомобиля для таможни РФ</div>
+    ${q.catalogSourceId?'<div class="full auto-note" data-customs-catalog-source><b>Данные автомобиля из каталога</b><p>ID: '+safe(q.catalogSourceId)+' · Год: '+safe(q.catalogYear||'уточняется')+' · VIN: '+safe(q.catalogVin||'не указан')+'</p><p>Двигатель: '+safe(q.catalogEngine||'не указан')+' · Пробег: '+safe(q.catalogMileage||'не указан')+'</p><small>Из заявки перенесены только подтверждённые значения. Месяц выпуска, точный объём и мощность при отсутствии данных заполняются по документам. Таможня и утильсбор рассчитываются отдельно и вводятся менеджером после проверки.</small></div>':''}
+    <input type="hidden" name="catalogSourceId" value="${safe(q.catalogSourceId||'')}">
+    <input type="hidden" name="catalogVin" value="${safe(q.catalogVin||'')}">
+    <input type="hidden" name="catalogYear" value="${safe(q.catalogYear||'')}">
+    <input type="hidden" name="catalogEngine" value="${safe(q.catalogEngine||'')}">
+    <input type="hidden" name="catalogMileage" value="${safe(q.catalogMileage||'')}">
     <label>Дата выпуска (год и месяц)<input type="month" name="manufactureDate" value="${safe(q.manufactureDate||'')}"></label>
     ${numberField('engineCc','Объём двигателя','см³')}
+    <p class="full auto-rule-hint">Проверьте точный объём по документам: обозначение двигателя «2.5» не всегда означает 2500 см³. <a href="https://www.tks.ru/auto/calc/" target="_blank" rel="noopener noreferrer">Калькулятор таможни ТКС</a></p>
     <label><span class="auto-quote-power-heading">Мощность двигателя <select name="powerUnit" data-previous-unit="${safe(q.powerUnit||'ps')}" aria-label="Единица мощности"><option value="ps" ${q.powerUnit==='hp'?'':'selected'}>л.с.</option><option value="hp" ${q.powerUnit==='hp'?'selected':''}>hp</option></select></span><input name="powerHp" type="number" min="0" step="any" value="${safe(q.powerInput??q.powerHp??0)}"></label>
     <label>Тип двигателя<select name="engineType">${engOptions}</select></label>
     <label>Статус импортёра<select name="importerType">${importerOptions}</select></label>
