@@ -44,3 +44,14 @@
   #quoteForm > label:not(.full) { white-space:normal; }
   #quoteForm .auto-quote-caption { white-space:normal; }
 }
+
+/* Preserve a readable vehicle snapshot when opening a CRM lead from the catalog. */
+.auto-catalog-lead-details{display:block;min-width:0;padding:14px 16px!important}
+.auto-catalog-lead-details h3{margin:0 0 12px;font-size:15px;line-height:1.35}
+.auto-catalog-lead-content{display:flex;gap:14px;align-items:flex-start;min-width:0}
+.auto-catalog-lead-image{width:150px;height:110px;flex:none;object-fit:cover;border-radius:12px;background:rgba(255,255,255,.05)}
+.auto-catalog-lead-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 14px;flex:1;min-width:0}
+.auto-catalog-lead-field{display:flex;flex-direction:column;gap:3px;min-width:0}
+.auto-catalog-lead-field span{font-size:11px;opacity:.72}
+.auto-catalog-lead-field b{font-size:13px;overflow-wrap:anywhere;font-weight:650}
+@media(max-width:640px){.auto-catalog-lead-content{flex-direction:column}.auto-catalog-lead-image{width:100%;max-width:250px;height:140px}.auto-catalog-lead-fields{width:100%;gap:12px 10px}}
