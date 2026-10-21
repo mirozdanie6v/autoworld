@@ -497,7 +497,7 @@ function modalGeorgiaQuote(q,lead){
   if(q&&['Согласован','Отказ'].includes(q.status))
     return `<div class="auto-modal-bg" data-modal-bg><div class="auto-modal auto-modal-wide">
     <div class="auto-modal-head"><div><span class="auto-eyebrow">${esc(q.id)} · v${q.version}</span><h2>${esc(q.model)}</h2><p>${esc(q.status)}</p></div><button class="auto-close" data-close>×</button></div>
-    ${quoteBreakdown(q)}<div class="auto-quote-total"><span>Итого по выбранному способу получения</span><b>${formatGeorgiaUsd(q.total)}</b></div>
+    ${quoteBreakdown(q)}${q.publicComment?`<div class="auto-note"><b>Общедоступный комментарий</b><p style="white-space:pre-wrap;overflow-wrap:anywhere">${esc(q.publicComment)}</p></div>`:""}<div class="auto-quote-total"><span>Итого по выбранному способу получения</span><b>${formatGeorgiaUsd(q.total)}</b></div>
     <div class="auto-actions"><button class="auto-btn primary" data-clone-quote="${esc(q.id)}">Создать новую версию</button><button class="auto-btn ghost" data-close>Закрыть</button></div></div></div>`;
   return georgiaQuoteForm(base,leads,quoteAllowedStatuses(q),esc,formatGeorgiaUsd);
 }
