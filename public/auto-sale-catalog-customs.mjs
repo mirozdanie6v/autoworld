@@ -26,8 +26,8 @@ export function catalogCustomsFacts(car={},asOf=new Date().toISOString().slice(0
     return electric?'electric':'';
   })();
   const date=clean(car.manufactureDate);
-  const manufactureDate=/^\d{4}-(0[1-9]|1[0-2])$/.test(date)?date:'';
   const year=Number(car.year)||0;
+  const manufactureDate=/^\d{4}-(0[1-9]|1[0-2])$/.test(date)&&(!year||Number(date.slice(0,4))===year)?date:'';
   const ageCategory=manufactureDate?ageCategoryForMonth(manufactureDate,asOf):ageCategoryForYear(year,asOf);
   const missing=[];
   if(!manufactureDate)missing.push('Месяц выпуска нужно уточнить по документам.');
