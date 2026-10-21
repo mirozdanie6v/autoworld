@@ -79,13 +79,32 @@ export function georgiaQuoteForm(q,leads,statuses,esc,money){
     <div class="full auto-form-divider">Параметры автомобиля для таможни РФ</div>
     <label>Дата выпуска (год и месяц)<input type="month" name="manufactureDate" value="${safe(q.manufactureDate||'')}"></label>
     ${numberField('engineCc','Объём двигателя','см³')}
-    <label><span class="auto-quote-power-heading">Мощность двигателя <select name="powerUnit" aria-label="Единица мощности"><option value="ps" ${q.powerUnit==='hp'?'':'selected'}>л.с.</option><option value="hp" ${q.powerUnit==='hp'?'selected':''}>hp</option></select></span><input name="powerHp" type="number" min="0" step="any" value="${safe(q.powerInput??q.powerHp??0)}"></label>
+    <label><span class="auto-quote-power-heading">Мощность двигателя <select name="powerUnit" data-previous-unit="${safe(q.powerUnit||'ps')}" aria-label="Единица мощности"><option value="ps" ${q.powerUnit==='hp'?'':'selected'}>л.с.</option><option value="hp" ${q.powerUnit==='hp'?'selected':''}>hp</option></select></span><input name="powerHp" type="number" min="0" step="any" value="${safe(q.powerInput??q.powerHp??0)}"></label>
     <label>Тип двигателя<select name="engineType">${engOptions}</select></label>
     <label>Статус импортёра<select name="importerType">${importerOptions}</select></label>
     <label>Способ получения<select name="transportMode">${modeSelect}</select></label>
     ${numberField('lot','Стоимость автомобиля','$','0.01')}
     ${numberField('legalization','Легализация','$','0.01')}
-    ${numberField('service','Услуга компании','$','0.01')}
+    ${numberField('service','Услуга компании','
+    ${numberField('customsRub','Таможня РФ','₽')}
+    ${numberField('recyclingRub','Утильсбор РФ','₽')}
+    ${numberField('internationalTransferPercent','Международный перевод','%','0.01')}
+    <p class="full auto-rule-hint">Предварительно 3,5% от стоимости автомобиля. База международного перевода подлежит согласованию с заказчиком.</p>
+    <div class="full auto-form-divider">Курс для расчёта</div>
+    ${numberField('usdRubRate','Курс RUB за 1 USD','₽','0.0001')}
+    <label>Дата курса<input type="date" name="exchangeRateDate" value="${safe(q.exchangeRateDate||'')}"></label>
+    <label>Источник курса<select name="exchangeRateSource">${rateSourceOptions}</select></label>
+    <p class="full auto-rule-hint">В итоговом расчёте клиент увидит курс и дату. Значение указывает менеджер, автоматический курс не подставляется.</p>
+    <label class="full">Комментарий менеджера (не виден клиенту)<textarea name="comment" rows="3" placeholder="Внутренняя информация для менеджера">${safe(q.comment||'')}</textarea></label>
+    ${q.migrationPending?'<p class="full auto-rule-hint">Это ранее сохранённый черновик. Прежние логистические статьи удалены из предварительной суммы; заново проверьте тариф, способ получения, таможню, утильсбор и курс перед отправкой.</p>':''}
+    <label>Статус<select name="status">${statusSelect}</select></label>
+    <div class="auto-quote-total full"><span>Предварительная сумма статей в USD</span><b id="quoteTotal">${money(total)}</b>
+    <small id="quoteCostPreview">${rate>0?'Курс: '+rate+' ₽/$ · дата '+safe(q.exchangeRateDate||'не указана'):'Для полного итога укажите курс и дату'}</small></div>
+    <div class="auto-form-actions"><button type="button" class="auto-btn ghost" data-close>Отмена</button><button type="submit" class="auto-btn primary">Сохранить расчёт</button></div>
+  </form></div></div>`;
+}
+,'0.01')}
+    <p class="full auto-rule-hint">Для возраста старше 5 лет стандартные 4 000 $ + 1 000 $ неприменимы: нужен отдельный индивидуальный расчёт. Отправка с этим тарифом блокируется.</p>
     ${numberField('customsRub','Таможня РФ','₽')}
     ${numberField('recyclingRub','Утильсбор РФ','₽')}
     ${numberField('internationalTransferPercent','Международный перевод','%','0.01')}
