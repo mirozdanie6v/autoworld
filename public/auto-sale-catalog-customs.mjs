@@ -8,7 +8,7 @@ const verifiedPositive=v=>Number.isFinite(Number(v))&&Number(v)>0?Number(v):0;
 
 export function catalogCustomsFacts(car={},asOf=new Date().toISOString().slice(0,10)){
   const description=clean(car.engine);
-  const volumeText=description.match(/(?:^|\b)([1-9]\d{2,4})\s*(?:см\s*[³3]|cm\s*[³3]|cc|куб\.?\s*см)\b?/iu);
+  const volumeText=description.match(/(?:^|\b)([1-9]\d{2,4})\s*(?:см\s*[³3]|cm\s*[³3]|cc|куб\.?\s*см)/iu);
   // The number must have an explicit cubic-centimetre unit; litres are only
   // approximate designations and require checking registration documents.
   const volume=verifiedPositive(car.engineCc)||verifiedPositive(volumeText?.[1]);
