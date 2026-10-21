@@ -1,5 +1,6 @@
 // Canonical preliminary tariffs, versioned to preserve previously agreed quotes.
 // The company's $500 service is INCLUDED in the legalization package.
+import {AWG_GEORGIA_TARIFF_VERSION} from './auto-sale-georgia-quote.mjs';
 export const AWG_TARIFF_VERSION='2026-10-20';
 export const AWG_COMPANY_SERVICE_USD=500;
 export const AWG_CRYPTO_RATE=0.035;
@@ -9,9 +10,9 @@ export function awgTariff(origin,ageCategory){
   if(!['США','Грузия'].includes(origin)||!['under3','3to5'].includes(ageCategory))return null;
   const packageUsd=origin==='США'&&ageCategory==='under3'?6500:5000;
   return {
-    tariffVersion:AWG_TARIFF_VERSION,ageCategory,
-    legalization:packageUsd-AWG_COMPANY_SERVICE_USD,
-    service:AWG_COMPANY_SERVICE_USD,
+    tariffVersion:origin==='Грузия'?AWG_GEORGIA_TARIFF_VERSION:AWG_TARIFF_VERSION,ageCategory,
+    legalization:origin==='Грузия'?4000:packageUsd-AWG_COMPANY_SERVICE_USD,
+    service:origin==='Грузия'?1000:AWG_COMPANY_SERVICE_USD,
     ocean:origin==='США'?AWG_US_LOGISTICS.mid:0,
     deliveryRange:origin==='США'?'2,5–3,5 месяца':'5–10 дней'
   };
