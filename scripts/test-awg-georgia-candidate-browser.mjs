@@ -24,7 +24,7 @@ const server=http.createServer(async(req,res)=>{
 });
 server.listen(0,'127.0.0.1');await once(server,'listening');
 const origin='http://127.0.0.1:'+server.address().port;
-const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
+const browser=await chromium.launch({headless:true,...(process.env.AWG_CHROME_BIN?{executablePath:process.env.AWG_CHROME_BIN}:{}),args:['--no-sandbox']});
 const quoteInput={
  id:'Q-AWG-GEO-BROWSER',leadId:'L-AWG-GEO-BROWSER',version:1,model:'Toyota Camry',
  origin:'Грузия',tariffVersion:'2026-10-21-georgia',quoteSchema:'awg-quote-georgia-2026-10-21',
@@ -104,6 +104,8 @@ async function runVariant(variant){
   assert.equal(response?.status(),200,'candidate build response');
   await page.locator('[data-go]').first().waitFor({state:'visible',timeout:25000});
   await page.waitForFunction((role)=>window.__AUTO_SALE_ACCESS__?.role===role,variant.role,{timeout:15000});
+  // Allow initial async identity and cache hydration to settle before opening a transient dialog.
+  await page.waitForTimeout(1100);
   if(variant.role==='admin'){
     await page.locator('[data-go="quotes"]').first().click();
     await page.locator('[data-new-quote]').click();
@@ -152,10 +154,11 @@ async function runVariant(variant){
     await card.click();
     const panel=page.locator('.auto-client-quote');
     await panel.waitFor({state:'visible',timeout:15000});
-    assert.match(await panel.innerText(),/26,657.02/);
-    assert.match(await panel.innerText(),/900.50/);
-    assert.match(await panel.innerText(),/556.52/);
-    assert.match(await panel.innerText(),/авто \+ доставка/);
+    const quoteText=await panel.innerText();
+    assert.match(quoteText,/26,657.02/);
+    assert.match(quoteText,/900.50/);
+    assert.match(quoteText,/556.52/);
+    assert.match(quoteText,/авто \+ доставка/);
     assert.equal(await panel.getByText('Согласовать расчёт').isVisible(),true);
     await page.screenshot({path:join(out,variant.name+'-quote.png'),fullPage:false});
     page.once('dialog',dialog=>dialog.accept());
