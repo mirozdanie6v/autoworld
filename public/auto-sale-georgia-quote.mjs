@@ -9,7 +9,7 @@ export function georgiaDraftForEditing(q={}){
   if(!q||q.status!=='Черновик'||q.origin!=='Грузия'||isNewGeorgiaQuote(q))return q;
   const rate=pos(q.usdRubRate);
   const migrated={...q,tariffVersion:AWG_GEORGIA_TARIFF_VERSION,quoteSchema:AWG_GEORGIA_QUOTE_SCHEMA,
-    transportMode:'',service:1000,legalization:4000,
+    transportMode:'',turnkeyDeliveryUsd:0,service:1000,legalization:4000,
     customsRub:pos(q.customsRub)||(rate>0?Math.round(pos(q.customs)*rate):0),
     recyclingRub:pos(q.recyclingRub)||(rate>0?Math.round(pos(q.recyclingFee)*rate):0),
     exchangeRateDate:'',exchangeRateSource:'',internationalTransferPercent:3.5,
@@ -25,6 +25,7 @@ export function georgiaQuoteAmounts(data={}){
   return {
     lot:pos(data.lot),
     auction:0,inland:0,ocean:0,repair:0,partsCost:0,georgiaDelivery:0,
+    turnkeyDeliveryUsd:data.transportMode==='Доставка под ключ'?pos(data.turnkeyDeliveryUsd):0,
     legalization:pos(data.legalization),service:pos(data.service),
     cryptoFee:georgiaTransferFee(data.lot,data.internationalTransferPercent),
     customs:rate>0?Math.round(customsRub/rate*100)/100:0,
@@ -36,7 +37,8 @@ export function georgiaQuoteErrors(q={}){
   const errors=[];
   if(!['under3','3to5'].includes(q.ageCategory))errors.push('Для автомобилей старше 5 лет требуется отдельный индивидуальный расчёт, стандартный пакет неприменим.');
   if(!GEORGIA_MODES.includes(q.transportMode))errors.push('Выберите способ получения автомобиля.');
-  if(q.transportMode==='Доставка под ключ'&&!q.deliveryPriceConfirmed)errors.push('Стоимость доставки под ключ не подтверждена. Пока сохраните черновик.');
+  if(q.transportMode==='Доставка под ключ'&&!(Number.isFinite(Number(q.turnkeyDeliveryUsd))&&Number(q.turnkeyDeliveryUsd)>0))errors.push('Укажите стоимость доставки под ключ в долларах (больше 0).');
+  if(q.transportMode!=='Доставка под ключ'&&num(q.turnkeyDeliveryUsd)!==0)errors.push('Для самовывоза доставка под ключ должна быть 0 $.');
   if(!['electric','no_engine'].includes(q.engineType)&&!(Number(q.engineCc)>0))errors.push('Укажите объём двигателя для таможни РФ.');
   if(!(Number(q.powerHp)>0))errors.push('Укажите мощность двигателя для таможни РФ.');
   if(!['petrol','diesel','petrol_electric','diesel_electric','electric','no_engine'].includes(q.engineType))errors.push('Выберите тип двигателя.');
@@ -83,6 +85,8 @@ export function georgiaQuoteForm(q,leads,statuses,esc,money){
     <label>Тип двигателя<select name="engineType">${engOptions}</select></label>
     <label>Статус импортёра<select name="importerType">${importerOptions}</select></label>
     <label>Способ получения<select name="transportMode">${modeSelect}</select></label>
+    <label id="quoteTurnkeyDeliveryField" class="${q.transportMode==='Доставка под ключ'?'':'auto-conditional-hidden'}">Стоимость доставки под ключ, $<input name="turnkeyDeliveryUsd" type="number" min="0" step="0.01" value="${safe(q.transportMode==='Доставка под ключ'?(q.turnkeyDeliveryUsd??0):0)}"></label>
+    <p class="full auto-rule-hint">Доставка под ключ оплачивается отдельно и прибавляется к итоговой стоимости. Для самовывоза доплата за эту услугу отсутствует.</p>
     ${numberField('lot','Стоимость автомобиля','$','0.01')}
     ${numberField('legalization','Легализация','$','0.01')}
     ${numberField('service','Услуга компании','$','0.01')}
