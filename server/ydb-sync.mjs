@@ -86,7 +86,7 @@ export async function syncYdbState(store,input,{includePrevious=false,prepareNot
             'tariffVersion','quoteSchema','transportMode','turnkeyDeliveryUsd','cryptoFee','recyclingFee',
             'customsRub','recyclingRub','usdRubRate','exchangeRateDate','exchangeRateSource',
             'internationalTransferPercent','ageCategory','manufactureDate','engineCc','powerHp',
-            'powerInput','powerUnit','engineType','importerType','comment'
+            'powerInput','powerUnit','engineType','importerType','comment','publicComment'
           ]){
             if(!same(before[key],quote[key]))return bad('locked_quote_changed',{id:quote.id,field:key});
           }

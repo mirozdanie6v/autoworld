@@ -67,7 +67,7 @@ test('Georgia rejects hidden legacy fees rather than silently including them',()
 test('Georgia editor has requested fields and not the removed old blocks',()=>{
  const q={...valid('3to5'),status:'Черновик'};
  const html=georgiaQuoteForm(q,[{id:'L-GEO',name:'Test',model:'Camry',status:'Расчёт'}],['Черновик','Отправлен'],x=>String(x),x=>'$'+x);
- for(const label of ['Самовывоз — Владикавказ','Доставка под ключ','Комментарий','Утильсбор РФ','Таможня РФ','Международный перевод','Дата курса'])assert.ok(html.includes(label),label);
+ for(const label of ['Самовывоз — Владикавказ','Доставка под ключ','Общедоступный комментарий','Утильсбор РФ','Таможня РФ','Международный перевод','Дата курса'])assert.ok(html.includes(label),label);
  for(const old of ['Досье проверки автомобиля','Ссылка на лот / объявление','Фото до покупки','Действует до','Источник цены','Логистика по Грузии','Доставка из Грузии в Россию','Запчасти (США до 3 лет)','Ремонт / подготовка','Подтверждение предварительных расходов','Таможенная оценка и утильсбор'])assert.equal(html.includes(old),false,old);
 });
 const tick=()=>new Promise(r=>setTimeout(r,0));
@@ -107,6 +107,7 @@ test('manager creates Georgia quote after scenario switch, zero clears, save use
  form.elements.engineType.value='petrol';form.elements.importerType.value='nat';
  form.elements.exchangeRateDate.value='2026-10-21';
  form.elements.status.value='Отправлен';
+ form.elements.publicComment.value='Встречаем во Владикавказе. Уточните дату прибытия.';
  form.elements.lot.dispatchEvent(new dom.window.Event('input',{bubbles:true}));
  assert.match(form.querySelector('#quoteTotal').textContent,/25,725/);
  assert.equal(form.querySelector('#quoteTurnkeyDeliveryField').classList.contains('auto-conditional-hidden'),true);
@@ -115,6 +116,7 @@ test('manager creates Georgia quote after scenario switch, zero clears, save use
  const q=JSON.parse(localStorage.getItem('auto-sale-quotes-v2')).find(x=>x.tariffVersion===AWG_GEORGIA_TARIFF_VERSION);
  assert.ok(q,'new Georgian quote saved');
  assert.equal(q.status,'Отправлен');
+ assert.equal(q.publicComment,'Встречаем во Владикавказе. Уточните дату прибытия.');
  assert.equal(q.total,25725);
  assert.equal(q.customsRub,420000);
  assert.equal(q.exchangeRateDate,'2026-10-21');
@@ -160,10 +162,10 @@ test('manager creates Georgia quote after scenario switch, zero clears, save use
  dom.window.close();
 });
 
-test('client sees Georgia RUB amounts, saved rate date, comment and no expiry',async()=>{
+test('client sees Georgia RUB amounts, saved rate date, public comment and no expiry',async()=>{
  const dom=new JSDOM('<!doctype html><html><body><div data-client-detail-bg><div class="auto-tg-modal"><div class="auto-client-order-grid"></div><div class="auto-guide"><span></span></div><button data-tg-manager="L-GEO">Менеджер</button></div></div></body></html>',{url:'https://auto-sale.viiversion.com/'});
  Object.assign(globalThis,{window:dom.window,document:dom.window.document,localStorage:dom.window.localStorage,MutationObserver:dom.window.MutationObserver,CustomEvent:dom.window.CustomEvent});
- const clientQuoteInput={...valid('3to5'),transportMode:'Доставка под ключ',turnkeyDeliveryUsd:875.25};
+ const clientQuoteInput={...valid('3to5'),transportMode:'Доставка под ключ',turnkeyDeliveryUsd:875.25,publicComment:'Доставка оплачивается отдельно.\nУточните адрес получения.'};
  const clientQuote={...clientQuoteInput,...georgiaQuoteAmounts(clientQuoteInput)};
  clientQuote.total=calculateQuote(clientQuote);
  localStorage.setItem('auto-sale-quotes-v2',JSON.stringify([{...clientQuote,id:'Q-GEO',version:1}]));
@@ -181,6 +183,9 @@ test('client sees Georgia RUB amounts, saved rate date, comment and no expiry',a
  assert.match(panel.textContent,/\$26,630.88/);
  assert.match(panel.textContent,/авто \+ доставка/);
  assert.match(panel.textContent,/\$555.63/);
+ assert.match(panel.textContent,/Комментарий к расчёту/);
+ assert.match(panel.textContent,/Доставка оплачивается отдельно/);
+ assert.match(panel.querySelector('[data-public-quote-comment] p').textContent,/Уточните адрес получения/);
  assert.doesNotMatch(panel.textContent,/Владик/);
  assert.doesNotMatch(panel.textContent,/Расчёт действует до/);
  const approve=panel.querySelector('[data-client-quote-agree="Q-GEO"]');
@@ -264,7 +269,9 @@ test('legacy Georgian drafts are converted for editing without mutating original
 test('new Georgian form retains technical data needed for manual customs lookup',()=>{
  const html=georgiaQuoteForm(valid('3to5'),[{id:'L-GEO',name:'Test',model:'Camry',status:'Расчёт'}],['Отправлен'],x=>String(x),x=>'$'+x);
  for(const name of ['engineCc','powerHp','powerUnit','engineType','importerType','manufactureDate','exchangeRateSource','turnkeyDeliveryUsd'])assert.match(html,new RegExp('name="'+name+'"'));
- assert.match(html,/не виден клиенту/);
+ assert.match(html,/Общедоступный комментарий \(виден клиенту\)/);
+ assert.match(html,/name="publicComment"/);
+ assert.doesNotMatch(html,/Комментарий менеджера \(не виден клиенту\)/);
 });
 
 test('Georgia USD display preserves cents without changing whole-dollar formatting',()=>{
@@ -291,4 +298,32 @@ test('Georgia editor explains the agreed international transfer base',()=>{
  const html=georgiaQuoteForm({...valid('3to5'),status:'Черновик'},[{id:'L-GEO',name:'Test',model:'Camry',status:'Расчёт'}],['Черновик','Отправлен'],x=>String(x),x=>'$'+x);
  assert.match(html,/от стоимости автомобиля плюс стоимость доставки под ключ/);
  assert.doesNotMatch(html,/База международного перевода подлежит согласованию/);
+});
+
+
+test('legacy manager-only comment remains private; only new publicComment reaches client',async()=>{
+ const dom=new JSDOM('<!doctype html><html><body><div data-client-detail-bg><div class="auto-tg-modal"><div class="auto-client-order-grid"></div><div class="auto-guide"><span></span></div><button data-tg-manager="L-GEO">Менеджер</button></div></div></body></html>',{url:'https://auto-sale.viiversion.com/'});
+ Object.assign(globalThis,{window:dom.window,document:dom.window.document,localStorage:dom.window.localStorage,MutationObserver:dom.window.MutationObserver,CustomEvent:dom.window.CustomEvent});
+ const q={...valid('3to5'),id:'Q-PRIVACY',version:1,comment:'НЕ ПУБЛИКОВАТЬ: внутренняя маржа'};
+ localStorage.setItem('auto-sale-quotes-v2',JSON.stringify([q]));
+ localStorage.setItem('auto-sale-notes-v2','{}');
+ await import('../public/auto-sale-client-quote.mjs?quote-privacy='+Date.now());
+ await tick();
+ let panel=document.querySelector('.auto-client-quote');
+ assert.ok(panel);
+ assert.equal(panel.querySelector('[data-public-quote-comment]'),null);
+ assert.doesNotMatch(panel.textContent,/НЕ ПУБЛИКОВАТЬ/);
+ const editor=georgiaQuoteForm(q,[{id:'L-GEO',name:'Client',model:'Toyota',status:'Расчёт'}],['Отправлен'],x=>String(x),x=>'$'+x);
+ assert.match(editor,/Старый внутренний комментарий/);
+ assert.match(editor,/НЕ ПУБЛИКОВАТЬ/);
+ assert.match(editor,/name="publicComment"/);
+ assert.doesNotMatch(editor,/name="comment"/);
+ dom.window.close();
+});
+
+test('public comment is HTML-escaped in manager editor and client view',()=>{
+ const q={...valid('3to5'),publicComment:'<img src=x onerror=alert(1)> & подробности'};
+ const editor=georgiaQuoteForm(q,[{id:'L-GEO',name:'Client',model:'Toyota',status:'Расчёт'}],['Отправлен'],v=>String(v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])),x=>'$'+x);
+ assert.match(editor,/&lt;img/);
+ assert.doesNotMatch(editor,/<img src=x/);
 });
