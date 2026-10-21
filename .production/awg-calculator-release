@@ -1,7 +1,10 @@
-AutoWorld Georgia quote runtime hotfix guarded release
-PR: https://github.com/mirozdanie6v/autoworld/pull/54
-Full quote feature: https://github.com/mirozdanie6v/autoworld/pull/53
-Feature SHA: 2ab8d4f1896ff3b5ac2a05129d43e1cf2cb068a8
-Reason: fix missing auto-sale-quote-audit.mjs inside production Docker images (previous release gateway 502)
-Guards: CI checks actual server module imports inside both runtime images, VK+Telegram enabled, backup/rollback, immutable frontend
-TKS API: external license required, manual verified TKS estimate until key added
+AutoWorld Georgia quote controlled release VII-179
+source-pr-55=103b946371ecbba695ebdcfd0475909bd4a95f30
+source-pr-56=77f519e60b86cd1a4047eca800d051ef913bc93c
+validation-full-ci=https://github.com/mirozdanie6v/autoworld/actions/runs/39619116606
+validation-browser=https://github.com/mirozdanie6v/autoworld/actions/runs/39618106080
+validation-ydb-staging=https://github.com/mirozdanie6v/autoworld/actions/runs/39612300969
+scope=Georgia quote editor and paid turnkey delivery, transfer percent from vehicle+delivery, client approval, accurate cents
+guard=wait-exact-main-ci; verify-vk-telegram-health; preserve-vk-enabled; backend-then-immutable-static; rollback-on-static-smoke-fail
+real-message-tests=false
+production-approval=2026-10-21 user requested guarded release after browser smoke
