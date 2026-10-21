@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {awgTariff,awgCryptoFee,awgPackageUsd,awgPendingItems,AWG_TARIFF_VERSION} from '../public/auto-sale-tariffs.mjs';
+import {AWG_GEORGIA_TARIFF_VERSION} from '../public/auto-sale-georgia-quote.mjs';
 import {calculateQuote,quoteCost} from '../public/auto-sale-core.mjs';
 import {validateQuote} from '../public/auto-sale-business-rules.mjs';
 import {validateQuote as serverValidateQuote} from '../server/auto-sale-rules.mjs';
@@ -13,12 +14,12 @@ for(const [origin,age,total,delivery] of [
 ]){
   test('AWG tariff '+origin+' '+age+' service included, not double charged',()=>{
     const preset=awgTariff(origin,age);
-    assert.equal(preset.tariffVersion,AWG_TARIFF_VERSION);
-    assert.equal(preset.service,500);
+    assert.equal(preset.tariffVersion,origin==='Грузия'?AWG_GEORGIA_TARIFF_VERSION:AWG_TARIFF_VERSION);
+    assert.equal(preset.service,origin==='Грузия'?1000:500);
     assert.equal(awgPackageUsd(preset),total);
     assert.equal(preset.ocean,delivery);
     assert.equal(calculateQuote({lot:12000,...preset}),12000+total+delivery);
-    assert.equal(quoteCost({lot:12000,...preset}),12000+total+delivery-500);
+    assert.equal(quoteCost({lot:12000,...preset}),12000+total+delivery-(origin==='Грузия'?1000:500));
   });
 }
 

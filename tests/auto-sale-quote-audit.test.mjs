@@ -14,6 +14,8 @@ function validQuote(origin,age){
   importerType:'nat',engineType:'petrol',priceSource:origin==='США'?'Copart':'MyAuto',
   invoiceUsd:12000,customsSource:'TKS',customsCheckedAt:'2026-10-20',customsConfirmed:true,recyclingConfirmed:true,
   repairReviewed:true,cryptoBaseConfirmed:true,validUntil:'2026-11-30'};
+ // This suite checks historical 2026-10-20 quotes, which must remain unchanged.
+ if(origin==='Грузия'){q.tariffVersion='2026-10-20';q.service=500;q.legalization=4500;}
  q.total=calculateQuote(q);
  return q;
 }

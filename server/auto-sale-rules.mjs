@@ -1,4 +1,5 @@
 import {quoteAuditErrors} from '../public/auto-sale-quote-audit.mjs';
+import {AWG_GEORGIA_TARIFF_VERSION,georgiaQuoteErrors} from '../public/auto-sale-georgia-quote.mjs';
 export const LEAD_STATUSES=['Новый','В работе','Расчёт','Ожидает клиента','Сделка','Отказ'];
 export const QUOTE_STATUSES=['Черновик','Отправлен','На согласовании','Согласован','Отказ'];
 export const ORDER_STAGES=['Запрос','Подбор','Расчёт','Согласование','Выкуп','Подготовка к отправке','В пути','Таможня','Доставка','Выдача'];
@@ -10,7 +11,7 @@ const ACTIVE_LEAD_STATUSES=['Новый','В работе','Расчёт','Ож�
 const text=v=>typeof v==='string'?v.trim():'';
 const num=v=>Number(v)||0;
 const records=v=>Array.isArray(v)?v.filter(x=>x&&typeof x==='object'):[];
-const quoteSum=q=>['lot','auction','inland','ocean','customs','repair','service','georgiaDelivery','legalization','recyclingFee','cryptoFee','partsCost'].reduce((sum,key)=>sum+num(q[key]),0);
+const quoteSum=q=>['lot','auction','inland','ocean','customs','repair','service','georgiaDelivery','turnkeyDeliveryUsd','legalization','recyclingFee','cryptoFee','partsCost'].reduce((sum,key)=>sum+num(q[key]),0);
 const PAYMENT_STAGE_IDS=['auction_deposit','auction_balance','logistics_legalization','customs_fts'];
 
 const verification=value=>value&&typeof value==='object'?value:{};
@@ -76,7 +77,7 @@ export function validateQuote(quote){
     for(const key of ['auction','inland','ocean','customs','repair','georgiaDelivery','legalization','recyclingFee','cryptoFee','partsCost'])if(num(quote[key])<0)errors.push(`${key}_nonnegative_required`);
     if(num(quote.total)<=0)errors.push('positive_total_required');
     if(num(quote.total)!==quoteSum(quote))errors.push('quote_total_mismatch');
-    if(!text(quote.validUntil))errors.push('valid_until_required');
+    if(!text(quote.validUntil)&&quote.tariffVersion!==AWG_GEORGIA_TARIFF_VERSION)errors.push('valid_until_required');
     if(quote.tariffVersion==='2026-10-20'){
       if(!['under3','3to5'].includes(quote.ageCategory))errors.push('age_category_required');
       if(!quote.customsConfirmed)errors.push('customs_unconfirmed');
@@ -87,7 +88,7 @@ export function validateQuote(quote){
       if(num(quote.service)!==500||packageUsd!==(quote.origin==='США'&&quote.ageCategory==='under3'?6500:5000))errors.push('legalization_package_mismatch');
     }
   }
-  return [...new Set([...errors,...quoteAuditErrors(quote)])];
+  return [...new Set([...errors,...quoteAuditErrors(quote),...georgiaQuoteErrors(quote)])];
 }
 
 export function validateOrder(order,previousStage=''){

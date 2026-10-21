@@ -1,9 +1,22 @@
+import {AWG_GEORGIA_TARIFF_VERSION} from './auto-sale-georgia-quote.mjs';
 export const TKS_CALCULATOR_URL='https://www.tks.ru/auto/calc/';
 export const QUOTE_AUDIT_SCHEMA='awg-quote-audit-2026-10';
 const amount=x=>Number(x)||0;
 export function defaultRepairCountry(origin,age){return origin==='США'&&age==='3to5'?'Грузия':'Россия'}
 export function defaultPartsCountry(origin,age){return origin==='США'&&age==='under3'?'Грузия':'По согласованию'}
 export function quoteCostRows(q={}){
+ if(q.origin==='Грузия'&&q.tariffVersion===AWG_GEORGIA_TARIFF_VERSION){
+   const rub = x => new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(Number(x)||0)+' ₽';
+   return [
+     {key:'lot',label:'Стоимость автомобиля',value:amount(q.lot)},
+     {key:'legalization',label:'Легализация',value:amount(q.legalization)},
+     {key:'service',label:'Услуга компании',value:amount(q.service)},
+     ...(q.transportMode==='Доставка под ключ'?[{key:'turnkeyDeliveryUsd',label:'Доставка под ключ',value:amount(q.turnkeyDeliveryUsd)}]:[]),
+     {key:'cryptoFee',label:'Международный перевод, '+(Number(q.internationalTransferPercent)||0)+'% (авто + доставка)',value:amount(q.cryptoFee)},
+     {key:'customs',label:'Таможня РФ',value:amount(q.customs),displayValue:rub(q.customsRub)},
+     {key:'recyclingFee',label:'Утильсбор РФ',value:amount(q.recyclingFee),displayValue:rub(q.recyclingRub)}
+   ];
+ }
  const us=q.origin==='США',repair=q.repairCountry||defaultRepairCountry(q.origin,q.ageCategory),parts=q.partsCountry||defaultPartsCountry(q.origin,q.ageCategory);
  const names=[['lot',us?'Лот на аукционе':'Автомобиль в Грузии'],['auction','Аукционный сбор'],['inland',us?'Доставка по США':'Логистика по Грузии'],['ocean',us?'Логистика до Тбилиси и брокеры':'Доставка из Грузии в Россию'],['cryptoFee','Криптоперевод 3,5%'],['georgiaDelivery','Доп. доставка по Грузии'],['repair','Ремонт / подготовка ('+repair+')'],['partsCost','Запчасти ('+parts+')'],['legalization','Легализация'],['service','Услуга компании'],['customs','Таможня / оформление'],['recyclingFee','Утильсбор']];
  return names.filter(([key])=>us||!['auction','cryptoFee','partsCost'].includes(key)||amount(q[key])!==0).map(([key,label])=>({key,label,value:amount(q[key])}));

@@ -3,6 +3,8 @@ import http from 'node:http';
 import {spawn} from 'node:child_process';
 import {once} from 'node:events';
 import {createHmac} from 'node:crypto';
+import {AWG_GEORGIA_TARIFF_VERSION,AWG_GEORGIA_QUOTE_SCHEMA,georgiaQuoteAmounts} from '../../public/auto-sale-georgia-quote.mjs';
+import {calculateQuote} from '../../public/auto-sale-core.mjs';
 
 export async function verifyPostgresRuntimeHttp(databaseUrl){
   const delivered=[];
@@ -54,8 +56,71 @@ export async function verifyPostgresRuntimeHttp(databaseUrl){
     for(let n=0;n<100&&delivered.length<4;n++)await new Promise(resolve=>setTimeout(resolve,50));
     assert.deepEqual([...new Set(delivered.filter(x=>x.channel==='telegram').map(x=>String(x.chat_id)))].sort(),['12345','12346','12347']);
     assert.ok(delivered.some(x=>x.channel==='vk'&&x.peer_id==='666'));
-    const removed=await request('/api/auto-sale/leads/L-RUNTIME-VK',{method:'DELETE',headers:{'x-auto-sale-key':apiKey,'x-auto-sale-skip-notifications':'1'},body:{baseRowVersion:created.data.revision}});
+    // Isolated PostgreSQL runtime: manager publishes a priced Georgian quote,
+    // the VK client reads and approves it, and the quote is removed with the synthetic lead.
+    const adminHeaders={'x-auto-sale-key':apiKey,'x-auto-sale-skip-notifications':'1'};
+    const qid='Q-RUNTIME-GEORGIA';
+    const detail={id:qid,leadId:'L-RUNTIME-VK',model:'Toyota Camry staging',origin:'Грузия',
+      tariffVersion:AWG_GEORGIA_TARIFF_VERSION,quoteSchema:AWG_GEORGIA_QUOTE_SCHEMA,
+      status:'Отправлен',version:1,transportMode:'Доставка под ключ',ageCategory:'3to5',
+      manufactureDate:'2023-02',engineCc:2000,powerHp:150,engineType:'petrol',importerType:'nat',
+      lot:15000,turnkeyDeliveryUsd:900.50,legalization:4000,service:1000,
+      customsRub:420000,recyclingRub:100000,usdRubRate:100,exchangeRateDate:'2026-10-21',exchangeRateSource:'cbr',
+      internationalTransferPercent:3.5,comment:'INTERNAL_ONLY_RUNTIME_TEST'};
+    const amounts=georgiaQuoteAmounts(detail);
+    const quote={...detail,...amounts,total:calculateQuote(amounts)};
+    assert.equal(quote.cryptoFee,556.52);
+    assert.equal(quote.total,26657.02);
+    const invalid=await request('/api/auto-sale/entities/batch',{method:'POST',headers:adminHeaders,
+      body:{operations:[{resource:'quote',operation:'create',id:qid,input:{...quote,cryptoFee:525}}]}});
+    assert.equal(invalid.status,400,JSON.stringify(invalid.data));
+    assert.equal(invalid.data.error,'invalid_quote');
+    const published=await request('/api/auto-sale/entities/batch',{method:'POST',headers:adminHeaders,
+      body:{operations:[{resource:'quote',operation:'create',id:qid,input:quote}]}});
+    assert.equal(published.status,200,JSON.stringify(published.data));
+    const quoteVersion=published.data.rowVersions?.['quote:'+qid];
+    assert.ok(Number(quoteVersion)>0,'quote row version persisted');
+    const visible=await request('/api/auto-sale/state',{headers:clientHeaders});
+    assert.equal(visible.status,200);
+    const clientQuote=visible.data.quotes?.find(x=>x.id===qid);
+    assert.ok(clientQuote,'VK client can read own Georgian quote');
+    assert.equal(clientQuote.total,26657.02);
+    assert.equal(clientQuote.turnkeyDeliveryUsd,900.50);
+    assert.equal(clientQuote.cryptoFee,556.52);
+    const foreign=new URLSearchParams(params);
+    foreign.set('vk_user_id','667');
+    foreign.delete('sign');
+    foreign.set('sign',createHmac('sha256',vkSecret).update(new URLSearchParams([...foreign].sort(([a],[b])=>a.localeCompare(b))).toString()).digest('base64url'));
+    const foreignView=await request('/api/auto-sale/state',{headers:{'x-vk-launch-params':foreign.toString()}});
+    assert.equal(foreignView.status,200);
+    assert.ok(!foreignView.data.quotes?.some(x=>x.id===qid),'other VK client cannot see quote');
+    const approved=await request('/api/auto-sale/entities/batch',{method:'POST',headers:clientHeaders,
+      body:{operations:[{resource:'quote',operation:'patch',id:qid,baseRowVersion:quoteVersion,
+        input:{clientDecision:'agreed',cryptoFee:0,turnkeyDeliveryUsd:0,total:1}}]}});
+    assert.equal(approved.status,200,JSON.stringify(approved.data));
+    const adminView=await request('/api/auto-sale/state',{headers:adminHeaders});
+    assert.equal(adminView.status,200);
+    const agreed=adminView.data.quotes?.find(x=>x.id===qid);
+    assert.ok(agreed,'approved quote persisted to PostgreSQL');
+    assert.equal(agreed.status,'Согласован');
+    assert.equal(agreed.clientDecision,'agreed');
+    assert.equal(agreed.total,26657.02,'client cannot modify previously offered total');
+    assert.equal(agreed.cryptoFee,556.52,'server protects transfer fee from client tampering');
+    assert.equal(agreed.turnkeyDeliveryUsd,900.50,'server protects delivery from client tampering');
+    const agreedQuoteVersion=approved.data.rowVersions?.['quote:'+qid];
+    assert.ok(Number(agreedQuoteVersion)>0);
+    const changedAfterAgreement=await request('/api/auto-sale/entities/batch',{method:'POST',headers:adminHeaders,
+      body:{operations:[{resource:'quote',operation:'patch',id:qid,baseRowVersion:agreedQuoteVersion,
+        input:{exchangeRateSource:'bank'}}]}});
+    assert.equal(changedAfterAgreement.status,400,JSON.stringify(changedAfterAgreement.data));
+    assert.equal(changedAfterAgreement.data.error,'locked_quote_changed');
+    assert.equal(changedAfterAgreement.data.field,'exchangeRateSource');
+    const afterDenied=await request('/api/auto-sale/state',{headers:adminHeaders});
+    assert.equal(afterDenied.data.quotes.find(x=>x.id===qid).exchangeRateSource,'cbr');
+    const leadVersion=adminView.data._rowVersions?.['lead:L-RUNTIME-VK']||created.data.revision;
+    const removed=await request('/api/auto-sale/leads/L-RUNTIME-VK?cascade=1',{method:'DELETE',headers:adminHeaders,body:{baseRowVersion:leadVersion}});
     assert.equal(removed.status,200,JSON.stringify(removed.data));
+    assert.ok(removed.data.deleted?.quotes?.includes(qid),'synthetic quote cascades with lead');
   }finally{
     if(child.exitCode===null){child.kill('SIGTERM');await once(child,'exit')}
     await new Promise(resolve=>provider.close(resolve));

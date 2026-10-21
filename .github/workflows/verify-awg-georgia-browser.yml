@@ -1,0 +1,43 @@
+name: Verify AWG Georgian candidate browser
+on:
+  push:
+    branches: [feature/vii-179-georgia-quote]
+    paths:
+      - .github/workflows/verify-awg-georgia-browser.yml
+      - scripts/test-awg-georgia-candidate-browser.mjs
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  candidate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Build candidate without publishing or writing live data
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run build
+          npm install --no-save --ignore-scripts playwright@1.56.1
+          CHROME=$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)
+          test -n "$CHROME" || { echo '::error::System Chrome missing on runner'; exit 1; }
+          echo "AWG_CHROME_BIN=$CHROME" >> "$GITHUB_ENV"
+      - name: Chromium manager and mini app preview smoke
+        run: |
+          set -euo pipefail
+          node --check scripts/test-awg-georgia-candidate-browser.mjs
+          node scripts/test-awg-georgia-candidate-browser.mjs
+          echo 'Built Georgian quote candidate rendered in Chromium: manager mobile/desktop, VK and Telegram isolated mini app contexts. No real API or external messaging.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Save browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: awg-georgia-candidate-browser
+          path: awg-georgia-browser-evidence/
+          retention-days: 7
+          if-no-files-found: ignore
