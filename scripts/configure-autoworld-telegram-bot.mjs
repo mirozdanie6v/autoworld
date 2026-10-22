@@ -60,7 +60,30 @@ const webhookPath=`/api/auto-sale/telegram/webhook/${webhookKey}`;
 const webhookUrl=explicitWebhookUrl
   ?new URL(explicitWebhookUrl).toString()
   :new URL(webhookPath,webhookBaseUrl.endsWith('/')?webhookBaseUrl:`${webhookBaseUrl}/`).toString();
-await api('deleteWebhook',{drop_pending_updates:false});
+// Refuse to change a functioning Telegram webhook until the intended ingress
+// successfully handles an authenticated no-message update through Yandex.
+const previousWebhook=await api('getWebhookInfo');
+if(previousWebhook?.url){
+  const prior=String(previousWebhook.url);
+  const allowed=[
+    new URL(webhookPath,'https://awgcars.ru/').toString(),
+    new URL(webhookPath,'https://d5dbgio6limv03usvipl.s183zexc.apigw.yandexcloud.net/').toString(),
+    'https://integration-telegram.viiversion.com/telegram/webhook'
+  ];
+  if(!allowed.includes(prior))throw new Error('Refusing to replace unexpected existing Telegram webhook URL');
+}
+const targetProbe=await fetch(webhookUrl,{
+  method:'POST',
+  headers:{'content-type':'application/json','x-telegram-bot-api-secret-token':webhookSecretToken},
+  body:JSON.stringify({update_id:-91020261022}),
+  signal:AbortSignal.timeout(20000)
+});
+const targetProbeBody=await targetProbe.json().catch(()=>({}));
+if(targetProbe.status!==200||targetProbeBody?.ok!==true||targetProbeBody?.ignored!==true){
+  throw new Error('Refusing Telegram webhook change: signed target preflight failed');
+}
+// setWebhook replaces the URL atomically and preserves queued updates.
+// Do not call deleteWebhook: it introduces needless webhook downtime.
 const webhookConfiguredAt=Math.floor(Date.now()/1000);
 await api('setWebhook',{
   url:webhookUrl,
