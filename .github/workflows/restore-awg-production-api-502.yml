@@ -1,0 +1,94 @@
+name: Guarded rollback AWG API from confirmed bad revision
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/restore-awg-production-api-502.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: awg-guarded-runtime-rollback
+  cancel-in-progress: false
+env:
+  YC_FOLDER_ID: b1g8u8vqkgehvtbj8n13
+  YC_DEPLOY_SA_ID: ${{ vars.AWG_YC_DEPLOY_SA_ID || 'aje775bcl6hgp40eu8of' }}
+  EXPECT_BAD_BUILD: ab3f92e1c8bc8ff560403151424e289dea73a39e
+  EXPECT_GOOD_BUILD: b8d1f7233099861e69061cf7a084cfb15b164401
+  CONTAINER_ID: bba691o7au7epjqvs77b
+jobs:
+  rollback:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - name: Request short lived GitHub OIDC
+        uses: actions/github-script@v7
+        id: oidc
+        with:
+          script: |
+            const token = await core.getIDToken('https://github.com/mirozdanie6v')
+            core.setSecret(token)
+            core.setOutput('token', token)
+      - name: Exchange token and install Yandex CLI
+        env:
+          GITHUB_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        run: |
+          set -euo pipefail
+          RESPONSE=$(curl -fsS --connect-timeout 10 --max-time 30 \
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            --data-urlencode 'grant_type=urn:ietf:params:oauth:grant-type:token-exchange' \
+            --data-urlencode 'requested_token_type=urn:ietf:params:oauth:token-type:access_token' \
+            --data-urlencode "audience=$YC_DEPLOY_SA_ID" \
+            --data-urlencode "subject_token=$GITHUB_OIDC_TOKEN" \
+            --data-urlencode 'subject_token_type=urn:ietf:params:oauth:token-type:id_token' \
+            https://auth.yandex.cloud/oauth/token)
+          TOKEN=$(printf '%s' "$RESPONSE" | jq -er '.access_token')
+          echo "::add-mask::$TOKEN"
+          echo "YC_IAM_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+          curl -fsSL --connect-timeout 15 --max-time 100 https://storage.yandexcloud.net/yandexcloud-yc/release/yc_linux_amd64.tar.gz -o "$RUNNER_TEMP/yc.tar.gz"
+          mkdir -p "$RUNNER_TEMP/yc-dist" "$RUNNER_TEMP/yc-bin"
+          tar -xzf "$RUNNER_TEMP/yc.tar.gz" -C "$RUNNER_TEMP/yc-dist"
+          BIN=$(find "$RUNNER_TEMP/yc-dist" -type f -name yc -print -quit)
+          test -n "$BIN"
+          install -m 0755 "$BIN" "$RUNNER_TEMP/yc-bin/yc"
+          echo "$RUNNER_TEMP/yc-bin" >> "$GITHUB_PATH"
+      - name: Verify exact broken active and previous good revision, then recover runtime
+        run: |
+          set -euo pipefail
+          yc config set endpoint api.cloud.yandex.net:443
+          yc config set token "$YC_IAM_TOKEN"
+          yc config set folder-id "$YC_FOLDER_ID"
+          BEFORE=$(curl -sS --connect-timeout 10 --max-time 30 -o "$RUNNER_TEMP/health-before.json" -w '%{http_code}' https://awgcars.ru/api/health || true)
+          if [ "$BEFORE" = 200 ] && jq -e '.ok==true' "$RUNNER_TEMP/health-before.json" >/dev/null 2>&1; then
+            echo "AWG_RECOVER_ALREADY_HEALTHY: no rollback needed"
+            exit 0
+          fi
+          yc serverless container revision list --container-id "$CONTAINER_ID" --format json > "$RUNNER_TEMP/revs.json"
+          jq -er 'if type=="array" then . else .revisions end | .[] | .id' "$RUNNER_TEMP/revs.json" | head -n 14 > "$RUNNER_TEMP/ids.txt"
+          : > "$RUNNER_TEMP/select.tsv"
+          while IFS= read -r rid; do
+            yc serverless container revision get "$rid" --format json > "$RUNNER_TEMP/one.json"
+            jq -r '[.id,.status,(.image.environment.AUTO_SALE_BUILD_SHA // "")] | @tsv' "$RUNNER_TEMP/one.json" >> "$RUNNER_TEMP/select.tsv"
+          done < "$RUNNER_TEMP/ids.txt"
+          echo "AWG_RUNTIME_REVISIONS" 
+          cat "$RUNNER_TEMP/select.tsv"
+          BAD=$(awk -F '\t' -v sha="$EXPECT_BAD_BUILD" '$2=="ACTIVE"&&$3==sha {print $1}' "$RUNNER_TEMP/select.tsv")
+          GOOD=$(awk -F '\t' -v sha="$EXPECT_GOOD_BUILD" '$3==sha {print $1}' "$RUNNER_TEMP/select.tsv" | head -n1)
+          test "$(printf '%s\n' "$BAD"|sed '/^$/d'|wc -l)" -eq 1 || { echo "::error::Active runtime is not exactly the known bad build; refusing rollback"; exit 1; }
+          test -n "$GOOD" && test "$GOOD" != "$BAD" || { echo "::error::Known-good revision cannot be identified; refusing rollback"; exit 1; }
+          echo "AWG_GUARDED_ROLLBACK: from=$BAD to=$GOOD"
+          yc serverless container rollback --id "$CONTAINER_ID" --revision-id "$GOOD" --format json | jq -c '{id,name,status}'
+          for attempt in $(seq 1 9); do
+            sleep 8
+            CODE=$(curl -sS --connect-timeout 8 --max-time 25 -o "$RUNNER_TEMP/check.json" -w '%{http_code}' https://awgcars.ru/api/health || true)
+            if [ "$CODE" = 200 ] && jq -e --arg sha "$EXPECT_GOOD_BUILD" '.ok==true and .buildSha==$sha and .vkAuth=="enabled" and .vkMessaging=="enabled"' "$RUNNER_TEMP/check.json" >/dev/null 2>&1; then
+              echo "AWG_PRODUCTION_RECOVERED" 
+              jq -c '{ok,buildSha,vkAuth,vkMessaging}' "$RUNNER_TEMP/check.json"
+              exit 0
+            fi
+            echo "AWG rollback check $attempt HTTP $CODE"
+          done
+          echo "::error::Rollback requested but production health not yet verified"
+          exit 1
