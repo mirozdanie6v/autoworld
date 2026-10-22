@@ -53,6 +53,25 @@ test('server uses only canonical database catalog; it ignores fake client year, 
  assert.equal(lead.budget,19000);
 });
 
+test('distinct identical-model catalog listings retain the exact selected ID, never name-matched',()=>{
+ const result=create({...clientInput,carId:other.id,catalogVehicle:{id:other.id},model:'Chevrolet Trax'});
+ assert.equal(result.ok,true);
+ const saved=result.operations[0].input;
+ assert.equal(saved.carId,other.id);
+ assert.equal(saved.catalogVehicle.id,other.id);
+ assert.equal(saved.year,'2022');
+ assert.equal(saved.estimatedCostRub,1770000);
+});
+
+test('client build provenance is bounded to hex release SHAs and marked as untrusted',()=>{
+ const sha='a'.repeat(40);
+ const good=create({...clientInput,clientBuildSha:sha});
+ assert.equal(good.operations[0].input.clientBuildSha,sha);
+ assert.equal(good.operations[0].input.catalogLinkVerifiedBy,'server-catalog-id-v1');
+ const invalid=create({...clientInput,clientBuildSha:'untrusted-injected-value'});
+ assert.equal(invalid.operations[0].input.clientBuildSha,'');
+});
+
 test('mismatched carId and snapshot ID is rejected instead of saving a general lead',()=>{
  assert.equal(create({...clientInput,catalogVehicle:{id:other.id}}).error,'catalog_car_binding_required');
  assert.equal(create({...clientInput,carId:'NOT-IN-CATALOG'}).error,'catalog_car_binding_required');
