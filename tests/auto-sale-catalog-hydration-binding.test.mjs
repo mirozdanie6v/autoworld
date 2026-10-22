@@ -51,6 +51,9 @@ test('late production /state refresh preserves selected catalog car and customer
  const saved=JSON.parse(localStorage.getItem('auto-sale-leads-v2')||'[]').find(x=>x.name==='Buyer');
  assert.ok(saved,'lead saved after late hydration');
  assert.equal(saved.catalogRequest,true);
+ assert.equal(saved.requestFlow,'catalog_card');
+ assert.equal(saved.requestCarId,car.id);
+ assert.equal(saved.requestUiVersion,'20261022-catalog-binding-v3');
  assert.equal(saved.carId,car.id,'exactly clicked car, never other matching model');
  assert.equal(saved.catalogVehicle.id,car.id);
  assert.equal(saved.year,'2023');
@@ -92,5 +95,7 @@ test('general client request remains general and is not assigned to a similar ca
  assert.equal(leads.length,1);
  assert.equal(leads[0].carId,'');
  assert.equal(leads[0].catalogRequest,false);
+ assert.equal(leads[0].requestFlow,'general_request');
+ assert.equal(leads[0].requestCarId,'');
  dom.window.close();
 });
