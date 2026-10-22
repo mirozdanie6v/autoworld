@@ -61,13 +61,43 @@ if(plainWeb&&webEnabled&&webAuthenticated){
   if(draft&&Date.now()-draft.at<15*60*1000){
     const restore=()=>{
       let form=document.getElementById('requestForm');
-      if(!form){
+      const fromCatalog=draft.values?.catalogIntent==='catalog'&&!!draft.values?.carId;
+      if(fromCatalog){
+        const id=String(draft.values.carId);
+        const locate=()=>[...document.querySelectorAll('[data-request-car]')].find(node=>node.dataset.requestCar===id);
+        let button=locate();
+        if(!button){
+          document.querySelector('[data-go="catalog"]')?.click();
+          button=locate();
+        }
+        if(!button){
+          // Never restore catalog draft through "Подобрать автомобиль": doing so
+          // silently turns a selected car into a generic lead after VK OAuth.
+          const app=document.getElementById('app');
+          if(app&&!app.querySelector('[data-catalog-login-restore-error]')){
+            const warning=document.createElement('p');
+            warning.dataset.catalogLoginRestoreError='1';
+            warning.className='auto-form-error';
+            warning.setAttribute('role','alert');
+            warning.textContent='Исходный автомобиль недоступен. Откройте карточку в каталоге заново и нажмите «Рассчитать».';
+            app.prepend(warning);
+          }
+          return false;
+        }
+        if(!form||form.elements?.carId?.value!==id){
+          button.click();form=document.getElementById('requestForm');
+        }
+        if(!form||form.elements.carId?.value!==id||form.elements.catalogIntent?.value!=='catalog')return false;
+      }else if(!form){
         const button=document.querySelector('[data-open-request]');
         if(button){button.click();form=document.getElementById('requestForm')}
       }
       if(!form)return false;
+      const editable=fromCatalog?new Set(['name','contact','damage','deliveryCity','note']):null;
       for(const [name,value] of Object.entries(draft.values||{})){
-        if(form.elements?.[name]&&name!=='managerMode')form.elements[name].value=value;
+        if(name==='managerMode'||name==='carId'||name==='catalogIntent'||name==='catalogUsdRubRate')continue;
+        if(editable&&!editable.has(name))continue;
+        if(form.elements?.[name])form.elements[name].value=value;
       }
       sessionStorage.removeItem(DRAFT_KEY);
       return true;
