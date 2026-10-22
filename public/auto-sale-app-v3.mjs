@@ -367,6 +367,9 @@ const savedRole=sessionStorage.getItem(KEYS.role);
 const initialRole=access.testHarnessFallback?(nav[savedRole]?savedRole:'client'):(hasAdminAccess&&['manager','owner'].includes(savedRole)?savedRole:(hasAdminAccess?'manager':'client'));
 const state={role:initialRole,route:'home',query:'',brand:'all',origin:'all',budget:'all',leadQuery:'',leadStatus:'all',leadSource:'all',leadManager:'all',orderQuery:'',orderStage:'all',orderManager:'all',orderRisk:'all',modal:null};
 state.route=nav[state.role][0][0];
+const restoredCatalogId=pendingCatalogSelection();
+const restoredCatalogCar=state.role==='client'&&restoredCatalogId?cars.find(c=>c.id===restoredCatalogId&&c.active!==false):null;
+if(restoredCatalogCar)state.modal={type:'request',prefill:`${restoredCatalogCar.brand} ${restoredCatalogCar.model}`,origin:carOrigin(restoredCatalogCar),carId:restoredCatalogId,managerMode:false};
 function refreshRuntimeFromServer(){
   // A live customer can open a catalog request before the initial /state returns.
   // Never discard its exact car ID or already typed fields when the response arrives.
@@ -772,6 +775,7 @@ async function submitRequest(form){
       return;
     }
     leads.push(lead);notes[lead.id]=[note];saveAll();
+    if(!managerMode)clearCatalogSelection();
     state.modal=null;state.role=managerMode?'manager':'client';state.route=managerMode?'leads':'orders';sessionStorage.setItem(KEYS.role,state.role);render();
   }finally{
     if(submitButton?.isConnected){submitButton.disabled=false;submitButton.textContent=originalText;submitButton.removeAttribute('aria-busy')}
