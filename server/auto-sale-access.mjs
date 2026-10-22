@@ -175,6 +175,8 @@ export function sanitizeClientOperations(state,operations,user,identityInput=nul
         source:'Mini App',manager:'',status:'Новый',priority:'Средний',
         createdAt:input.createdAt||new Date().toISOString(),nextAction:input.nextAction||new Date().toISOString().slice(0,10),
         acquisitionChannel:identity.provider,clientSubmittedAt:now(),
+        clientBuildSha:/^[a-f0-9]{40}$/.test(clean(input.clientBuildSha))?clean(input.clientBuildSha):'',
+        ...(verified.selection?{catalogLinkVerifiedBy:'server-catalog-id-v1'}:{}),
         deposit:0,depositDate:'',paymentMethod:'',
         ...clientIdentityPatch(user,identity)
       };
