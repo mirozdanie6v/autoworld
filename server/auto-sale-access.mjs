@@ -1,3 +1,5 @@
+import {catalogVehicleSnapshot,catalogPriceRub,catalogBudgetUsd} from '../public/auto-sale-catalog-lead.mjs';
+
 const STAFF_ROLES=new Set(['Менеджер','Директор','Администратор']);
 export const MAX_ADMIN_ACCOUNTS=3;
 
@@ -81,6 +83,43 @@ export function rowVersionsForAccess(rowVersions,state,access){
   ]));
 }
 
+// The entity API must not erase catalog details sent by a signed VK/Telegram client.
+ // A client-supplied snapshot is never authoritative: rebuild it from the current
+ // published YDB catalog using the submitted immutable vehicle ID.
+function verifiedClientCatalogSelection(state,input={}){
+  const requestedId=clean(input.carId||input.catalogVehicle?.id);
+  const snapshotId=clean(input.catalogVehicle?.id);
+  const rate=Number(input.catalogUsdRubRate)||0;
+  const suspectGeneric=Boolean(
+    input.catalogRequest===true||snapshotId||clean(input.year)||clean(input.mileage)||
+    Number(input.estimatedCostRub)>0||
+    (clean(input.engine)&&!['Не важно','Бензин','Гибрид','Electric'].includes(clean(input.engine)))
+  );
+  const bindingError={ok:false,status:409,error:'catalog_car_binding_required'};
+  if(!requestedId)return suspectGeneric?bindingError:{ok:true,selection:null};
+  if(snapshotId&&snapshotId!==requestedId)return bindingError;
+  const car=(Array.isArray(state?.catalog)?state.catalog:[])
+    .find(item=>clean(item?.id)===requestedId&&item.active!==false);
+  if(!car)return{ok:false,status:409,error:'catalog_car_not_available'};
+  const vehicle=catalogVehicleSnapshot(car);
+  if(!vehicle)return bindingError;
+  if(rate<0||rate>1000||!Number.isFinite(rate))return{ok:false,status:400,error:'invalid_catalog_rate'};
+  return{ok:true,selection:{
+    catalogRequest:true,
+    carId:requestedId,
+    catalogVehicle:vehicle,
+    model:[car.brand,car.model].map(clean).filter(Boolean).join(' '),
+    origin:clean(car.origin),
+    year:clean(car.year),
+    mileage:clean(car.mileage),
+    engine:clean(car.engine),
+    drive:clean(car.drive),
+    estimatedCostRub:catalogPriceRub(car),
+    catalogUsdRubRate:rate,
+    budget:rate>0?catalogBudgetUsd(car,rate):0
+  }};
+}
+
 function allowedLeadPatch(input={}){
   const keys=['name','contact','model','origin','budget','yearFrom','yearTo','mileageMax','engine','drive','damage','deliveryCity','note'];
   return Object.fromEntries(keys.filter(key=>Object.prototype.hasOwnProperty.call(input,key)).map(key=>[key,input[key]]));
@@ -127,8 +166,11 @@ export function sanitizeClientOperations(state,operations,user,identityInput=nul
       if(!id)return{ok:false,status:400,error:'lead_id_required'};
       if(leadById.has(id))return{ok:false,status:409,error:'entity_conflict'};
       const input=operation.input||{};
+      const verified=verifiedClientCatalogSelection(state,input);
+      if(!verified.ok)return{ok:false,status:verified.status,error:verified.error};
       operation.input={
         ...allowedLeadPatch(input),
+        ...(verified.selection||{}),
         id,
         source:'Mini App',manager:'',status:'Новый',priority:'Средний',
         createdAt:input.createdAt||new Date().toISOString(),nextAction:input.nextAction||new Date().toISOString().slice(0,10),
@@ -143,6 +185,11 @@ export function sanitizeClientOperations(state,operations,user,identityInput=nul
       if(!lead||!ownedLeadIds.has(id))return{ok:false,status:403,error:'client_entity_forbidden'};
       if(clean(lead.status)!=='Новый')return{ok:false,status:409,error:'client_lead_locked'};
       operation.input=allowedLeadPatch(operation.input||{});
+      if(lead.catalogRequest===true){
+        // Client may update general delivery preferences, not the original car.
+        for(const field of ['model','origin','engine','drive','budget'])
+          delete operation.input[field];
+      }
       out.push(operation);continue;
     }
     if(resource==='quote'&&action==='patch'){
