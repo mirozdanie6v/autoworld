@@ -3,3 +3,8 @@ Authorized by user to restore /start replies.
 Deploy workflow 38670307873: success; signed noop 200, ignored true, ingress->Yandex verified.
 Change only Telegram setWebhook to https://integration-telegram.viiversion.com/telegram/webhook.
 Do not drop pending updates. Leave YDB, VK, awgcars.ru and app runtime unchanged.
+
+2026-10-22 guarded recovery from failed production deployment 39762270951.
+Verified PR #68 merged as dd434cc54c294a4006d3cac914e39a2ed372a293 and CI 39765992868 succeeded.
+Restore the previously verified Cloudflare Telegram ingress after last full deploy reset the bot to Yandex API Gateway.
+Run exact-URL checks and signed no-message preflight before setWebhook; preserve pending updates, do not alter VK, YDB or app runtime.
