@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {catalogLeadCreationGuard,CATALOG_REQUEST_CLIENT_VERSION} from '../server/auto-sale-catalog-request-guard.mjs';
+import {syncYdbState} from '../server/ydb-sync.mjs';
 const car={id:'AWG-3950',brand:'Chevrolet',model:'Trax',origin:'Грузия',year:2023,
  engine:'1,2l на 139HP',drive:'FWD',mileage:'40 000 км',active:true};
 const general={id:'L-FRESH',clientCreated:true,model:'Chevrolet Trax',origin:'Грузия',
@@ -32,4 +33,28 @@ test('generic selection with broad engine does not force-link car despite same m
 });
 test('multiple same-model catalog candidates never auto-resolve an exact car id',()=>{
  assert.equal(catalogLeadCreationGuard({...general,engine:car.engine},[car,{...car,id:'AWG-3941'}]),'catalog_car_binding_missing');
+});
+
+test('YDB entity create denies the real Trax failure shape before any write',async()=>{
+ let writes=0;
+ const store={
+  loadState:async()=>({initialized:true,revision:348,leads:[],quotes:[],orders:[],team:[],notes:{},catalog:[{...car,image:'https://example.com/trax.jpg'}]}),
+  replaceState:async()=>{writes++;return{status:200,data:{ok:true}}}
+ };
+ const incomplete={...general,id:'L-NEW-TRAX',name:'Synthetic',contact:'@synthetic',status:'Новый',nextAction:'2026-10-22',
+  engine:car.engine,createdAt:'2026-10-22T08:00:00Z'};
+ const response=await syncYdbState(store,{
+  baseRevision:348,leads:[incomplete],quotes:[],orders:[],notes:{},team:[],
+  catalog:[{...car,image:'https://example.com/trax.jpg'}]
+ });
+ assert.equal(response.status,400);
+ assert.equal(response.data.error,'catalog_car_binding_missing');
+ assert.equal(writes,0,'never silently save unlinked old Mini App lead');
+ const linked={...incomplete,catalogRequest:true,carId:car.id,catalogVehicle:{id:car.id},
+  requestCarId:car.id,requestFlow:'catalog_card',requestUiVersion:CATALOG_REQUEST_CLIENT_VERSION};
+ const ok=await syncYdbState(store,{
+  baseRevision:348,leads:[linked],quotes:[],orders:[],notes:{},team:[],
+  catalog:[{...car,image:'https://example.com/trax.jpg'}]
+ });
+ assert.equal(ok.status,200);assert.equal(writes,1);
 });
