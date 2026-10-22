@@ -116,5 +116,15 @@ jobs:
           echo 'Worker deployed; existing bot and outbound signing keys preserved.'
       - name: Check signed Cloudflare ingress against actual production API
         run: node scripts/verify-awg-cloudflare-telegram-webhook.mjs
+      - name: Restore registered Telegram webhook using authenticated Cloudflare control
+        env:
+          AUTOWORLD_RELAY_SECRET: ${{ secrets.AWG_RELAY_SECRET }}
+        run: node scripts/repair-awg-telegram-via-cloudflare.mjs
+      - name: Verify production AWG and Telegram relay after webhook repair
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --max-time 20 https://awgcars.ru/api/health | jq -e '.ok == true and .persistence == "ydb-serverless" and .telegramRoutingReady == true'
+          curl --fail --silent --show-error --max-time 20 https://integration-telegram.viiversion.com/telegram/health | jq -e '.ok == true'
+
 
 # VII-172: redeploy previously tested Cloudflare Telegram ingress; retain outbound /telegram/send.
