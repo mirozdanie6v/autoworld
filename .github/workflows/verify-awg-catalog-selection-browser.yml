@@ -1,0 +1,43 @@
+name: Verify AWG exact catalog car retention in Mini Apps
+on:
+  push:
+    branches: [fix/vii-179-catalog-selection-async-state]
+    paths:
+      - .github/workflows/verify-awg-catalog-selection-browser.yml
+      - scripts/test-awg-catalog-selection-late-state-browser.mjs
+      - public/auto-sale-app-v3.mjs
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Build candidate without deploying
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run build
+          npm install --no-save --ignore-scripts playwright@1.56.1
+          CHROME=$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)
+          test -n "$CHROME" || { echo "::error::Chrome unavailable"; exit 1; }
+          echo "AWG_CHROME_BIN=$CHROME" >> "$GITHUB_ENV"
+      - name: Real Chromium viewport and delayed state test, no production actions
+        run: |
+          set -euo pipefail
+          node --check scripts/test-awg-catalog-selection-late-state-browser.mjs
+          node scripts/test-awg-catalog-selection-late-state-browser.mjs
+      - name: Keep before and after screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: awg-catalog-selected-car-mobile
+          path: awg-catalog-selection-browser-evidence/
+          if-no-files-found: ignore
+          retention-days: 7
