@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import {catalogCarForLead} from '../public/auto-sale-catalog-lead.mjs';
 
-const TARGET='L-3493B4C3-B1BB-41B0-9C65-F0FA1FF0AB58';
+const TARGET='L-920CF6A2-3D9F-4842-8C4F-E5C650EDAC9F';
 const apiKey=String(process.env.AUTO_SALE_API_KEY||'').trim();
 assert.ok(apiKey.length>=16,'admin API key unavailable');
 const response=await fetch('https://awgcars.ru/api/auto-sale/state',{
