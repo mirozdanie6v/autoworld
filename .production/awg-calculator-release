@@ -1,9 +1,9 @@
-AutoWorld exact catalog vehicle selected request binding guarded release VII-179
-feature-merge-sha=522e6bce9786e4b34290472986a3d4d4f6564277
-feature-pr=https://github.com/mirozdanie6v/autoworld/pull/62
-regression-ci=https://github.com/mirozdanie6v/autoworld/actions/runs/39742432120
-chromium-vk-telegram-mobile=https://github.com/mirozdanie6v/autoworld/actions/runs/39742337219
-scenario=selected-catalog-card->request->late-initial-state->preserve-immutable-car-id-and-typed-fields->save-exact-id
-guard=wait-exact-main-ci; keep-vk-enabled; backend-then-immutable-static; browser-check-and-rollback
-real-client-lead-restored=false
-prod-deploy-authorized=2026-10-22 user requested fix for catalog selection loss
+AWG AutoWorld - repair lost selected car linkage on server - guarded release
+source-pr=https://github.com/mirozdanie6v/autoworld/pull/64
+source-sha=f01623eeb610c93c651c80caf43521ef90022ef5
+ci-feature=https://github.com/mirozdanie6v/autoworld/actions/runs/39749729399
+scope=signed VK and Telegram client lead creation; strict catalog ID; authoritative catalog snapshot; year mileage price; stale-client detection; client app revision provenance
+precondition=exact-main-ci-success
+rollout=guarded-server-VK-and-TG-on; immutable-static-browser-smoke; rollback-on-failure; verify-current-sha
+no-existing-customer-leads-relinked=true
+approved-by-user=2026-10-22
