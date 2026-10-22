@@ -15,6 +15,7 @@ const create=(input,user={id:'999999887',provider:'vk'})=>sanitizeClientOperatio
 ],{id:user.id,username:'qa',first_name:'Test'},user);
 const clientInput={carId:trail.id,catalogRequest:true,catalogVehicle:catalogVehicleSnapshot(trail),
  origin:'Грузия',model:'Chevrolet Trax',year:'2023',mileage:trail.mileage,engine:trail.engine,
+ requestFlow:'catalog_card',requestCarId:trail.id,requestUiVersion:'20261022-catalog-binding-v3',
  drive:trail.drive,estimatedCostRub:trail.priceRub,catalogUsdRubRate:100,budget:19000};
 
 test('VK and Telegram signed client creates retain immutable catalog vehicle and real year/mileage',()=>{
@@ -24,6 +25,9 @@ test('VK and Telegram signed client creates retain immutable catalog vehicle and
   const lead=result.operations[0].input;
   assert.equal(lead.catalogRequest,true);
   assert.equal(lead.carId,trail.id);
+  assert.equal(lead.requestFlow,'catalog_card');
+  assert.equal(lead.requestCarId,trail.id);
+  assert.equal(lead.requestUiVersion,'20261022-catalog-binding-v3');
   assert.equal(lead.catalogVehicle.id,trail.id);
   assert.equal(lead.catalogVehicle.vin,trail.vin);
   assert.equal(lead.year,'2023');
