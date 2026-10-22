@@ -13,6 +13,7 @@ RUN npm ci --omit=dev --ignore-scripts
 COPY --from=build --chown=node:node /app/dist ./dist
 COPY --from=build --chown=node:node /app/public/auto-sale-quote-audit.mjs ./public/auto-sale-quote-audit.mjs
 COPY --from=build --chown=node:node /app/public/auto-sale-georgia-quote.mjs ./public/auto-sale-georgia-quote.mjs
+COPY --from=build --chown=node:node /app/public/auto-sale-catalog-lead.mjs ./public/auto-sale-catalog-lead.mjs
 COPY --chown=node:node server ./server
 COPY --chown=node:node shared ./shared
 COPY --chown=node:node scripts ./scripts
