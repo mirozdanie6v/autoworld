@@ -1,4 +1,5 @@
 import {leadTransitionAllowed,quoteTransitionAllowed,validateLead,validateOrder,validateQuote,validateVehicleVerification} from './auto-sale-rules.mjs';
+import {catalogLeadCreationGuard} from './auto-sale-catalog-request-guard.mjs';
 
 const arr=v=>Array.isArray(v)?v.filter(x=>x&&typeof x==='object'):[];
 const text=v=>String(v??'').trim();
@@ -54,6 +55,10 @@ export async function syncYdbState(store,input,{includePrevious=false,prepareNot
     const errors=validateLead(lead);
     if(errors.length)return bad('invalid_lead',{id:lead.id,details:errors});
     const before=previousLeads.get(text(lead.id));
+    if(initialized&&!before){
+      const catalogGuard=catalogLeadCreationGuard(lead,catalog);
+      if(catalogGuard)return bad(catalogGuard,{id:lead.id,details:['Выбранный автомобиль не привязан к заявке. Откройте нужную карточку каталога заново и отправьте запрос.']});
+    }
     if(initialized&&before){
       if(before.catalogRequest===true&&(lead.catalogRequest!==true||!same(before.carId,lead.carId)||!sameJson(before.catalogVehicle,lead.catalogVehicle)))return bad('catalog_car_binding_locked',{id:lead.id});
       const agreed=quotes.some(q=>text(q.leadId)===text(lead.id)&&text(q.status)==='Согласован');
