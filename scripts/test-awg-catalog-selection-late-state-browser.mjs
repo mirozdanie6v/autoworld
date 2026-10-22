@@ -99,6 +99,9 @@ try{
   assert.equal(created.input.carId,car.id);
   assert.equal(created.input.catalogVehicle.id,car.id);
   assert.equal(created.input.catalogRequest,true);
+  assert.equal(created.input.requestFlow,'catalog_card');
+  assert.equal(created.input.requestCarId,car.id);
+  assert.equal(created.input.requestUiVersion,'20261022-catalog-binding-v3');
   assert.equal(created.input.year,'2023');
   assert.equal(created.input.mileage,'44 000 км');
   assert.equal(created.input.engine,'1,3l на 155HP');
