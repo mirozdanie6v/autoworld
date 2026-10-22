@@ -1,8 +1,9 @@
-AWG guarded production release: catalog quote customs prefill and source vehicle identity integrity
-source-pr=60
-source-merge-sha=0ceec10f32f7b25e5b814efd4dac5a700b28d315
-validation-ci=https://github.com/mirozdanie6v/autoworld/actions/runs/39670593697
-scope=selected catalog lead immutable snapshot and server invariant; verified engine cc/power/fuel/month VIN autofill to Georgian customs quotation; no guessed charges or unsupported metadata
-safety=exact-main-ci; guard-existing-VK-Telegram; Yandex YDB and API production integration; direct static browser rollback gate
-real-message-tests=false
-production-approval=2026-10-22 user requested fix selected catalog binding and customs field autofill
+AutoWorld exact catalog vehicle selected request binding guarded release VII-179
+feature-merge-sha=522e6bce9786e4b34290472986a3d4d4f6564277
+feature-pr=https://github.com/mirozdanie6v/autoworld/pull/62
+regression-ci=https://github.com/mirozdanie6v/autoworld/actions/runs/39742432120
+chromium-vk-telegram-mobile=https://github.com/mirozdanie6v/autoworld/actions/runs/39742337219
+scenario=selected-catalog-card->request->late-initial-state->preserve-immutable-car-id-and-typed-fields->save-exact-id
+guard=wait-exact-main-ci; keep-vk-enabled; backend-then-immutable-static; browser-check-and-rollback
+real-client-lead-restored=false
+prod-deploy-authorized=2026-10-22 user requested fix for catalog selection loss
