@@ -303,7 +303,11 @@ quotes=quotes.map(x=>{const origin=String(x.origin||'').trim()||(Number(x.auctio
 orders=orders.map(x=>{const rawPayments=normalizePayments(x),origin=String(x.origin||'').trim()||(x.lot?'США':'Уточняется'),lead=leads.find(l=>l.id===x.leadId),quote=quotes.filter(q=>q.leadId===x.leadId).sort((a,b)=>(b.version||1)-(a.version||1))[0],riskType=x.riskType||(x.risk==='Нет'?'Нет':RISK_TYPES.includes(x.risk)?x.risk:'Другое'),riskNote=x.riskNote||(riskType==='Другое'?x.risk:'');let paymentPlan=Array.isArray(x.paymentPlan)?x.paymentPlan:[],paymentPlanNeedsReview=Boolean(x.paymentPlanNeedsReview);if(origin==='США'&&quote&&paymentPlan.length!==4){const range=auctionDepositRange(x.total||quote.total),knownDeposit=Number(lead?.deposit)||0,deposit=knownDeposit||Math.round((range.min+range.max)/2);paymentPlan=buildUsPaymentPlan({...quote,origin,total:Number(x.total)||Number(quote.total)||0},deposit,{needsReview:!knownDeposit});paymentPlanNeedsReview=!knownDeposit;}const payments=paymentPlan.length?migratePaymentsToPlan(rawPayments,paymentPlan):rawPayments;return{...x,origin,transportMode:x.transportMode||defaultTransportMode(origin),paymentPlan,paymentPlanNeedsReview,payments,paid:paymentsTotal(payments),riskType,riskNote}});
 const saveAll=()=>{persist(KEYS.leads,leads);persist(KEYS.quotes,quotes);persist(KEYS.orders,orders);persist(KEYS.notes,notes);persist(KEYS.catalog,cars)};
 const noteEntry=value=>({id:'NOTE-'+Date.now()+'-'+Math.random().toString(36).slice(2,8),at:new Date().toISOString(),text:value});
-const entityErrorText=error=>error?.code==='telegram_auth_required'
+const entityErrorText=error=>error?.code==='catalog_car_binding_required'
+  ?'Не удалось сохранить выбранный автомобиль. Закройте форму, обновите Mini App и повторно нажмите «Получить расчёт» в карточке машины.'
+  :error?.code==='catalog_car_not_available'
+    ?'Выбранный автомобиль больше не доступен в каталоге. Обновите Mini App и откройте другую карточку.'
+  :error?.code==='telegram_auth_required'
   ?'Авторизация не подтверждена. Обновите страницу и войдите через VK ID ещё раз.'
   :error?.code==='origin_forbidden'
     ?'Запрос отклонён проверкой безопасности. Обновите страницу и попробуйте снова.'
