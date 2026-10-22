@@ -54,3 +54,5 @@ jobs:
         run: |
           docker run --rm --entrypoint node autoworld-yandex:check -e "import('./server/auto-sale-rules.mjs').then(m=>{if(typeof m.validateQuote!=='function')process.exit(1)})"
           docker run --rm --entrypoint node autoworld-timeweb:check -e "import('./server/auto-sale-rules.mjs').then(m=>{if(typeof m.validateQuote!=='function')process.exit(1)})"
+          docker run --rm --entrypoint node autoworld-yandex:check -e "import('./server/auto-sale-access.mjs').then(m=>{if(typeof m.sanitizeClientOperations!=='function')process.exit(1)})"
+          docker run --rm --entrypoint node autoworld-timeweb:check -e "import('./server/auto-sale-access.mjs').then(m=>{if(typeof m.sanitizeClientOperations!=='function')process.exit(1)})"
