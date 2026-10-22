@@ -21,8 +21,22 @@ const stagedEntry = path.join(temp, 'awg-direct-index.html');
 const backup = path.join(temp, 'awg-index-before-direct.html');
 
 async function yc(...args) {
-  const {stdout} = await exec('yc', args, {timeout: 90000, maxBuffer: 2_000_000});
-  return stdout;
+  let lastError;
+  // Read/upload operations are idempotent; retry endpoint resolver/network
+  // failures without ever skipping content verification or rollback gates.
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    try {
+      const {stdout} = await exec('yc', [...args, '--retry', '3', '--timeout', '90s'],
+        {timeout: 115000, maxBuffer: 2_000_000});
+      return stdout;
+    } catch (error) {
+      lastError = error;
+      if (attempt === 4) break;
+      console.warn('Yandex Object Storage operation retry ' + attempt + '/4: ' + args.slice(0, 3).join(' '));
+      await new Promise(resolve => setTimeout(resolve, attempt * 12000));
+    }
+  }
+  throw lastError;
 }
 async function copy(from, key, cache) {
   await yc('storage', 's3', 'cp', from, `s3://${bucket}/${key}`,
@@ -56,7 +70,7 @@ await yc('storage', 's3', 'cp', `s3://${bucket}/index.html`, backup, '--only-sho
 await copy(backup, `rollbacks/${release}/index.html`, 'no-cache, no-store, must-revalidate');
 const files = (await readdir(dist, {recursive: true, withFileTypes: true})).filter(x => x.isFile()).map(x => path.join(x.parentPath, x.name));
 let cursor = 0;
-await Promise.all(Array.from({length: 8}, async () => {
+await Promise.all(Array.from({length: 4}, async () => {
   while (cursor < files.length) {
     const file = files[cursor++];
     const key = path.relative(dist, file).split(path.sep).join('/');
