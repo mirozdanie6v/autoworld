@@ -59,14 +59,16 @@ test('production Telegram cutover waits for the exact deployed source SHA',async
 });
 
 
-test('Telegram webhook ingress goes directly to the ready Yandex API Gateway',async()=>{
+test('Telegram webhook ingress uses verified Cloudflare and keeps Yandex as the protected upstream',async()=>{
   const deploy=await readFile(new URL('../.github/workflows/deploy-awg-production.yml',import.meta.url),'utf8');
   const configure=await readFile(new URL('../scripts/configure-autoworld-telegram-bot.mjs',import.meta.url),'utf8');
   assert.match(deploy,/AUTO_SALE_TELEGRAM_WEBHOOK_BASE_URL=https:\/\/\$GW_DOMAIN\//);
-  assert.doesNotMatch(deploy,/AUTO_SALE_TELEGRAM_WEBHOOK_URL:/);
+  assert.match(deploy,/AUTO_SALE_TELEGRAM_WEBHOOK_URL: https:\/\/integration-telegram\.viiversion\.com\/telegram\/webhook/);
   assert.match(configure,/secret_token:webhookSecretToken/);
   assert.match(configure,/x-telegram-bot-api-secret-token/);
   assert.match(configure,/new URL\(webhookPath,webhookBaseUrl/);
+  assert.match(configure,/targetProbeBody\?\.ignored!==true/);
+  assert.doesNotMatch(configure,/await api\('deleteWebhook'/);
 });
 
 
