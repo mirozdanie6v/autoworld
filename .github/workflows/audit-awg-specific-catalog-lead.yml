@@ -1,0 +1,78 @@
+name: Audit single AWG catalog lead binding (read only)
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/audit-awg-specific-catalog-lead.yml
+      - scripts/audit-awg-specific-catalog-lead.mjs
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: awg-specific-catalog-lead-readonly
+  cancel-in-progress: false
+env:
+  YC_FOLDER_ID: b1g8u8vqkgehvtbj8n13
+  YC_DEPLOY_SA_ID: ${{ vars.AWG_YC_DEPLOY_SA_ID || 'aje775bcl6hgp40eu8of' }}
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v5
+      - name: Obtain short-lived production identity
+        uses: actions/github-script@v7
+        id: oidc
+        with:
+          script: |
+            const token = await core.getIDToken('https://github.com/mirozdanie6v')
+            core.setSecret(token)
+            core.setOutput('token', token)
+      - name: Exchange GitHub OIDC for Yandex IAM
+        env:
+          GITHUB_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        run: |
+          set -euo pipefail
+          RESPONSE=$(curl --fail --silent --show-error --connect-timeout 10 --max-time 30 \
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            --data-urlencode 'grant_type=urn:ietf:params:oauth:grant-type:token-exchange' \
+            --data-urlencode 'requested_token_type=urn:ietf:params:oauth:token-type:access_token' \
+            --data-urlencode "audience=$YC_DEPLOY_SA_ID" \
+            --data-urlencode "subject_token=$GITHUB_OIDC_TOKEN" \
+            --data-urlencode 'subject_token_type=urn:ietf:params:oauth:token-type:id_token' \
+            https://auth.yandex.cloud/oauth/token)
+          TOKEN=$(printf '%s' "$RESPONSE" | jq -er '.access_token')
+          echo "::add-mask::$TOKEN"
+          echo "YC_IAM_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+      - name: Download Yandex CLI for read-only revision metadata
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --connect-timeout 15 --max-time 90 \
+            https://storage.yandexcloud.net/yandexcloud-yc/release/yc_linux_amd64.tar.gz \
+            -o "$RUNNER_TEMP/yc.tar.gz"
+          mkdir -p "$RUNNER_TEMP/yc-dist" "$RUNNER_TEMP/yc-bin"
+          tar -xzf "$RUNNER_TEMP/yc.tar.gz" -C "$RUNNER_TEMP/yc-dist"
+          BIN=$(find "$RUNNER_TEMP/yc-dist" -type f -name yc -print -quit)
+          test -n "$BIN"
+          install -m 0755 "$BIN" "$RUNNER_TEMP/yc-bin/yc"
+          echo "$RUNNER_TEMP/yc-bin" >> "$GITHUB_PATH"
+      - name: Read running runtime credentials without disclosing or changing them
+        run: |
+          set -euo pipefail
+          umask 077
+          yc config set endpoint api.cloud.yandex.net:443
+          yc config set token "$YC_IAM_TOKEN"
+          yc config set folder-id "$YC_FOLDER_ID"
+          CID=$(yc serverless container get --name autoworld-awg-prod --format json | jq -er '.id')
+          test "$CID" = bba691o7au7epjqvs77b
+          yc serverless container revision list --container-id "$CID" --format json > "$RUNNER_TEMP/revs.json"
+          RID=$(jq -er '(if type=="array" then . else .revisions end) | map(select(.status=="ACTIVE")) | sort_by(.created_at // .createdAt) | last | .id' "$RUNNER_TEMP/revs.json")
+          yc serverless container revision get "$RID" --format json > "$RUNNER_TEMP/prod.json"
+          jq -e '.image.environment.YDB_CONNECTION_STRING|endswith("/etn00ojk5iv1u7dgpdar")' "$RUNNER_TEMP/prod.json" >/dev/null
+          KEY=$(jq -er '.image.environment.AUTO_SALE_API_KEY|select(length>=16)' "$RUNNER_TEMP/prod.json")
+          echo "::add-mask::$KEY"
+          echo "AUTO_SALE_API_KEY=$KEY" >> "$GITHUB_ENV"
+          echo "Production revision verified; audit uses GET only."
+      - name: Verify exact lead's catalog binding, without exposing customer PII
+        run: node scripts/audit-awg-specific-catalog-lead.mjs
