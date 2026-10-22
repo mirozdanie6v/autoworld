@@ -1,9 +1,11 @@
-AWG AutoWorld - repair lost selected car linkage on server - guarded release
-source-pr=https://github.com/mirozdanie6v/autoworld/pull/64
-source-sha=f01623eeb610c93c651c80caf43521ef90022ef5
-ci-feature=https://github.com/mirozdanie6v/autoworld/actions/runs/39749729399
-scope=signed VK and Telegram client lead creation; strict catalog ID; authoritative catalog snapshot; year mileage price; stale-client detection; client app revision provenance
-precondition=exact-main-ci-success
-rollout=guarded-server-VK-and-TG-on; immutable-static-browser-smoke; rollback-on-failure; verify-current-sha
-no-existing-customer-leads-relinked=true
-approved-by-user=2026-10-22
+AWG hotfix selected catalog car binding and Docker module packaging
+source-fix-pr-64=https://github.com/mirozdanie6v/autoworld/pull/64
+source-runtime-pr-66=https://github.com/mirozdanie6v/autoworld/pull/66
+head=cdd15bc3c1c19591b776a0efe4cdbae80a6f7609
+ci-docker-import=https://github.com/mirozdanie6v/autoworld/actions/runs/39752617556
+root-cause=sanitizeClientOperations dropped catalog ID; runtime lacked public catalog snapshot module
+preflight=production reverted and healthy at b8d1f7233099861e69061cf7a084cfb15b164401
+release-gate=exact-main-ci; keep VK+Telegram enabled; guarded runtime then immutable-static/browser-rollback; API health SHA must equal release SHA
+client-build-provenance=on
+historical-Trax-and-Trailblazer-autorelink=forbidden
+user-approved=2026-10-22
