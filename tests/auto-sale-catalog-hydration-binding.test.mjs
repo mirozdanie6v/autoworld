@@ -76,6 +76,7 @@ test('catalog-origin request cannot be silently downgraded by clearing hidden in
 test('general client request remains general and is not assigned to a similar catalog car',async()=>{
  const {dom,root}=await page();
  root.querySelector('[data-close]').click();
+ root.querySelector('[data-go="home"]').click();
  root.querySelector('[data-open-request]').click();
  const form=root.querySelector('#requestForm');
  assert.equal(form.elements.carId.value,'');
