@@ -1,1 +1,3 @@
 2026-10-11: inspect current production revision, existing secret bindings and HTTP health before releasing VK notification and channel analytics improvements. Read-only.
+
+2026-10-22: READ-ONLY production gateway HTTP 502 diagnostic after safeguarded catalog binding server release. Inspect revisions and health without changing traffic or secrets.
