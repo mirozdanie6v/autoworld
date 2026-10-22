@@ -7,6 +7,7 @@ const target=base+'/telegram/webhook';
 const key=createHmac('sha256',token).update('auto-sale-telegram-webhook-v2').digest('hex').slice(0,32);
 const signed=createHmac('sha256',token).update('auto-sale-telegram-webhook-secret-v1').digest('hex');
 const production='https://awgcars.ru/api/auto-sale/telegram/webhook/'+key;
+const oldYandexGateway='https://d5dbgio6limv03usvipl.s183zexc.apigw.yandexcloud.net/api/auto-sale/telegram/webhook/'+key;
 async function telegram(method,body={}){
  const rsp=await fetch('https://api.telegram.org/bot'+token+'/'+method,{
   method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(18000)
@@ -18,7 +19,7 @@ async function telegram(method,body={}){
 const me=await telegram('getMe');
 assert.equal(me.username,'AutoWorld_Georgia_bot');
 const prev=await telegram('getWebhookInfo');
-assert.ok([production,target].includes(String(prev.url||'')),'refuse_unexpected_current_webhook_URL');
+assert.ok([production,oldYandexGateway,target].includes(String(prev.url||'')),'refuse_unexpected_current_webhook_URL');
 const health=await fetch(base+'/telegram/health',{signal:AbortSignal.timeout(15000)});
 assert.equal(health.status,200);
 const probe=await fetch(target,{method:'POST',
