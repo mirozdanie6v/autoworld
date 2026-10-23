@@ -74,7 +74,7 @@ test('validated client to handoff workflow preserves all business rules',async()
   submit(dom,form);
 
   let quote=JSON.parse(localStorage.getItem('auto-sale-quotes-v2')).find(x=>x.leadId===lead.id);
-  assert.ok(quote);
+  assert.ok(quote,'new quote not saved, form: '+root.querySelector('#quoteForm')?.textContent.slice(-1100));
   assert.equal(quote.total,32210);
   assert.equal(quote.status,'Отправлен');
   assert.equal(quote.verification.lotNumber,'998877');
