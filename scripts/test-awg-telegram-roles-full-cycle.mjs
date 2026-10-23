@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {createHmac,randomUUID} from 'node:crypto';
 import {chromium} from 'playwright';
 import {writeFile} from 'node:fs/promises';
+import {createTelegramService} from '../server/telegram-bot.mjs';
 
 const base=String(process.env.STAGING_URL||'').replace(/\/$/,'');
 const apiKey=String(process.env.AUTO_SALE_API_KEY||'');
@@ -14,6 +15,8 @@ const actors={
   manager:JSON.parse(process.env.AUDIT_MANAGER_USER||'null')
 };
 assert.ok(actors.client?.id&&actors.manager?.id,'verified physical identities required');
+assert.equal(process.env.AUDIT_TARGETED_ONLY,'1','VII-182: restrict physical test to verified client and Dmitry');
+assert.equal(process.env.GITHUB_RUN_ATTEMPT,'1','VII-182: never replay live notifications');
 function signInitData(user){
   const p=new URLSearchParams({
     auth_date:String(Math.floor(Date.now()/1000)),
@@ -136,14 +139,14 @@ async function delivered(notifications,expected,label,revision=0){
     await sleep(1800);
   }
   const expectedClients=label==='Новый'?1:expected/2;
-  const expectedManagers=label==='Новый'?3:expected/2;
+  const expectedManagers=label==='Новый'?1:expected/2;
   assert.equal(rows.filter(x=>x.target==='client').length,expectedClients,label+' client');
   assert.equal(rows.filter(x=>x.target==='manager').length,expectedManagers,label+' manager');
   for(const row of rows){
     if(row.target==='client')assert.ok(String(row.id).endsWith(':'+clientTelegramUserId),label+' notification must target the verified client');
-    if(row.target==='manager'&&label!=='Новый')assert.ok(String(row.id).endsWith(':'+managerTelegramUserId),label+' notification must target the selected manager '+auditManagerName);
+    if(row.target==='manager')assert.ok(String(row.id).endsWith(':'+managerTelegramUserId),label+' notification must target ONLY the selected manager '+auditManagerName);
   }
-  if(label==='Новый')assert.ok(rows.some(row=>row.target==='manager'&&String(row.id).endsWith(':'+managerTelegramUserId)),'new lead fanout must include the selected manager');
+  if(label==='Новый')assert.equal(rows.filter(row=>row.target==='manager').length,1,'new test lead must not notify other managers');
   report.security.exactTelegramRecipients=true;
   receipts.push(...rows.map(x=>({id:x.id,target:x.target,event:x.event,messageId:x.messageId,status:x.status,step:label})));
   console.log('TELEGRAM_STEP_OK',JSON.stringify({step:label,deliveries:rows.map(({target,event,messageId})=>({target,event,messageId}))}));
@@ -273,6 +276,13 @@ const clientTelegramUserId=/^\d+$/.test(auditClientTelegramId)
   :String(linkedClientLead?.telegramUserId||'');
 assert.match(clientTelegramUserId,/^\d+$/,`@${auditClientUsername} client Telegram must be linked through Mini App or provided as AUDIT_CLIENT_TELEGRAM_ID`);
 assert.notEqual(clientTelegramUserId,managerTelegramUserId,'Physical Telegram E2E requires distinct client and manager accounts');
+// Real production notification recipient guard: local routing must resolve to ONLY Dmitry.
+const recipientProbe={manager:auditManagerName,managerTelegramUserId,managerTelegramUsername:auditManagerUsername,telegramUserId:clientTelegramUserId,telegramUsername:auditClientUsername};
+const service=createTelegramService({token:botToken,managerChatIds:process.env.AUTO_SALE_MANAGER_CHAT_IDS||''});
+assert.deepEqual(service.managerIds(recipientProbe,initial),[managerTelegramUserId],'STOP: manager notification fan-out contains other recipients');
+assert.equal(String(actors.client.id),clientTelegramUserId);
+assert.equal(String(actors.manager.id),managerTelegramUserId);
+console.log('AWG_VII182_RECIPIENT_GUARD_OK',JSON.stringify({client:'@Flyer_kg',manager:'Дмитрий',onlyOneManager:true,otherManagersMessaged:false}));
 const suffix=Date.now().toString(36).toUpperCase();
 const leadId='L-QA-'+suffix,quoteId='Q-QA-'+suffix,orderId='O-QA-'+suffix;
 const today=new Date().toISOString().slice(0,10),future=new Date(Date.now()+30*86400000).toISOString().slice(0,10);
@@ -302,7 +312,7 @@ const payment=i=>({
   paymentStage:plan[i].id,
   note:'ТЕСТ, деньги не переводились'
 });
-const report={leadId,quoteId,orderId,telegram:{client:'@'+auditClientUsername,manager:'@'+auditManagerUsername},writePath:'entity-batch',authMode:'QA signatures for verified existing physical Telegram identities',logicalRoles:['client','manager'],initialManagerFanout:3,subsequentPhysicalRecipients:2,receipts,security:{},ui:{},conversation:[],cleanup:null};
+const report={leadId,quoteId,orderId,telegram:{client:'@'+auditClientUsername,manager:'@'+auditManagerUsername},writePath:'admin-seeded-targeted-fixture',authMode:'QA signatures for verified existing physical Telegram identities',logicalRoles:['client','manager'],initialManagerFanout:1,subsequentPhysicalRecipients:2,receipts,security:{},ui:{},conversation:[],cleanup:null};
 let scenarioStarted=false;
 let cleanupFailure=null;
 
@@ -315,7 +325,9 @@ try{
     origin:'США',
     budget:45000,
     source:'Mini App',
-    manager:'',
+    manager:auditManagerName,
+    managerTelegramUserId,managerTelegramUsername:auditManagerUsername,
+    managerClaimedByTelegramUserId:managerTelegramUserId,
     status:'Новый',
     nextAction:today,
     priority:'Средний',
@@ -366,13 +378,15 @@ try{
   report.security.registeredManagerRole=true;
   report.security.clientStaffIsolation=true;
   scenarioStarted=true;
-  await batch('Новый',4,[{resource:'lead',operation:'create',id:leadId,input:lead}],'client');
+  // Admin seeds a test-only lead preassigned to Dmitry; a client-created unassigned
+  // lead would legitimately notify three managers. Never use it for physical QA.
+  await batch('Новый',2,[{resource:'lead',operation:'create',id:leadId,input:lead}],'admin');
   const afterCreate=await state();
   const persistedNew=(afterCreate.leads||[]).find(x=>x.id===leadId);
-  assert.equal(persistedNew.manager,'','new client request must be unassigned');
+  assert.equal(persistedNew.manager,auditManagerName,'test lead is preassigned only to Dmitry');
   assert.equal(persistedNew.telegramUserId,clientTelegramUserId);
   assert.equal(persistedNew.source,'Mini App');
-  report.security.serverOwnedClientIdentity=true;
+  report.security.verifiedClientIdentityAndPreassignedManager=true;
   const own=await req('/api/auto-sale/state',{actor:'client'});
   assert.ok((own.data.leads||[]).some(x=>x.id===leadId));
   const foreign=signInitData({id:'999999999999993',username:'autoworld_isolation_probe',first_name:'QA isolation'});
