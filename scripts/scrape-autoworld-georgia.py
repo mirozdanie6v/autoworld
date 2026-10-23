@@ -203,7 +203,7 @@ def parse_engine_cc(text):
 
 
 def parse_power_metric_hp(text):
-    m = re.search(r"(?<!\d)(\d{2,4}(?:[.,]\d+)?)\s*(л\.?\s*с\.?|PS|metric\s*hp|HP)\b", str(text or ""), re.I)
+    m = re.search(r"(?<!\d)(\d{2,4}(?:[.,]\d+)?)\s*(л\.?\s*с\.?|PS|metric\s*hp|HP)(?![A-Za-zА-Яа-я])", str(text or ""), re.I)
     if not m:
         return None
     power = float(m.group(1).replace(",", "."))
