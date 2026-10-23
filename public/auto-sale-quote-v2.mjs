@@ -12,6 +12,7 @@ export function quoteV2Rate(q={}){
   const cbr=positive(q.cbrRubRate);
   return{cbrRubRate:cbr,calculationRubRate:cbr>0?Math.round(cbr*1.04*10000)/10000:0,spreadPercent:4};
 }
+export const quoteV2RubToUsd=(rub,cbrRubRate)=>{const rate=quoteV2Rate({cbrRubRate}).calculationRubRate;return rate>0?Math.round(positive(rub)/rate*100)/100:0;};
 export const quoteV2Transfer=(lot,delivery,percent=3.5)=>Math.round((positive(lot)+positive(delivery))*positive(percent))/100;
 export function quoteV2Amounts(q={}){
   const origin=q.origin==='США'?'США':'Грузия';
@@ -92,6 +93,8 @@ export function quoteV2Form(q={},leads=[],statuses=[],esc=String,verificationPho
     '<div class="full auto-form-divider">Характеристики автомобиля</div>'+
     '<input type="hidden" name="catalogSourceId" value="'+safe(q.catalogSourceId||'')+'">'+
     '<input type="hidden" name="catalogVin" value="'+safe(q.catalogVin||'')+'">'+
+    '<input type="hidden" name="sourcePriceRub" value="'+safe(q.sourcePriceRub||0)+'">'+
+    '<input type="hidden" name="sourceTurnkeyDeliveryRub" value="'+safe(q.sourceTurnkeyDeliveryRub||0)+'">'+
     '<label>Месяц выпуска<input name="manufactureDate" type="month" value="'+safe(q.manufactureDate||'')+'"></label>'+
     number('engineCc','Объём двигателя','см³')+
     '<label>Мощность двигателя, л.с.<input type="number" name="powerHp" min="0" step="0.01" value="'+safe(q.powerHp||0)+'"></label>'+
@@ -102,6 +105,7 @@ export function quoteV2Form(q={},leads=[],statuses=[],esc=String,verificationPho
     number('lot','Стоимость автомобиля','$','0.01')+
     '<label id="quoteTurnkeyDeliveryField" class="'+(checked?'':'auto-conditional-hidden')+'">Стоимость доставки под ключ, $<input name="turnkeyDeliveryUsd" type="number" min="0" step="0.01" value="'+safe(checked?q.turnkeyDeliveryUsd||0:0)+'"></label>'+
     '<p class="full auto-rule-hint">Доставка включается в сумму отдельно. Если использована разница между ценой автомобиля и ценой в России с ремонтом, менеджер должен проверить состав затрат, чтобы не учесть их дважды.</p>'+
+    (q.sourcePriceRub>0?'<p class="full auto-note">Цена автомобиля из объявления: '+rub(q.sourcePriceRub)+'. После указания официального курса ЦБ РФ она автоматически пересчитывается в доллары по расчётному курсу, если менеджер ещё не ввёл цену вручную.</p>':'')+
     (q.sourceTurnkeyDeliveryRub>0?'<p class="full auto-note">По объявлению: разница между ценой автомобиля и ценой в России с ремонтом — '+rub(q.sourceTurnkeyDeliveryRub)+'. Сверьте состав и переведите в $ по курсу перед внесением доставки.</p>':'')+
     usFields+
     number('customsAndRecyclingRub','Таможня + утильсбор РФ (включены в доставку)','₽')+
