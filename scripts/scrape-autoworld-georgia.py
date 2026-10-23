@@ -129,10 +129,20 @@ def price_amount_rub(value):
 
 
 def parse_russia_turnkey_rub(text):
-    """The source's 'price in Russia incl. repair' is not a discount."""
-    for line in str(text or "").splitlines():
+    """Handle Telegram line wraps after 'price in Russia (with repair)'."""
+    lines = [line.strip() for line in str(text or "").splitlines() if line.strip()]
+    for index, line in enumerate(lines):
         if re.search(r"цена\s+в\s+россии\s*\(\s*с\s+ремонтом\s*\)", line, re.I):
-            return price_amount_rub(line)
+            price = price_amount_rub(line)
+            if price:
+                return price
+            # One following token can be a wrench; skip it, not another labeled article.
+            for following in lines[index + 1:index + 3]:
+                if re.search(r"(?:таможня|утилизац|двигатель|пробег|год|торги|доставк)", following, re.I):
+                    break
+                price = price_amount_rub(following)
+                if price:
+                    return price
     return None
 
 
@@ -163,6 +173,27 @@ def parse_rub(text, label):
             v = float(m.group(1).replace(",", "."))
             return int(v * (1_000 if i == 0 else 1_000_000))
     return None
+
+
+def parse_customs_and_recycling_rub(text):
+    """Prefer a combined declared source amount; otherwise sum distinct explicit line items."""
+    lines = [line.strip() for line in str(text or "").splitlines() if line.strip()]
+    def from_label(label):
+        for i, line in enumerate(lines):
+            if not re.search(label, line, re.I):
+                continue
+            price = price_amount_rub(line)
+            if price:
+                return price
+            if i + 1 < len(lines) and not re.search(r"[А-Яа-яA-Za-z]{3,}", lines[i + 1]):
+                return price_amount_rub(lines[i + 1])
+        return None
+    combined = from_label(r"таможн\w*\s*\+\s*(?:утиль|утилиз)")
+    if combined:
+        return combined
+    customs = from_label(r"таможенн\w*|таможня|пошлин\w*")
+    recycling = from_label(r"утильсбор|утилизационн\w*\s+сбор")
+    return customs + recycling if customs is not None and recycling is not None else None
 
 
 def parse_engine_cc(text):
@@ -309,6 +340,7 @@ def parse_car(post_id, source_url, text, photos, published_at, emoji_ids=None):
         "russiaTurnkeyRub": russia_turnkey,
         "turnkeyDeliveryRub": delivery_difference,
         "customsRub": parse_rub(text, "customs"),
+        "customsAndRecyclingRub": parse_customs_and_recycling_rub(text),
         "lot": lot,
         "calculationDate": calc_date,
         "sourcePhotos": photos,
@@ -504,7 +536,7 @@ def write_outputs(cars, pages, uploaded_count, reused_count, recovered_cars, fai
     fields = [
         "sourcePostId","sourceUrl","publishedAt","origin","brand","model","year","trim","mileage","engine","powerHp",
         "consumption","transmission","drive","safety","interior","damage","vin","auctionDate","estimatedBidUsd",
-        "priceBeforeDiscountRub","priceAfterDiscountRub","priceRub","discountExplicit","russiaTurnkeyRub","turnkeyDeliveryRub","engineCc","customsRub","lot","calculationDate","photos","rawText"
+        "priceBeforeDiscountRub","priceAfterDiscountRub","priceRub","discountExplicit","russiaTurnkeyRub","turnkeyDeliveryRub","engineCc","customsRub","customsAndRecyclingRub","lot","calculationDate","photos","rawText"
     ]
     with (OUT_DIR / "cars.csv").open("w", encoding="utf-8-sig", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=fields, extrasaction="ignore")
