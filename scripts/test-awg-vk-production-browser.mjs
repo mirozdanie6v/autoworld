@@ -17,6 +17,10 @@ try{
   await page.locator('[data-vk-status="out"]').waitFor({timeout:20000});
   assert.equal(await badge.locator('[data-vk-status-caption]').innerText(),'Войти');
   const r=await badge.boundingBox();
+  const geometry=await page.evaluate(()=>({innerWidth:window.innerWidth,visualWidth:window.visualViewport?.width,
+    scrollWidth:document.documentElement.scrollWidth,bodyWidth:document.body.scrollWidth}));
+  console.log('AWG_VK_BADGE_GEOMETRY',JSON.stringify({rect:r,viewport:geometry}));
+  await page.screenshot({path:'awg-vk-production-mobile-login.png',fullPage:false});
   assert.ok(r&&r.width>20&&r.width<180&&r.x>=0&&r.x+r.width<=392,'compact status visible inside mobile viewport');
   const state=await page.evaluate(async()=>{
     const [health,config,profile,data]=await Promise.all([
