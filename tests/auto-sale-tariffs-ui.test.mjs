@@ -43,7 +43,7 @@ test('new USA quote removes legalization/company service; totals include interna
   form.dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true}));
   await tick();await tick();
   const q=JSON.parse(localStorage.getItem('auto-sale-quotes-v2')).find(q=>q.model==='Test US 2022');
-  assert.ok(q,'new quote saved, form: '+root.querySelector('#quoteForm')?.textContent.slice(-1100));
+  assert.ok(q,'new quote saved, form: '+root.querySelector('#quoteForm .auto-form-error')?.textContent);
   assert.equal(q.status,'Отправлен');
   assert.equal(q.service,0);
   assert.equal(q.legalization,0);
