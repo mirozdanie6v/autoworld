@@ -1,4 +1,4 @@
-name: AWG VK flyer_flyer to Telegram Dmitry physical message smoke (one time)
+name: AWG VII-182 VK flyer_flyer to Dmitry one-time physical delivery
 on:
   push:
     branches: [main]
@@ -90,7 +90,7 @@ jobs:
           jq -c '{relayRouteConfigured:(.image.environment.AUTO_SALE_TELEGRAM_RELAY_URL=="https://integration-telegram.viiversion.com/telegram/send"),relaySigningKeyPresent:((.image.environment.AUTOWORLD_RELAY_SECRET//"")|length>0),notificationPumpConfigured:(.image.environment.AUTO_SALE_NOTIFICATION_PUMP_ENABLED//"default")}' "$RUNNER_TEMP/prod.json" | sed 's/^/AWG_PRODUCTION_TELEGRAM_DELIVERY_MODE /'
       - name: Send ONE labelled VK message to verified client and ONE Telegram message to verified Dmitry
         env:
-          AWG_PHYSICAL_TEST_GUARD: VK26443041_TO_TG_DMITRY_SINGLE_TEST_20261015
+          AWG_PHYSICAL_TEST_GUARD: AWG_VII182_VK_TO_DMITRY_20261023
         run: |
           set -euo pipefail
           node --check scripts/test-awg-vk-client-dmitry-physical.mjs
