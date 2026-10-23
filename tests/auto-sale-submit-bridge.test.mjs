@@ -47,7 +47,7 @@ test('direct submit bridge reaches the core quote saver and persists a draft',as
   const saved=JSON.parse(localStorage.getItem('auto-sale-quotes-v2')).find(q=>q.leadId==='L-108');
   assert.ok(saved);
   assert.equal(saved.status,'Черновик');
-  assert.equal(saved.service,500);
+  assert.equal(saved.service,0); // new version has no standalone company fee
   assert.equal(root.querySelector('#quoteForm'),null);
   dom.window.close();
 });
