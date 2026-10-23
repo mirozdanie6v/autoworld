@@ -1,5 +1,5 @@
 AWG production release
-requested_at=2026-10-08T11:42:00+07:00
-source_sha=68173a1c939f8687ca7cd40896b09da3ccd61ed6
-reason=retry-vii-145-safe-vk-rollout-after-registry-timeout-vk-forced-off
+requested_at=2026-10-23
+source_sha=74c9ba17575dc88d690689ccfd8c50e6c6c77198
+reason=vii-180-staging-verified-17-checks-and-full-ci-green-preserve-vk-telegram
 run_real_client_e2e=false
