@@ -46,7 +46,7 @@ test('draft quote saves on mobile-style form with exactly one serialized lead fi
   assert.equal(new dom.window.FormData(form).get('leadId'),expectedLead);
   assert.equal(form.querySelectorAll('input[type="hidden"][name="leadId"]').length,0);
 
-  form.querySelector('[name="service"]').value='1600';
+  form.querySelector('[name="lot"]').value='1600';
   form.querySelector('button[type="submit"]').click();
   await tick();
 
