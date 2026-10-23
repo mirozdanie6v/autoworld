@@ -95,13 +95,24 @@ function extractPromoPriceRub(source){
   return m?Number(`${m[1]}${m[2]}${m[3]}`)*10_000:0;
 }
 function sourceRubPrices(source){
-  const rawVisible=Number(source?.priceBeforeDiscountRub)||Number(source?.priceRub)||0;
-  const promo=extractPromoPriceRub(source);
-  if(rawVisible>0&&promo>0&&rawVisible>promo){
-    return{priceBeforeDiscountRub:rawVisible,priceAfterDiscountRub:promo,priceRub:promo};
-  }
-  const current=promo||Number(source?.priceRub)||0;
-  return{priceBeforeDiscountRub:Number(source?.priceBeforeDiscountRub)||0,priceAfterDiscountRub:promo||0,priceRub:current};
+  const raw=String(source?.rawText||'');
+  const explicit=source?.discountExplicit===true||/скидк|цен[аыу]\s+сниж|цен[аыу]\s+со\s+скидк|акци[яию]/iu.test(raw);
+  const primary=Math.max(0,Number(source?.priceRub)||0);
+  const before=Math.max(0,Number(source?.priceBeforeDiscountRub)||0);
+  const promo=Math.max(0,extractPromoPriceRub(source));
+  // A second "price in Russia (with repair)" is a turnkey estimate, not a discount.
+  const priceRub=(explicit&&before>promo&&promo>0)?promo:(primary||before||promo);
+  const prior=explicit&&before>priceRub?before:0;
+  const russiaTurnkeyRub=Math.max(0,Number(source?.russiaTurnkeyRub)||0);
+  const turnkeyDeliveryRub=russiaTurnkeyRub>=priceRub&&priceRub>0&&russiaTurnkeyRub>0?
+    russiaTurnkeyRub-priceRub:0;
+  return{
+    priceBeforeDiscountRub:prior,priceAfterDiscountRub:prior?priceRub:0,
+    priceRub,discountExplicit:Boolean(prior),
+    russiaTurnkeyRub,
+    turnkeyDeliveryRub,
+    turnkeyDeliverySource:turnkeyDeliveryRub>0?'source_russia_with_repair_difference':''
+  };
 }
 
 const BRAND_MAP=new Map([
@@ -240,6 +251,7 @@ function normalizeCar(source){
     model,
     year,
     engineCc:Number.isFinite(Number(source.engineCc))&&Number(source.engineCc)>0?Number(source.engineCc):0,
+    powerHp:Number.isFinite(Number(source.powerHp))&&Number(source.powerHp)>0?Number(source.powerHp):0,
     manufactureDate:/^\d{4}-(0[1-9]|1[0-2])$/.test(String(source.manufactureDate||''))?String(source.manufactureDate):'',
     engineType:['petrol','diesel','petrol_electric','diesel_electric','electric','no_engine'].includes(String(source.engineType||''))?String(source.engineType):'',
     body:buildBodyType(brand,model),
@@ -252,6 +264,10 @@ function normalizeCar(source){
     priceBeforeDiscountRub:prices.priceBeforeDiscountRub,
     priceAfterDiscountRub:prices.priceAfterDiscountRub,
     priceRub,
+    discountExplicit:prices.discountExplicit,
+    russiaTurnkeyRub:prices.russiaTurnkeyRub,
+    turnkeyDeliveryRub:prices.turnkeyDeliveryRub,
+    turnkeyDeliverySource:prices.turnkeyDeliverySource,
     estimatedBidUsd:bid,
     delivery:'Срок по запросу',
     tag:trim||'AutoWorld',
