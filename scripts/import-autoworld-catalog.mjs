@@ -287,6 +287,7 @@ function normalizeCar(source){
     safety,
     auctionDate:clean(source.auctionDate),
     customsRub,
+    customsAndRecyclingRub:Number(source.customsAndRecyclingRub)>0?Number(source.customsAndRecyclingRub):0,
     lot:clean(source.lot),
     calculationDate:clean(source.calculationDate),
     rawSourceTitle:title.title||clean(source.title),
