@@ -734,13 +734,24 @@ async function quoteAction(id,status){
 async function cloneQuote(id){
   const old=quotes.find(x=>x.id===id);if(!old)return;
   const q={...old,id:nextId('Q',quotes),version:(old.version||1)+1,status:'Черновик',validUntil:old.tariffVersion===AWG_GEORGIA_TARIFF_VERSION?'':addDays(today,7),updatedAt:new Date().toISOString(),revisionOf:old.id};
-  // A new version of a historical Georgia quote adopts current Georgia tariffs
-  // without mutating the immutable original quote.
-  if(old.origin==='Грузия'&&old.tariffVersion!==AWG_GEORGIA_TARIFF_VERSION){
-    Object.assign(q,{tariffVersion:AWG_GEORGIA_TARIFF_VERSION,quoteSchema:'awg-quote-georgia-2026-10-21',legalization:4000,service:1000,
-      customsRub:0,recyclingRub:0,usdRubRate:0,exchangeRateDate:'',internationalTransferPercent:3.5,
-      comment:'',exchangeRateSource:'',transportMode:'Самовывоз — Владикавказ',validUntil:''});
-    Object.assign(q,georgiaQuoteAmounts(q));
+  // Only the NEW draft migrates to the 22 October terms. The original approved
+  // customer quote remains immutable and its historical sums are unchanged.
+  if(['Грузия','США'].includes(old.origin)&&!v2Quote(old)){
+    Object.assign(q,{
+      tariffVersion:AWG_QUOTE_V2_TARIFF,quoteSchema:AWG_QUOTE_V2_SCHEMA,
+      transportMode:(Number(old.turnkeyDeliveryUsd)>0?'Доставка под ключ':modesV2(old.origin)[0]),
+      legalization:0,service:0,customs:0,recyclingFee:0,georgiaDelivery:0,
+      customsAndRecyclingRub:Number(old.customsAndRecyclingRub)||(Number(old.customsRub)||0)+(Number(old.recyclingRub)||0),
+      internationalTransferPercent:Number(old.internationalTransferPercent)||3.5,
+      cbrRubRate:0,usdRubRate:0,exchangeRateDate:'',exchangeRateSource:'cbr',validUntil:'',
+      auction:old.origin==='США'?Number(old.auction)||0:0,
+      inland:old.origin==='США'?Number(old.inland)||0:0,
+      ocean:old.origin==='США'?Number(old.ocean)||0:0,
+      repair:old.origin==='США'?Number(old.repair)||0:0,
+      partsCost:old.origin==='США'?Number(old.partsCost)||0:0,
+      quoteConversionRequired:true
+    });
+    Object.assign(q,quoteV2Amounts(q));
     q.total=calculateQuote(q);
   }
   delete q.sentAt;delete q.agreedAt;
