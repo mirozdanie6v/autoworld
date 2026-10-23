@@ -109,7 +109,7 @@ test('manager creates new-version Georgia quote without obsolete fees and indepe
   form.dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true}));
   await tick();await tick();
   const q=JSON.parse(localStorage.getItem('auto-sale-quotes-v2')).find(x=>x.quoteSchema===AWG_QUOTE_V2_SCHEMA);
-  assert.ok(q,'new quote persisted');
+  assert.ok(q,'new quote persisted, form: '+root.querySelector('#quoteForm')?.textContent.slice(-1100));
   assert.equal(q.tariffVersion,AWG_QUOTE_V2_TARIFF);
   assert.equal(q.status,'Отправлен');
   assert.equal(q.total,15525);
