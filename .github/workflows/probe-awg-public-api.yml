@@ -1,4 +1,5 @@
 name: Probe AWG Public API (read-only)
+# VII-180 pre-release production network diagnostic (read-only), 2026-10-23
 
 on:
   push:
