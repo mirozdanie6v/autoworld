@@ -101,7 +101,7 @@ test('manager Georgia calculation autofills customs parameters from linked lead,
  root.querySelector('[data-lead="L-GEO-CUSTOMS"]').click();
  root.querySelector('[data-create-quote="L-GEO-CUSTOMS"]').click();
  const form=root.querySelector('#quoteForm');
- assert.equal(form.dataset.georgiaQuote,'true');
+ assert.equal(form.dataset.awgQuoteV2,'true');
  assert.equal(form.elements.leadId.value,'L-GEO-CUSTOMS');
  assert.equal(form.elements.manufactureDate.value,'2022-06');
  assert.equal(form.elements.engineCc.value,'1998');
@@ -110,9 +110,7 @@ test('manager Georgia calculation autofills customs parameters from linked lead,
  assert.equal(form.elements.ageCategory.value,'3to5');
  assert.equal(form.elements.catalogSourceId.value,CAR.id);
  assert.equal(form.elements.catalogVin.value,CAR.vin);
- assert.equal(form.elements.customsRub.value,'0');
- assert.equal(form.elements.recyclingRub.value,'0');
- assert.match(form.querySelector('[data-customs-catalog-source]').textContent,/JTNB11HK0J3000001/);
+ assert.equal(form.elements.customsAndRecyclingRub.value,String(CAR.customsRub||0));
  dom.window.close();
 });
 
