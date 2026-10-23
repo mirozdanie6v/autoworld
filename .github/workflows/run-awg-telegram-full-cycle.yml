@@ -103,6 +103,9 @@ jobs:
             echo "::add-mask::$VALUE"
             echo "$KEY=$VALUE" >> "$GITHUB_ENV"
           done
+          CHAT_IDS=$(jq -r '.image.environment.AUTO_SALE_MANAGER_CHAT_IDS // ""' "$RUNNER_TEMP/current-revision.json")
+          if [ -n "$CHAT_IDS" ]; then echo "::add-mask::$CHAT_IDS"; fi
+          echo "AUTO_SALE_MANAGER_CHAT_IDS=$CHAT_IDS" >> "$GITHUB_ENV"
           BUILD=$(jq -er '.image.environment.AUTO_SALE_BUILD_SHA' "$RUNNER_TEMP/current-revision.json")
           echo "AUDIT_EXPECTED_BUILD_SHA=$BUILD" >> "$GITHUB_ENV"
           echo "Current production revision verified; credentials stay only in this runner."
@@ -111,6 +114,7 @@ jobs:
       - name: Run selected production QA scenario for the verified client and manager
         env:
           AUDIT_UI_ONLY: ${{ inputs.mode == 'ui_only' && '1' || '0' }}
+          AUDIT_TARGETED_ONLY: '1'
         run: node scripts/test-awg-telegram-roles-full-cycle.mjs
       - name: Save sanitized lifecycle report and browser evidence
         if: always()
