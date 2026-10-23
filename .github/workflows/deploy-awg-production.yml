@@ -458,11 +458,13 @@ jobs:
 
       - name: Configure Telegram Mini App and webhook
         env:
-          AUTO_SALE_TELEGRAM_BOT_TOKEN: ${{ secrets.AWG_TELEGRAM_BOT_TOKEN }}
-          # Preserve the previously verified Cloudflare ingress; Telegram cannot reliably
-          # deliver to the regional Yandex Gateway directly.
+          # The bot menu and Mini App configuration are preserved unchanged.
+          # GitHub-hosted runners cannot reach Telegram Bot API directly.
+          # Restore/verify the registered exact Cloudflare webhook from Cloudflare
+          # after a signed upstream probe, with drop_pending_updates=false.
           AUTO_SALE_TELEGRAM_WEBHOOK_URL: https://integration-telegram.viiversion.com/telegram/webhook
-        run: node scripts/configure-autoworld-telegram-bot.mjs
+          AUTOWORLD_RELAY_SECRET: ${{ secrets.AWG_RELAY_SECRET }}
+        run: node scripts/repair-awg-telegram-via-cloudflare.mjs
 
       - name: Verify Telegram RBAC read/write boundary
         run: |
