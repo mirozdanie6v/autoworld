@@ -552,7 +552,7 @@ function modalQuoteV2(q,lead,requestedOrigin=''){
     catalogSourceId:linked.car?.id||'',catalogVin:facts?.vin||'',
     catalogYear:facts?.year||'',lot:0,turnkeyDeliveryUsd:0,
     sourceTurnkeyDeliveryRub:Number(linked.car?.turnkeyDeliveryRub)||0,
-    customsAndRecyclingRub:Number(linked.car?.customsRub)||0,
+    customsAndRecyclingRub:Number(linked.car?.customsAndRecyclingRub||linked.car?.customsRub)||0,
     cbrRubRate:0,usdRubRate:0,exchangeRateSource:'cbr',exchangeRateDate:'',
     internationalTransferPercent:3.5,publicComment:'',verification:normalizeVehicleVerification({}),
     auction:0,inland:0,ocean:0,repair:0,partsCost:0
