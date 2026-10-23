@@ -13,6 +13,7 @@ RUN npm install --omit=dev
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/public/auto-sale-quote-audit.mjs ./public/auto-sale-quote-audit.mjs
 COPY --from=build /app/public/auto-sale-georgia-quote.mjs ./public/auto-sale-georgia-quote.mjs
+COPY --from=build /app/public/auto-sale-quote-v2.mjs ./public/auto-sale-quote-v2.mjs
 COPY --from=build /app/public/auto-sale-catalog-lead.mjs ./public/auto-sale-catalog-lead.mjs
 COPY server ./server
 COPY shared ./shared
