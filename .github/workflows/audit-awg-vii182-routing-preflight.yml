@@ -1,0 +1,141 @@
+name: AWG VII-182 verified identities and exact recipient preflight (read-only)
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/audit-awg-vii182-routing-preflight.yml
+  workflow_dispatch:
+    inputs:
+      manager:
+        description: 'Registered manager for this test'
+        type: choice
+        options:
+          - Дмитрий
+          - Алексей
+          - Иван
+        default: Иван
+      mode:
+        description: 'full_cycle sends test Telegram notifications; ui_only uses silent fixtures'
+        type: choice
+        options:
+          - full_cycle
+          - ui_only
+        default: full_cycle
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: awg-telegram-physical-full-cycle
+  cancel-in-progress: false
+env:
+  YC_FOLDER_ID: b1g8u8vqkgehvtbj8n13
+  YC_DEPLOY_SA_ID: ${{ vars.AWG_YC_DEPLOY_SA_ID || 'aje775bcl6hgp40eu8of' }}
+  STAGING_URL: https://awgcars.ru
+  AUDIT_MANAGER_NAME: Дмитрий
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install existing test runtime
+        run: |
+          set -euo pipefail
+          npm ci
+          npm install --no-save --ignore-scripts playwright@1.56.1
+          CHROME=$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)
+          test -n "$CHROME"
+          echo "PLAYWRIGHT_CHROME_PATH=$CHROME" >> "$GITHUB_ENV"
+          node --check scripts/resolve-awg-telegram-audit-identities.mjs
+          node --check scripts/test-awg-telegram-roles-full-cycle.mjs
+      - name: Request existing Yandex federation identity
+        uses: actions/github-script@v7
+        id: oidc
+        with:
+          script: |
+            const token = await core.getIDToken('https://github.com/mirozdanie6v')
+            core.setSecret(token)
+            core.setOutput('token', token)
+      - name: Exchange identity and install official Yandex CLI
+        env:
+          GITHUB_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        run: |
+          set -euo pipefail
+          RESPONSE=$(curl --fail --silent --show-error --connect-timeout 10 --max-time 30 \
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            --data-urlencode 'grant_type=urn:ietf:params:oauth:grant-type:token-exchange' \
+            --data-urlencode 'requested_token_type=urn:ietf:params:oauth:token-type:access_token' \
+            --data-urlencode "audience=$YC_DEPLOY_SA_ID" \
+            --data-urlencode "subject_token=$GITHUB_OIDC_TOKEN" \
+            --data-urlencode 'subject_token_type=urn:ietf:params:oauth:token-type:id_token' \
+            https://auth.yandex.cloud/oauth/token)
+          TOKEN=$(printf '%s' "$RESPONSE" | jq -er '.access_token')
+          echo "::add-mask::$TOKEN"
+          echo "YC_IAM_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+          curl --fail --silent --show-error --connect-timeout 15 --max-time 90 \
+            https://storage.yandexcloud.net/yandexcloud-yc/release/yc_linux_amd64.tar.gz \
+            -o "$RUNNER_TEMP/yc.tar.gz"
+          mkdir -p "$RUNNER_TEMP/yc-dist" "$RUNNER_TEMP/yc-bin"
+          tar -xzf "$RUNNER_TEMP/yc.tar.gz" -C "$RUNNER_TEMP/yc-dist"
+          BIN=$(find "$RUNNER_TEMP/yc-dist" -type f -name yc -print -quit)
+          test -n "$BIN"
+          install -m 0755 "$BIN" "$RUNNER_TEMP/yc-bin/yc"
+          echo "$RUNNER_TEMP/yc-bin" >> "$GITHUB_PATH"
+      - name: Read current production credentials without cloud changes or disclosure
+        run: |
+          set -euo pipefail
+          yc config set endpoint api.cloud.yandex.net:443
+          yc config set token "$YC_IAM_TOKEN"
+          yc config set folder-id "$YC_FOLDER_ID"
+          CONTAINER_ID=$(yc serverless container get --name autoworld-awg-prod --format json | jq -er '.id')
+          yc serverless container revision list --container-id "$CONTAINER_ID" --format json > "$RUNNER_TEMP/revisions.json"
+          CURRENT_REV=$(jq -er '(if type=="array" then . else .revisions end) | map(select(.status=="ACTIVE")) | sort_by(.created_at // .createdAt) | last | .id' "$RUNNER_TEMP/revisions.json")
+          yc serverless container revision get "$CURRENT_REV" --format json > "$RUNNER_TEMP/current-revision.json"
+          test "$(jq -r '.image.environment.AUTO_SALE_PUBLIC_DEMO_WRITE' "$RUNNER_TEMP/current-revision.json")" = false
+          jq -e '.image.environment.YDB_CONNECTION_STRING | endswith("/etn00ojk5iv1u7dgpdar")' "$RUNNER_TEMP/current-revision.json" >/dev/null
+          for KEY in AUTO_SALE_API_KEY AUTO_SALE_TELEGRAM_BOT_TOKEN YDB_CONNECTION_STRING; do
+            VALUE=$(jq -er --arg key "$KEY" '.image.environment[$key] | select(length>0)' "$RUNNER_TEMP/current-revision.json")
+            echo "::add-mask::$VALUE"
+            echo "$KEY=$VALUE" >> "$GITHUB_ENV"
+          done
+          CHAT_IDS=$(jq -r '.image.environment.AUTO_SALE_MANAGER_CHAT_IDS // ""' "$RUNNER_TEMP/current-revision.json")
+          if [ -n "$CHAT_IDS" ]; then echo "::add-mask::$CHAT_IDS"; fi
+          echo "AUTO_SALE_MANAGER_CHAT_IDS=$CHAT_IDS" >> "$GITHUB_ENV"
+          BUILD=$(jq -er '.image.environment.AUTO_SALE_BUILD_SHA' "$RUNNER_TEMP/current-revision.json")
+          echo "AUDIT_EXPECTED_BUILD_SHA=$BUILD" >> "$GITHUB_ENV"
+          echo "Current production revision verified; credentials stay only in this runner."
+      - name: Resolve and verify existing Flyer_kg and selected manager Telegram identities
+        run: node scripts/resolve-awg-telegram-audit-identities.mjs
+      - name: Verify exactly TWO physical Telegram recipients and existing manager routing (read-only)
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import {createTelegramService} from './server/telegram-bot.mjs';
+          const client=String(process.env.AUDIT_CLIENT_TELEGRAM_ID||'');
+          const manager=String(process.env.AUDIT_MANAGER_TELEGRAM_ID||'');
+          assert.match(client,/^\\d+$/);assert.match(manager,/^\\d+$/);
+          assert.notEqual(client,manager);
+          const response=await fetch('https://awgcars.ru/api/auto-sale/state',{
+            headers:{'x-auto-sale-key':process.env.AUTO_SALE_API_KEY},
+            signal:AbortSignal.timeout(30000)
+          });
+          assert.equal(response.status,200);
+          const state=await response.json();
+          const lead={id:'L-QA-PREFLIGHT-ONLY',manager:'Дмитрий',
+            managerTelegramUserId:manager,managerTelegramUsername:'Flyer_Flyer',
+            telegramUserId:client,telegramUsername:'Flyer_kg',clientCreated:true};
+          const bot=createTelegramService({token:process.env.AUTO_SALE_TELEGRAM_BOT_TOKEN,
+            managerChatIds:process.env.AUTO_SALE_MANAGER_CHAT_IDS||''});
+          const recipients=bot.managerIds(lead,state);
+          const exact=recipients.length===1&&recipients[0]===manager;
+          console.log('AWG_VII182_PREFLIGHT',JSON.stringify({client:'@Flyer_kg',manager:'Дмитрий',
+            uniqueAccounts:true,productionBuild:process.env.AUDIT_EXPECTED_BUILD_SHA,
+            linkedManagerCount:recipients.length,onlyDmitry:exact,managerFallbackConfigured:Boolean(process.env.AUTO_SALE_MANAGER_CHAT_IDS),
+            safeToRunAssignedLeadFullCycle:exact,writeOperations:0,notificationSends:0}));
+          // Avoid triggering any live messages if fallback would include other staff.
+          assert.ok(exact,'existing fallback configuration would message other managers; block physical scenario');
+          NODE
