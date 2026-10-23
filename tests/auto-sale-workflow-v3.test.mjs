@@ -52,10 +52,14 @@ test('validated client to handoff workflow preserves all business rules',async()
   set(form,'[name="auction"]','1000');
   set(form,'[name="inland"]','700');
   set(form,'[name="ocean"]','2400');
-  set(form,'[name="customs"]','6200');
   set(form,'[name="repair"]','1200');
-  set(form,'[name="service"]','1500');
-  set(form,'[name="validUntil"]','2026-09-20');
+  set(form,'[name="engineCc"]','2000');
+  set(form,'[name="powerHp"]','150');
+  set(form,'[name="engineType"]','petrol');
+  set(form,'[name="importerType"]','nat');
+  set(form,'[name="cbrRubRate"]','100');
+  set(form,'[name="exchangeRateDate"]','2026-10-22');
+  set(form,'[name="customsAndRecyclingRub"]','620000');
   set(form,'[name="verificationLot"]','998877');
   set(form,'[name="verificationVin"]','WAUZZZTEST1234567');
   set(form,'[name="verificationYear"]','2023');
@@ -66,16 +70,12 @@ test('validated client to handoff workflow preserves all business rules',async()
   set(form,'[name="verificationResult"]','Одобрен к покупке');
   set(form,'[name="verificationCheckedAt"]','2026-09-12');
   set(form,'[name="verificationPhotos"]','["https://example.com/audi-q5-before.jpg"]');
-  // Preserve the existing legacy quote journey: new tariff confirmations are covered separately.
-  set(form,'[name="tariffVersion"]','');
-  set(form,'[name="quoteSchema"]','');
-  set(form,'[name="legalization"]','0');
   set(form,'[name="status"]','Отправлен');
   submit(dom,form);
 
   let quote=JSON.parse(localStorage.getItem('auto-sale-quotes-v2')).find(x=>x.leadId===lead.id);
   assert.ok(quote);
-  assert.equal(quote.total,39000);
+  assert.equal(quote.total,32210);
   assert.equal(quote.status,'Отправлен');
   assert.equal(quote.verification.lotNumber,'998877');
   assert.equal(quote.verification.result,'Одобрен к покупке');
@@ -91,7 +91,7 @@ test('validated client to handoff workflow preserves all business rules',async()
   root.querySelector(`[data-lead="${lead.id}"]`).click();
   form=root.querySelector('#leadEditForm');
   assert.ok(form.querySelector('[name="deposit"]'));
-  set(form,'[name="deposit"]','10000');
+  set(form,'[name="deposit"]','9000');
   set(form,'[name="depositDate"]','2026-09-12');
   set(form,'[name="paymentMethod"]','Банк');
   submit(dom,form);
@@ -105,10 +105,10 @@ test('validated client to handoff workflow preserves all business rules',async()
   assert.equal(order.stage,'Выкуп');
   assert.equal(order.lot,'998877');
   assert.equal(order.vin,'WAUZZZTEST1234567');
-  assert.equal(order.paid,10000);
+  assert.equal(order.paid,9000);
   assert.equal(order.payments.length,1);
   assert.equal(order.paymentPlan.length,4);
-  assert.deepEqual(order.paymentPlan.map(x=>x.amount),[10000,17000,5800,6200]);
+  assert.deepEqual(order.paymentPlan.map(x=>x.amount),[9000,18000,5210,0]);
   assert.equal(order.payments[0].paymentStage,'auction_deposit');
 
   form=root.querySelector('#orderForm');
@@ -117,7 +117,7 @@ test('validated client to handoff workflow preserves all business rules',async()
   set(form,'[name="vin"]','WAUZZZTEST1234567');
   set(form,'[name="eta"]','2026-10-25');
   set(form,'[name="location"]','Long Beach, CA');
-  set(form,'[name="paymentAmount"]','17000');
+  set(form,'[name="paymentAmount"]','18000');
   set(form,'[name="paymentDate"]','2026-09-13');
   set(form,'[name="paymentMethod"]','Банк');
   submit(dom,form);
@@ -130,13 +130,13 @@ test('validated client to handoff workflow preserves all business rules',async()
   form=root.querySelector('#orderForm');
   set(form,'[name="stage"]','В пути');
   set(form,'[name="location"]','Atlantic Ocean');
-  set(form,'[name="paymentAmount"]','5800');
+  set(form,'[name="paymentAmount"]','5210');
   set(form,'[name="paymentDate"]','2026-09-13');
   set(form,'[name="paymentMethod"]','Банк');
   submit(dom,form);
   order=JSON.parse(localStorage.getItem('auto-sale-orders-v2')).find(x=>x.id===order.id);
   assert.equal(order.stage,'В пути');
-  assert.equal(order.paid,32800);
+  assert.equal(order.paid,32210);
   assert.equal(order.payments.length,3);
   assert.equal(order.payments[2].paymentStage,'logistics_legalization');
 
@@ -146,16 +146,16 @@ test('validated client to handoff workflow preserves all business rules',async()
   set(form,'[name="riskType"]','Документы');
   form.querySelector('#riskType').dispatchEvent(new dom.window.Event('change',{bubbles:true}));
   set(form,'[name="riskNote"]','Проверяется комплект документов.');
-  set(form,'[name="paymentAmount"]','6200');
+  set(form,'[name="paymentAmount"]','0');
   set(form,'[name="paymentDate"]','2026-10-23');
   set(form,'[name="paymentMethod"]','Банк');
   submit(dom,form);
   order=JSON.parse(localStorage.getItem('auto-sale-orders-v2')).find(x=>x.id===order.id);
   assert.equal(order.stage,'Таможня');
   assert.equal(order.riskType,'Документы');
-  assert.equal(order.paid,39000);
-  assert.equal(order.payments.length,4);
-  assert.equal(order.payments[3].paymentStage,'customs_fts');
+  assert.equal(order.paid,32210);
+  assert.equal(order.payments.length,3);
+  assert.equal(order.paymentPlan[3].amount,0);
 
   form=root.querySelector('#orderForm');
   set(form,'[name="stage"]','Доставка');
@@ -173,8 +173,8 @@ test('validated client to handoff workflow preserves all business rules',async()
   submit(dom,form);
   order=JSON.parse(localStorage.getItem('auto-sale-orders-v2')).find(x=>x.id===order.id);
   assert.equal(order.stage,'Выдача');
-  assert.equal(order.paid,39000);
-  assert.equal(order.payments.length,4);
+  assert.equal(order.paid,32210);
+  assert.equal(order.payments.length,3);
   assert.equal(root.querySelector(`[data-order-next="${order.id}"]`),null);
 
   root.querySelector('[data-role="owner"]').click();
@@ -182,7 +182,7 @@ test('validated client to handoff workflow preserves all business rules',async()
   root.querySelector(`[data-order="${order.id}"]`).click();
   assert.equal(root.querySelector('#orderForm'),null);
   assert.match(root.textContent,/КОНТРОЛЬ/);
-  assert.match(root.textContent,/\$39,000/);
+  assert.match(root.textContent,/\$32,210/);
 
   root.querySelector('[data-role="client"]').click();
   root.querySelector('[data-go="orders"]').click();
