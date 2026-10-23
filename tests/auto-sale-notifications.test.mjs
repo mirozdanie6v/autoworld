@@ -66,6 +66,25 @@ test('an unsupported keyboard falls back to text with the same idempotency key',
   assert.equal(s.marks.length,1);assert.equal(s.marks[0].messageId,'1001');
 });
 
+test('VK API 912 disabled chat-bot feature delivers text and web URL without duplicate',async()=>{
+  const s=services({responses:[
+    {error:{error_code:912,error_msg:'This is a chat bot feature, change this status in settings'}},
+    {response:20261023}
+  ]});
+  const message={id:'revision:quote:client:vk:42',channel:'vk',vkUserId:'42',
+    message:'ТЕСТ: ваш расчёт готов',quoteId:'Q-182',leadId:'L-42'};
+  const delivered=await deliverSaleNotifications([message],s);
+  assert.equal(delivered[0].ok,true);
+  assert.equal(s.requests.length,2);
+  assert.ok(s.requests[0].body.has('keyboard'));
+  assert.equal(s.requests[1].body.has('keyboard'),false);
+  assert.equal(s.requests[0].body.get('random_id'),s.requests[1].body.get('random_id'));
+  assert.match(s.requests[1].body.get('message'),/ваш расчёт готов/);
+  assert.match(s.requests[1].body.get('message'),/https:\/\/awgcars\.ru\//);
+  assert.equal(s.marks.length,1);
+  assert.equal(s.marks[0].messageId,'20261023');
+});
+
 test('VK permission denial is permanent and is not retried as a keyboard failure',async()=>{
   const s=services({responses:[{error:{error_code:901,error_msg:'Messages are not allowed'}}]});
   const result=await deliverSaleNotifications([{id:'denied',channel:'vk',vkUserId:'42',message:'Заказ',orderId:'O-1'}],s);
