@@ -1,3 +1,4 @@
+import {v2Quote,quoteV2Errors} from '../public/auto-sale-quote-v2.mjs';
 import {quoteAuditErrors} from '../public/auto-sale-quote-audit.mjs';
 import {AWG_GEORGIA_TARIFF_VERSION,georgiaQuoteErrors} from '../public/auto-sale-georgia-quote.mjs';
 export const LEAD_STATUSES=['Новый','В работе','Расчёт','Ожидает клиента','Сделка','Отказ'];
@@ -76,11 +77,11 @@ export function validateQuote(quote){
   if(!text(quote.model))errors.push('model_required');
   if(!QUOTE_STATUSES.includes(status))errors.push('invalid_quote_status');
   if(status!=='Черновик'){
-    for(const key of ['lot','service'])if(num(quote[key])<=0)errors.push(`${key}_positive_required`);
+    for(const key of (v2Quote(quote)?['lot']:['lot','service']))if(num(quote[key])<=0)errors.push(`${key}_positive_required`);
     for(const key of ['auction','inland','ocean','customs','repair','georgiaDelivery','legalization','recyclingFee','cryptoFee','partsCost'])if(num(quote[key])<0)errors.push(`${key}_nonnegative_required`);
     if(num(quote.total)<=0)errors.push('positive_total_required');
     if(num(quote.total)!==quoteSum(quote))errors.push('quote_total_mismatch');
-    if(!text(quote.validUntil)&&quote.tariffVersion!==AWG_GEORGIA_TARIFF_VERSION)errors.push('valid_until_required');
+    if(!v2Quote(quote)&&!text(quote.validUntil)&&quote.tariffVersion!==AWG_GEORGIA_TARIFF_VERSION)errors.push('valid_until_required');
     if(quote.tariffVersion==='2026-10-20'){
       if(!['under3','3to5'].includes(quote.ageCategory))errors.push('age_category_required');
       if(!quote.customsConfirmed)errors.push('customs_unconfirmed');
@@ -91,7 +92,7 @@ export function validateQuote(quote){
       if(num(quote.service)!==500||packageUsd!==(quote.origin==='США'&&quote.ageCategory==='under3'?6500:5000))errors.push('legalization_package_mismatch');
     }
   }
-  return [...new Set([...errors,...quoteAuditErrors(quote),...georgiaQuoteErrors(quote)])];
+  return [...new Set([...errors,...quoteAuditErrors(quote),...georgiaQuoteErrors(quote),...quoteV2Errors(quote)])];
 }
 
 export function validateOrder(order,previousStage=''){

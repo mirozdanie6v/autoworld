@@ -2,7 +2,7 @@ const money=value=>'$'+new Intl.NumberFormat('en-US',{maximumFractionDigits:0}).
 const rubMoney=value=>new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(Number(value)||0)+' ₽';
 const detailDeliveryHint=car=>{const v=String(car?.delivery||'').trim();return !v||v==='Срок по запросу'?(car?.origin==='США'?'2,5–3,5 месяца':'5–10 дней'):v};
 const detailPrice=car=>Number(car?.price)>0?`от ${money(car.price)}`:Number(car?.priceRub)>0?rubMoney(car.priceRub):Number(car?.estimatedBidUsd)>0?`ставка ≈ ${money(car.estimatedBidUsd)}`:'по расчёту';
-const detailOldPriceRub=car=>{const before=Number(car?.priceBeforeDiscountRub)||0,current=Number(car?.priceRub)||0;return before>current&&current>0?before:0};
+const detailOldPriceRub=car=>{const before=Number(car?.priceBeforeDiscountRub)||0,current=Number(car?.priceRub)||0;return car?.discountExplicit===true&&before>current&&current>0?before:0};
 const detailPriceHtml=car=>{const old=detailOldPriceRub(car);return `${old?`<s class="auto-detail-price-old">${rubMoney(old)}</s>`:''}<strong class="auto-detail-price-current">${detailPrice(car)}</strong>${old?'<span class="auto-detail-price-label">цена со скидкой</span>':''}`};
 const auctionDateText=car=>String(car?.auctionDate||'').trim()||'уточняется';
 const auctionDateTime=value=>{const raw=String(value||'').trim();if(!raw)return null;const m=raw.match(/^(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{4})$/);if(m){const t=Date.UTC(Number(m[3]),Number(m[2])-1,Number(m[1]));return Number.isNaN(t)?null:t}const t=Date.parse(raw);return Number.isNaN(t)?null:t};

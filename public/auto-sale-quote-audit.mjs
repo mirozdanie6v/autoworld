@@ -1,3 +1,4 @@
+import {v2Quote,quoteV2Rows} from './auto-sale-quote-v2.mjs';
 import {AWG_GEORGIA_TARIFF_VERSION} from './auto-sale-georgia-quote.mjs';
 export const TKS_CALCULATOR_URL='https://www.tks.ru/auto/calc/';
 export const QUOTE_AUDIT_SCHEMA='awg-quote-audit-2026-10';
@@ -5,6 +6,7 @@ const amount=x=>Number(x)||0;
 export function defaultRepairCountry(origin,age){return origin==='США'&&age==='3to5'?'Грузия':'Россия'}
 export function defaultPartsCountry(origin,age){return origin==='США'&&age==='under3'?'Грузия':'По согласованию'}
 export function quoteCostRows(q={}){
+  if(v2Quote(q))return quoteV2Rows(q);
  if(q.origin==='Грузия'&&q.tariffVersion===AWG_GEORGIA_TARIFF_VERSION){
    const rub = x => new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(Number(x)||0)+' ₽';
    return [
@@ -30,6 +32,7 @@ export function ageCategoryForYear(year,asOf){const y=Number(year);if(!Number.is
 export function tksParameters(q={}){return {cost:Math.round(Math.max(0,Number(q.invoiceUsd||q.lot)||0)),volume:Math.round(Math.max(0,Number(q.engineCc)||0)),currency:840,power:Math.round(Math.max(0,Number(q.powerHp)||0)),power_edizm:'ls',engine_type:q.engineType||'petrol',age:q.ageCategory==='under3'?3:q.ageCategory==='3to5'?35:57,face:q.importerType||'nat',ts_type:'00_8703'}}
 
 export function quoteAuditErrors(q={}){
+ if(v2Quote(q))return [];
  if(q.quoteSchema!==QUOTE_AUDIT_SCHEMA||q.status==='Черновик')return [];
  const err=[],positive=x=>Number(x)>0,field=x=>String(x??'').trim();
  if(!['under3','3to5'].includes(q.ageCategory))err.push('Уточните возраст автомобиля для выбранного тарифа.');

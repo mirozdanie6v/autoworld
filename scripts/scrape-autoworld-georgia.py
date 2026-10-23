@@ -113,27 +113,102 @@ def num_value(value):
     except Exception:
         return None
 
+def price_amount_rub(value):
+    """Return explicit ruble amounts; never treat model years or engine litres as prices."""
+    value = str(value or "").replace("\u00a0", " ").strip()
+    m = re.search(r"(\d+(?:[.,]\d+)?)\s*(?:млн|миллион)", value, re.I)
+    if m:
+        return round(float(m.group(1).replace(",", ".")) * 1_000_000)
+    m = re.search(r"(\d+(?:[.,]\d+)?)\s*(?:тыс|тысяч)", value, re.I)
+    if m:
+        return round(float(m.group(1).replace(",", ".")) * 1_000)
+    m = re.search(r"(?<!\d)(\d{1,3}(?:[ \u00a0]\d{3})+|\d{6,9})\s*(?:₽|руб)", value, re.I)
+    if m:
+        return int(re.sub(r"\D", "", m.group(1)))
+    return None
+
+
+def parse_russia_turnkey_rub(text):
+    """Handle Telegram line wraps after 'price in Russia (with repair)'."""
+    lines = [line.strip() for line in str(text or "").splitlines() if line.strip()]
+    for index, line in enumerate(lines):
+        if re.search(r"цена\s+в\s+россии\s*\(\s*с\s+ремонтом\s*\)", line, re.I):
+            price = price_amount_rub(line)
+            if price:
+                return price
+            # One following token can be a wrench; skip it, not another labeled article.
+            for following in lines[index + 1:index + 3]:
+                if re.search(r"(?:таможня|утилизац|двигатель|пробег|год|торги|доставк)", following, re.I):
+                    break
+                price = price_amount_rub(following)
+                if price:
+                    return price
+    return None
+
+
 def parse_rub(text, label):
     if label == "price":
-        patterns = [
-            r"Цена[^\n]{0,80}?([0-9]+(?:[.,][0-9]+)?)\s*млн",
-            r"([0-9]+(?:[.,][0-9]+)?)\s*млн\.?\s*руб",
-        ]
-        for p in patterns:
-            m = re.search(p, text, re.I | re.S)
-            if m:
-                return int(float(m.group(1).replace(",", ".")) * 1_000_000)
-    else:
-        patterns = [
-            r"таможенн[^\n]{0,90}?([0-9]+(?:[.,][0-9]+)?)\s*тыс",
-            r"таможенн[^\n]{0,90}?([0-9]+(?:[.,][0-9]+)?)\s*млн",
-        ]
-        for i, p in enumerate(patterns):
-            m = re.search(p, text, re.I | re.S)
-            if m:
-                v = float(m.group(1).replace(",", "."))
-                return int(v * (1_000 if i == 0 else 1_000_000))
+        # Select only the primary listing price, never the lower 'price in Russia' row.
+        for line in str(text or "").splitlines():
+            if re.search(r"цена\s+в\s+россии", line, re.I):
+                continue
+            if re.search(r"(?:цена|стоимость\s+автомобиля)", line, re.I):
+                price = price_amount_rub(line)
+                if price:
+                    return price
+        for line in str(text or "").splitlines():
+            if re.search(r"цена\s+в\s+россии|таможн|утиль|ремонт|доставк", line, re.I):
+                continue
+            price = price_amount_rub(line)
+            if price:
+                return price
+        return None
+    patterns = [
+        r"таможенн[^\n]{0,90}?([0-9]+(?:[.,][0-9]+)?)\s*тыс",
+        r"таможенн[^\n]{0,90}?([0-9]+(?:[.,][0-9]+)?)\s*млн",
+    ]
+    for i, p in enumerate(patterns):
+        m = re.search(p, text, re.I | re.S)
+        if m:
+            v = float(m.group(1).replace(",", "."))
+            return int(v * (1_000 if i == 0 else 1_000_000))
     return None
+
+
+def parse_customs_and_recycling_rub(text):
+    """Prefer a combined declared source amount; otherwise sum distinct explicit line items."""
+    lines = [line.strip() for line in str(text or "").splitlines() if line.strip()]
+    def from_label(label):
+        for i, line in enumerate(lines):
+            if not re.search(label, line, re.I):
+                continue
+            price = price_amount_rub(line)
+            if price:
+                return price
+            if i + 1 < len(lines) and not re.search(r"[А-Яа-яA-Za-z]{3,}", lines[i + 1]):
+                return price_amount_rub(lines[i + 1])
+        return None
+    combined = from_label(r"таможн\w*\s*\+\s*(?:утиль|утилиз)")
+    if combined:
+        return combined
+    customs = from_label(r"таможенн\w*|таможня|пошлин\w*")
+    recycling = from_label(r"утильсбор|утилизационн\w*\s+сбор")
+    return customs + recycling if customs is not None and recycling is not None else None
+
+
+def parse_engine_cc(text):
+    # A nominal '2.0' engine designation does not prove exact cubic centimetres.
+    m = re.search(r"(?<!\d)([1-9]\d{2,4})\s*(?:см\s*[³3]|cm\s*[³3]|cc|куб\.?\s*см)\b", str(text or ""), re.I)
+    return int(m.group(1)) if m else None
+
+
+def parse_power_metric_hp(text):
+    m = re.search(r"(?<!\d)(\d{2,4}(?:[.,]\d+)?)\s*(л\.?\s*с\.?|PS|metric\s*hp|HP)(?![A-Za-zА-Яа-я])", str(text or ""), re.I)
+    if not m:
+        return None
+    power = float(m.group(1).replace(",", "."))
+    # Mechanical hp differs from the Russian metric л.с. / PS.
+    return round(power * 1.013869665, 2) if m.group(2).upper() == "HP" else power
 
 KEYCAP_PRICE_RE = re.compile(
     r"([0-9])️⃣\s*\n\s*🤩\s*\n\s*([0-9])️⃣\s*\n\s*([0-9])️⃣\s*\n\s*🔤\s*\n\s*🔤\s*\n\s*🔤",
@@ -157,14 +232,14 @@ def parse_discount_rub(text):
     return None
 
 def parse_price_pair(text):
-    visible = parse_rub(text, "price")
-    promo = parse_discount_rub(text)
-    before = None
-    current = promo or visible
-    if visible and promo and visible > promo:
-        before = visible
-        current = promo
-    return before, current, promo
+    primary = parse_rub(text, "price")
+    emoji_price = parse_discount_rub(text)
+    explicit = bool(re.search(r"скидк|цен[аыу]\s+сниж|цен[аыу]\s+со\s+скидк|акци[яию]", str(text or ""), re.I))
+    russia_price = parse_russia_turnkey_rub(text)
+    if primary and emoji_price and explicit and primary > emoji_price:
+        return primary, emoji_price, emoji_price
+    # Without an explicit promotion, a second number must never be a strike-through.
+    return None, primary or emoji_price or russia_price, None
 
 def parse_title(text):
     lines = [x.strip(" -*•🌟✨") for x in text.splitlines() if x.strip()]
@@ -229,6 +304,8 @@ def parse_car(post_id, source_url, text, photos, published_at, emoji_ids=None):
 
     detected_origin, origin_detection = origin_from_custom_emoji(emoji_ids or [])
     price_before_discount, price_current, price_after_discount = parse_price_pair(text)
+    russia_turnkey = parse_russia_turnkey_rub(text)
+    delivery_difference = (russia_turnkey - price_current) if russia_turnkey and price_current and russia_turnkey >= price_current and not price_before_discount else None
     return {
         "source": "AutoWorld_Georgia",
         "sourcePostId": str(post_id),
@@ -245,7 +322,8 @@ def parse_car(post_id, source_url, text, photos, published_at, emoji_ids=None):
         "trim": first_match([r"комплектация\s*[:\-]?\s*([^\n]+)"], text),
         "mileage": first_match([r"Пробег\s*[:\-]?\s*([^\n]+)"], text),
         "engine": first_match([r"Двигатель\s*[:\-]?\s*([^\n]+)"], text),
-        "powerHp": num_value(first_match([r"(\d+(?:[.,]\d+)?)\s*(?:HP|л\.?с\.?)"], text)),
+        "powerHp": parse_power_metric_hp(text),
+        "engineCc": parse_engine_cc(text),
         "consumption": first_match([r"Расход\s*[:\-]?\s*([^\n]+)"], text),
         "transmission": first_match([r"Коробка\s*[:\-]?\s*([^\n]+)"], text),
         "drive": first_match([r"Привод\s*[:\-]?\s*([^\n]+)"], text),
@@ -258,7 +336,11 @@ def parse_car(post_id, source_url, text, photos, published_at, emoji_ids=None):
         "priceBeforeDiscountRub": price_before_discount,
         "priceAfterDiscountRub": price_after_discount,
         "priceRub": price_current,
+        "discountExplicit": bool(price_before_discount),
+        "russiaTurnkeyRub": russia_turnkey,
+        "turnkeyDeliveryRub": delivery_difference,
         "customsRub": parse_rub(text, "customs"),
+        "customsAndRecyclingRub": parse_customs_and_recycling_rub(text),
         "lot": lot,
         "calculationDate": calc_date,
         "sourcePhotos": photos,
@@ -454,7 +536,7 @@ def write_outputs(cars, pages, uploaded_count, reused_count, recovered_cars, fai
     fields = [
         "sourcePostId","sourceUrl","publishedAt","origin","brand","model","year","trim","mileage","engine","powerHp",
         "consumption","transmission","drive","safety","interior","damage","vin","auctionDate","estimatedBidUsd",
-        "priceBeforeDiscountRub","priceAfterDiscountRub","priceRub","customsRub","lot","calculationDate","photos","rawText"
+        "priceBeforeDiscountRub","priceAfterDiscountRub","priceRub","discountExplicit","russiaTurnkeyRub","turnkeyDeliveryRub","engineCc","customsRub","customsAndRecyclingRub","lot","calculationDate","photos","rawText"
     ]
     with (OUT_DIR / "cars.csv").open("w", encoding="utf-8-sig", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=fields, extrasaction="ignore")

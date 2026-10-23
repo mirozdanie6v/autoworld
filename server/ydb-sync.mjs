@@ -1,4 +1,5 @@
 import {leadTransitionAllowed,quoteTransitionAllowed,validateLead,validateOrder,validateQuote,validateVehicleVerification} from './auto-sale-rules.mjs';
+import {v2Quote} from '../public/auto-sale-quote-v2.mjs';
 
 const arr=v=>Array.isArray(v)?v.filter(x=>x&&typeof x==='object'):[];
 const text=v=>String(v??'').trim();
@@ -7,6 +8,19 @@ const same=(a,b)=>String(a??'')===String(b??'');
 const sameJson=(a,b)=>JSON.stringify(a??null)===JSON.stringify(b??null);
 const latestQuote=(quotes,leadId)=>quotes.filter(q=>text(q.leadId)===leadId).sort((a,b)=>num(b.version)-num(a.version))[0];
 const bad=(error,data={})=>({status:400,data:{error,...data}});
+const VII180_IMMUTABLE_FIELDS=[
+  'leadId','model','origin','tariffVersion','quoteSchema','transportMode','ageCategory',
+  'lot','turnkeyDeliveryUsd','auction','inland','ocean','repair','partsCost',
+  'customs','recyclingFee','service','legalization','georgiaDelivery','cryptoFee','total',
+  'customsAndRecyclingRub','cbrRubRate','usdRubRate','exchangeRateDate','exchangeRateSource',
+  'internationalTransferPercent','manufactureDate','engineCc','powerHp','powerInput','powerUnit',
+  'engineType','importerType','catalogSourceId','catalogVin','catalogYear','catalogEngine',
+  'catalogMileage','sourcePriceRub','sourceTurnkeyDeliveryRub',
+  'customsRub','recyclingRub','customsSource','customsCheckedAt','customsConfirmed',
+  'recyclingConfirmed','cryptoBaseConfirmed','repairReviewed','repairCountry','partsCountry',
+  'invoiceUsd','priceSource','vehicleSourceUrl','publicComment','comment','validUntil','version'
+];
+
 const photoList=v=>Array.isArray(v)?v.filter(Boolean):[];
 const validPhoto=value=>{
   const src=text(value);
@@ -64,9 +78,18 @@ export async function syncYdbState(store,input,{includePrevious=false,prepareNot
   }
 
   for(const quote of quotes){
+    const before=previousQuotes.get(text(quote.id));
+    // VII-180 must reject every change to an approved financial breakdown before
+    // ordinary schema validation, including attempts that would break the schema.
+    // Status/clientDecision remain handled by transition and access rules.
+    if(initialized&&before&&v2Quote(before)&&['Согласован','Отказ'].includes(text(before.status))){
+      for(const key of VII180_IMMUTABLE_FIELDS){
+        if(!same(before[key],quote[key]))return bad('locked_quote_changed',{id:quote.id,field:key});
+      }
+      if(!sameJson(before.verification,quote.verification))return bad('locked_quote_changed',{id:quote.id,field:'verification'});
+    }
     const errors=validateQuote(quote);
     if(errors.length)return bad('invalid_quote',{id:quote.id,details:errors});
-    const before=previousQuotes.get(text(quote.id));
     if(initialized&&before){
       if(!same(before.leadId,quote.leadId))return bad('quote_lead_locked',{id:quote.id});
       if(!quoteTransitionAllowed(text(before.status),text(quote.status))){

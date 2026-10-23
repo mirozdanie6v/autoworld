@@ -252,7 +252,7 @@ test('client catalog shows crossed source price and current discounted price',as
   const discounted=[{
     id:'AWG-3990',brand:'Nissan',model:'Kicks',year:2023,origin:'Грузия',
     mileage:'59 000 км',engine:'1.6L',drive:'FWD',auction:'AutoWorld Georgia',
-    price:0,priceBeforeDiscountRub:1870000,priceAfterDiscountRub:1720000,priceRub:1720000,
+    price:0,priceBeforeDiscountRub:1870000,priceAfterDiscountRub:1720000,priceRub:1720000,discountExplicit:true,
     delivery:'Срок по запросу',tag:'SV',image:'https://example.com/kicks.jpg',
     interiorPhotos:[],otherPhotos:[],active:true,source:'AutoWorld_Georgia'
   }];
@@ -273,7 +273,7 @@ test('manager can edit before and after discount prices',async()=>{
   const discounted=[{
     id:'AWG-3990',brand:'Nissan',model:'Kicks',year:2023,origin:'Грузия',
     mileage:'59 000 км',engine:'1.6L',drive:'FWD',auction:'AutoWorld Georgia',
-    price:0,priceBeforeDiscountRub:1870000,priceAfterDiscountRub:1720000,priceRub:1720000,
+    price:0,priceBeforeDiscountRub:1870000,priceAfterDiscountRub:1720000,priceRub:1720000,discountExplicit:true,
     delivery:'Срок по запросу',tag:'SV',image:'https://example.com/kicks.jpg',
     interiorPhotos:[],otherPhotos:[],active:true,source:'AutoWorld_Georgia'
   }];

@@ -6,7 +6,7 @@ import {catalogVehicleSnapshot,catalogLeadSpecsText,renderCatalogLeadVehicle} fr
 const car={
   id:'CAR-AUDIT-2026',brand:'Toyota',model:'RAV4',origin:'Грузия',
   year:2024,mileage:'42 500 км',engine:'2.5 Hybrid',drive:'4WD',
-  price:18500,priceRub:2570000,priceBeforeDiscountRub:2670000,
+  price:18500,priceRub:2570000,priceBeforeDiscountRub:2670000,discountExplicit:true,
   auction:'',auctionDate:'',delivery:'5–10 дней',tag:'В наличии',
   image:'https://example.com/car.jpg',interiorPhotos:['https://example.com/interior.jpg'],
   otherPhotos:[],active:true

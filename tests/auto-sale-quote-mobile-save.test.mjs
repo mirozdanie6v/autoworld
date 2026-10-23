@@ -46,7 +46,7 @@ test('draft quote saves on mobile-style form with exactly one serialized lead fi
   assert.equal(new dom.window.FormData(form).get('leadId'),expectedLead);
   assert.equal(form.querySelectorAll('input[type="hidden"][name="leadId"]').length,0);
 
-  form.querySelector('[name="service"]').value='1600';
+  form.querySelector('[name="lot"]').value='1600';
   form.querySelector('button[type="submit"]').click();
   await tick();
 
@@ -54,7 +54,7 @@ test('draft quote saves on mobile-style form with exactly one serialized lead fi
   assert.equal(rows.length,before+1);
   const saved=rows.at(-1);
   assert.equal(saved.status,'Черновик');
-  assert.equal(saved.total,1600);
+  assert.equal(saved.total,1656); // the 3.5% international transfer is included
   assert.equal(saved.leadId,expectedLead);
   assert.equal(root.querySelector('#quoteForm'),null);
   assert.match(root.textContent,/Калькуляции клиентам/i);
