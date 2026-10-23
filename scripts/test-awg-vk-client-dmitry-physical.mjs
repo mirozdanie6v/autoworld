@@ -10,8 +10,10 @@ const vkAppSecret=String(process.env.AUTO_SALE_VK_APP_SECRET||'');
 const relaySecret=String(process.env.AUTOWORLD_RELAY_SECRET||'');
 const relayUrl=String(process.env.AUTO_SALE_TELEGRAM_RELAY_URL||'');
 const database=String(process.env.YDB_CONNECTION_STRING||'');
-assert.equal(process.env.AWG_PHYSICAL_TEST_GUARD,'VK26443041_TO_TG_DMITRY_SINGLE_TEST_20261015');
+assert.equal(process.env.AWG_PHYSICAL_TEST_GUARD,'AWG_VII182_VK_TO_DMITRY_20261023');
 assert.ok(database.endsWith('/etn00ojk5iv1u7dgpdar'),'production YDB guard');
+assert.equal(process.env.GITHUB_RUN_ATTEMPT,'1','physical smoke cannot replay');
+assert.match(String(process.env.GITHUB_RUN_ID||''),/^\d+$/,'GitHub one-time run id required');
 assert.equal(relayUrl,'https://integration-telegram.viiversion.com/telegram/send');
 assert.ok(token.length>30,'telegram_bot_token_missing_or_short');
 assert.ok(vkToken.length>30,'vk_community_token_missing_or_short');
@@ -65,9 +67,9 @@ assert.ok((state.team||[]).some(m=>m.name==='Дмитрий'&&m.active!==false),
 const vkService=createVkService({enabled:'true',appId:'54810434',appSecret:vkAppSecret,
   groupId:'242103542',communityToken:vkToken});
 const tgService=createTelegramService({token,relayUrl,relaySecret,managerChatIds:''});
-const reference='AWG-VK-DMITRY-SMOKE-20261015';
-const vkMessage='AUTO МИР · ТЕСТ СВЯЗИ\n\nПроверяем получение уведомлений в VK по существующей заявке. Это технический тест: статус и данные заявки не изменены. Отвечать не требуется.';
-const tgMessage='AUTO МИР · ТЕСТ СВЯЗИ\n\nПроверяем доставку сообщений менеджеру Дмитрию в Telegram для клиента из VK. Это технический тест: статус и данные заявки не изменены. Отвечать не требуется.';
+const reference='AWG-VK-DMITRY-SMOKE-VII182-'+process.env.GITHUB_RUN_ID;
+const vkMessage='AUTO МИР · ТЕСТ VII-182\n\nПроверяем доставку уведомлений сообщества VK. Новая заявка не создаётся, статусы и данные не меняются. Отвечать не требуется.';
+const tgMessage='AUTO МИР · ТЕСТ VII-182\n\nПроверяем доставку сообщения менеджеру Дмитрию для клиента VK flyer_flyer. Новая заявка не создаётся, статусы не меняются. Отвечать не требуется.';
 let vkResult={ok:false},telegramResult={ok:false};
 try{
   const sent=await vkService.send('26443041',vkMessage,{idempotencyKey:reference+':vk:client'});
