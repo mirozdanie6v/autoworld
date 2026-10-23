@@ -9,6 +9,7 @@ import {
 import {validateQuote as serverValidate} from '../server/auto-sale-rules.mjs';
 import {validateQuote as clientValidate} from '../public/auto-sale-business-rules.mjs';
 import {calculateQuote} from '../public/auto-sale-core.mjs';
+import {syncYdbState} from '../server/ydb-sync.mjs';
 import {catalogVehicleSnapshot,renderCatalogLeadVehicle} from '../public/auto-sale-catalog-lead.mjs';
 import {catalogCustomsFacts} from '../public/auto-sale-catalog-customs.mjs';
 
@@ -92,4 +93,32 @@ test('Russia-repair price difference converts to a separate USD delivery estimat
  assert.equal(quoteV2RubToUsd(withRepairRub-originalRub,baseRate),6730.77);
  assert.equal(quoteV2RubToUsd(0,baseRate),0);
  assert.equal(quoteV2RubToUsd(700000,0),0);
+});
+
+test('approved/declined VII-180 quote rejects every financial or evidence tamper BEFORE generic validation',async()=>{
+  for(const origin of ['Грузия','США']){
+    for(const status of ['Согласован','Отказ']){
+      const old={...sample(origin),id:'Q-LOCK-180',version:1,status,
+        verification:{lotNumber:'1234'},publicComment:'Approved terms',
+        sourcePriceRub:1600000,sourceTurnkeyDeliveryRub:700000};
+      const attempts=[
+        {exchangeRateSource:'bank'},
+        {lot:15100,turnkeyDeliveryUsd:1900},
+        {customsAndRecyclingRub:600000},
+        {cbrRubRate:101,usdRubRate:105.04},
+        {sourcePriceRub:1800000},
+        {publicComment:'Different terms'},
+        {verification:{lotNumber:'5678'}}
+      ];
+      for(const fields of attempts){
+        const previous={initialized:true,revision:3,leads:[],quotes:[old],orders:[],team:[],catalog:[],notes:{}};
+        const store={loadState:async()=>previous,replaceState:async()=>{throw Error('locked quote must not write')}};
+        const attempted={...old,...fields};
+        const result=await syncYdbState(store,{...previous,quotes:[attempted],baseRevision:3});
+        assert.equal(result.status,400);
+        assert.equal(result.data.error,'locked_quote_changed',
+          'tampering '+Object.keys(fields).join(',')+' must be detected for '+origin+'/'+status);
+      }
+    }
+  }
 });
