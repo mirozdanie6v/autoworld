@@ -26,7 +26,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: ab22140d89214f12ff981a30674a53f22e948904
+          ref: 4268cc73fb1790836ab76d7b16446601752078bc
           persist-credentials: false
       - uses: actions/setup-node@v5
         with:
@@ -38,7 +38,7 @@ jobs:
           set -euo pipefail
           test "$YDB_CONNECTION_STRING" = 'grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1ggsmuiq7tb2d27f89q/etnhujtu1t6f89tdtohs'
           test -n "$YC_STAGING_VERIFY_SA_ID" || { echo '::error::Dedicated staging-only service account AWG_YC_STAGING_VERIFY_SA_ID is not configured'; exit 1; }
-          test "$(git rev-parse HEAD)" = 'ab22140d89214f12ff981a30674a53f22e948904'
+          test "$(git rev-parse HEAD)" = '4268cc73fb1790836ab76d7b16446601752078bc'
           npm ci
           node --check scripts/test-awg-vii180-staging-quote.mjs
       - uses: actions/github-script@v7
