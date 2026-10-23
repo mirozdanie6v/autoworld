@@ -16,6 +16,14 @@ try{
   await badge.waitFor({state:'visible',timeout:25000});
   await page.locator('[data-vk-status="out"]').waitFor({timeout:20000});
   assert.equal(await badge.locator('[data-vk-status-caption]').innerText(),'Войти');
+  // Appearance and final positioning are separate from mere DOM visibility;
+  // wait for the actual responsive layout instead of racing delayed CSS.
+  await page.waitForFunction(()=>{
+    const element=document.querySelector('[data-vk-status-widget]');
+    if(!element)return false;
+    const rect=element.getBoundingClientRect();
+    return rect.width>20&&rect.width<180&&rect.left>=0&&rect.right<=document.documentElement.clientWidth+2;
+  },null,{timeout:20000});
   const r=await badge.boundingBox();
   const geometry=await page.evaluate(()=>({innerWidth:window.innerWidth,visualWidth:window.visualViewport?.width,
     scrollWidth:document.documentElement.scrollWidth,bodyWidth:document.body.scrollWidth}));
