@@ -83,6 +83,14 @@ jobs:
             count_total:market.data.count??null,
             items:(market.data.items||[]).map(x=>({id:x.id,title:String(x.title||'').slice(0,95)}))
           } : market;
+          const settings = await vk('groups.getSettings',{group_id:gid});
+          const sr = settings.data || {};
+          results.bot_settings = settings.data ? {
+            messages:sr.messages??null,
+            bots_capabilities:sr.bots_capabilities??null,
+            bots_start_button:sr.bots_start_button??null,
+            raw_keys:Object.keys(sr).slice(0,40)
+          } : settings;
           const perms = await vk('groups.getTokenPermissions',{});
           results.permissions = perms.data ? {
             token_api_accepted:true,
