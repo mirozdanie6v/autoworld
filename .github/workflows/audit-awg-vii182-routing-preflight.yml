@@ -117,7 +117,7 @@ jobs:
           import {createTelegramService} from './server/telegram-bot.mjs';
           const client=String(process.env.AUDIT_CLIENT_TELEGRAM_ID||'');
           const manager=String(process.env.AUDIT_MANAGER_TELEGRAM_ID||'');
-          assert.match(client,/^\\d+$/);assert.match(manager,/^\\d+$/);
+          assert.match(client,/^\d+$/);assert.match(manager,/^\d+$/);
           assert.notEqual(client,manager);
           const response=await fetch('https://awgcars.ru/api/auto-sale/state',{
             headers:{'x-auto-sale-key':process.env.AUTO_SALE_API_KEY},
