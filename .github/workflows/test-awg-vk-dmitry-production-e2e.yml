@@ -1,4 +1,4 @@
-name: AWG production VK to Dmitry full delivery E2E (one time)
+name: AWG VII-182 VK lead and quote to Dmitry physical E2E (one time)
 on:
   push:
     branches: [main]
@@ -92,9 +92,9 @@ jobs:
           set -euo pipefail
           test "$GITHUB_RUN_ATTEMPT" = 1
           node --check scripts/test-awg-vk-dmitry-production-e2e.mjs
-      - name: Create single synthetic lead, verify automatic Telegram/VK deliveries, then delete lead
+      - name: Create synthetic VK lead and VII-180 quote, verify exact recipients, then delete both
         env:
-          AWG_E2E_GUARD: VK26443041_DMITRY_TEST_ONLY_20261015
+          AWG_E2E_GUARD: AWG_VII182_REAL_VK_LEAD_DMITRY_20261023
         run: node scripts/test-awg-vk-dmitry-production-e2e.mjs
 
 # Retry 2026-10-15: readiness via live health; prior run failed before any mutation.
