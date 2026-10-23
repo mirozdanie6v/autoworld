@@ -22,6 +22,9 @@ export function catalogVehicleSnapshot(car){
     price:num(car.price),estimatedBidUsd:num(car.estimatedBidUsd),priceRub:num(car.priceRub),
     priceBeforeDiscountRub:num(car.priceBeforeDiscountRub),
     priceAfterDiscountRub:num(car.priceAfterDiscountRub),
+    discountExplicit:car.discountExplicit===true,
+    russiaTurnkeyRub:num(car.russiaTurnkeyRub),turnkeyDeliveryRub:num(car.turnkeyDeliveryRub),
+    turnkeyDeliverySource:str(car.turnkeyDeliverySource),
     interiorPhotos:photoList(car.interiorPhotos),otherPhotos:photoList(car.otherPhotos)
   };
 }
@@ -49,10 +52,14 @@ export function renderCatalogLeadVehicle(lead={}, {escape=String,money=v=>'$'+v,
   const fields=[
     label('Год выпуска',year),label('Пробег автомобиля',mileage),
     label('Двигатель',engine),label('Привод',drive),
+    ...(num(s.engineCc)>0?[label('Объём двигателя, см³',num(s.engineCc))]:[]),
+    ...(num(s.powerHp)>0?[label('Мощность, л.с.',num(s.powerHp))]:[]),
     label('Сценарий покупки',str(s.origin||lead.origin)),
     label('Стоимость из карточки',cost),
     ...(num(s.price)>0&&valueRub?[label('Стоимость в рублях',rubMoney(valueRub))]:[]),
-    ...(originalBefore&&originalBefore>valueRub?[label('До скидки',rubMoney(originalBefore))]:[]),
+    ...(s.discountExplicit===true&&originalBefore&&originalBefore>valueRub?[label('До скидки',rubMoney(originalBefore))]:[]),
+    ...(num(s.russiaTurnkeyRub)>0?[label('Цена в России с ремонтом (источник)',rubMoney(s.russiaTurnkeyRub))]:[]),
+    ...(num(s.turnkeyDeliveryRub)>0?[label('Разница: доставка под ключ (источник)',rubMoney(s.turnkeyDeliveryRub))]:[]),
     ...(str(s.auction)?[label('Аукцион / площадка',s.auction)]:[]),
     ...(str(s.auctionDate)?[label('Дата аукциона',s.auctionDate)]:[]),
     ...(str(s.delivery)?[label('Срок доставки',s.delivery)]:[]),
