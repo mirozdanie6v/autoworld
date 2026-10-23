@@ -1,4 +1,5 @@
 name: Audit production Telegram webhook and start replies (read only)
+# VII-180 read-only release readiness audit: 2026-10-23
 on:
   push:
     branches: [main]
