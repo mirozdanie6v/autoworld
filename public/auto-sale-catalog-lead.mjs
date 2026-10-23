@@ -16,7 +16,7 @@ export function catalogVehicleSnapshot(car){
     lot:str(car.lot),power:str(car.power),engineCc:num(car.engineCc),powerHp:num(car.powerHp),
     engineType:str(car.engineType),manufactureDate:str(car.manufactureDate),seats:str(car.seats),
     efficiency:str(car.efficiency),publishedAt:str(car.publishedAt),
-    calculationDate:str(car.calculationDate),customsRub:num(car.customsRub),
+    calculationDate:str(car.calculationDate),customsRub:num(car.customsRub),customsAndRecyclingRub:num(car.customsAndRecyclingRub),
     highlights:Array.isArray(car.highlights)?car.highlights.filter(x=>typeof x==='string').slice(0,20):[],
     bestFor:str(car.bestFor),
     price:num(car.price),estimatedBidUsd:num(car.estimatedBidUsd),priceRub:num(car.priceRub),
