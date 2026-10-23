@@ -102,10 +102,18 @@ export function createVkService({
       return{response,data};
     }
     let {response,data}=await request();
-    // Some communities do not accept keyboards. Keep the same random_id so
-    // falling back to text cannot produce a second delivery.
-    if(Number(data?.error?.error_code)===911&&body.has('keyboard')){
+    // VK rejects inline open_app keyboards with error 911 (invalid format)
+    // or 912 when the community's Chat Bot feature is disabled.
+    // Reuse EXACTLY the same random_id: a text fallback must never duplicate
+    // an already accepted event. Normal (keyboard) delivery remains preferred.
+    const keyboardError=Number(data?.error?.error_code);
+    if([911,912].includes(keyboardError)&&body.has('keyboard')){
       body.delete('keyboard');
+      if(keyboardError===912){
+        // Without bot features no inline button is possible. Give customers
+        // a working web entry instead of silently losing the notification.
+        body.set('message',text+'\n\nОткрыть AUTO МИР: https://awgcars.ru/');
+      }
       ({response,data}=await request());
     }
     if(!response.ok||data?.error){
