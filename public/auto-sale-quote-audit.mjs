@@ -31,9 +31,8 @@ export function ageCategoryForYear(year,asOf){const y=Number(year);if(!Number.is
 
 export function tksParameters(q={}){return {cost:Math.round(Math.max(0,Number(q.invoiceUsd||q.lot)||0)),volume:Math.round(Math.max(0,Number(q.engineCc)||0)),currency:840,power:Math.round(Math.max(0,Number(q.powerHp)||0)),power_edizm:'ls',engine_type:q.engineType||'petrol',age:q.ageCategory==='under3'?3:q.ageCategory==='3to5'?35:57,face:q.importerType||'nat',ts_type:'00_8703'}}
 
-export function quoteAuditErrors(q={
-  if(v2Quote(q))return [];
-}){
+export function quoteAuditErrors(q={}){
+ if(v2Quote(q))return [];
  if(q.quoteSchema!==QUOTE_AUDIT_SCHEMA||q.status==='Черновик')return [];
  const err=[],positive=x=>Number(x)>0,field=x=>String(x??'').trim();
  if(!['under3','3to5'].includes(q.ageCategory))err.push('Уточните возраст автомобиля для выбранного тарифа.');
