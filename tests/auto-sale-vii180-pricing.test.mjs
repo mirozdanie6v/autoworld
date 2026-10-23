@@ -4,7 +4,7 @@ import {execFileSync} from 'node:child_process';
 import {
   AWG_QUOTE_V2_SCHEMA,AWG_QUOTE_V2_TARIFF,v2Quote,modesV2,
   quoteV2Amounts,quoteV2Total,quoteV2TotalRub,quoteV2Rate,
-  quoteV2Errors,quoteV2Form,quoteV2Rows
+  quoteV2Errors,quoteV2Form,quoteV2Rows,quoteV2RubToUsd
 } from '../public/auto-sale-quote-v2.mjs';
 import {validateQuote as serverValidate} from '../server/auto-sale-rules.mjs';
 import {validateQuote as clientValidate} from '../public/auto-sale-business-rules.mjs';
@@ -84,4 +84,12 @@ test('snapshot contains numeric engine and source turnkey difference for exact c
 });
 test('catalog scraper Python remains syntactically valid',()=>{
  execFileSync('python3',['-m','py_compile','scripts/scrape-autoworld-georgia.py'],{stdio:'pipe'});
+});
+
+test('Russia-repair price difference converts to a separate USD delivery estimate at the documented rate',()=>{
+ const originalRub=1600000,withRepairRub=2300000,baseRate=100;
+ assert.equal(quoteV2RubToUsd(originalRub,baseRate),15384.62);
+ assert.equal(quoteV2RubToUsd(withRepairRub-originalRub,baseRate),6730.77);
+ assert.equal(quoteV2RubToUsd(0,baseRate),0);
+ assert.equal(quoteV2RubToUsd(700000,0),0);
 });
