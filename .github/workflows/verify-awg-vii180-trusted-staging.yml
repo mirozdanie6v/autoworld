@@ -1,0 +1,83 @@
+name: Verify VII-180 exact candidate on trusted isolated YDB staging
+
+on:
+  push:
+    branches: [feature/vii-179-georgia-quote]
+    paths:
+      - .github/workflows/verify-awg-vii180-trusted-staging.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: awg-vk-staging-ydb-schema
+  cancel-in-progress: false
+
+env:
+  YC_STAGING_VERIFY_SA_ID: aje0hvomk86tu5lbs5rk
+  YDB_CONNECTION_STRING: grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1ggsmuiq7tb2d27f89q/etnhujtu1t6f89tdtohs
+
+jobs:
+  verify-staging:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ab22140d89214f12ff981a30674a53f22e948904
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Verify staging-only target and install dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$YDB_CONNECTION_STRING" = 'grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1ggsmuiq7tb2d27f89q/etnhujtu1t6f89tdtohs'
+          test -n "$YC_STAGING_VERIFY_SA_ID" || { echo '::error::Dedicated staging-only service account AWG_YC_STAGING_VERIFY_SA_ID is not configured'; exit 1; }
+          test "$(git rev-parse HEAD)" = 'ab22140d89214f12ff981a30674a53f22e948904'
+          npm ci
+          node --check scripts/test-awg-vii180-staging-quote.mjs
+      - uses: actions/github-script@v7
+        name: Obtain ephemeral GitHub OIDC identity
+        id: oidc
+        with:
+          script: |
+            const token = await core.getIDToken('https://github.com/mirozdanie6v')
+            core.setSecret(token)
+            core.setOutput('token', token)
+      - name: Exchange ephemeral identity for staging YDB access only
+        shell: bash
+        env:
+          GITHUB_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        run: |
+          set -euo pipefail
+          node -e 'const p=JSON.parse(Buffer.from(process.env.GITHUB_OIDC_TOKEN.split(".")[1],"base64url")); console.log("Verified non-secret GitHub OIDC claims:",JSON.stringify({iss:p.iss,aud:p.aud,sub:p.sub,repository:p.repository,ref:p.ref}));'
+          RESPONSE=$(curl -sS --connect-timeout 10 --max-time 30 -w '\n%{http_code}' \
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            --data-urlencode 'grant_type=urn:ietf:params:oauth:grant-type:token-exchange' \
+            --data-urlencode 'requested_token_type=urn:ietf:params:oauth:token-type:access_token' \
+            --data-urlencode "audience=$YC_STAGING_VERIFY_SA_ID" \
+            --data-urlencode "subject_token=$GITHUB_OIDC_TOKEN" \
+            --data-urlencode 'subject_token_type=urn:ietf:params:oauth:token-type:id_token' \
+            https://auth.yandex.cloud/oauth/token)
+          CODE=$(printf '%s' "$RESPONSE" | tail -n1)
+          if [ "$CODE" != 200 ]; then
+            printf '%s' "$RESPONSE" | sed '$d' | jq -r '{error: .error, code: .code, description: (.error_description // .message // "" | tostring | .[0:220])}' 2>/dev/null || true
+            echo "::error::OIDC exchange denied HTTP $CODE"
+            exit 1
+          fi
+          TOKEN=$(printf '%s' "$RESPONSE" | sed '$d' | jq -r '.access_token // empty')
+          test -n "$TOKEN"
+          echo "::add-mask::$TOKEN"
+          echo "YDB_ACCESS_TOKEN_CREDENTIALS=$TOKEN" >> "$GITHUB_ENV"
+      - name: Publish, approve and clean a synthetic VII-180 quote on staging only
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$YDB_CONNECTION_STRING" = 'grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1ggsmuiq7tb2d27f89q/etnhujtu1t6f89tdtohs'
+          node scripts/test-awg-vii180-staging-quote.mjs
+          echo 'VII-180 exact candidate: isolated staging YDB persistence, VK identity, approval, price lock, planned notifications, and cleanup PASS. Real Telegram/VK notifications not sent. Production untouched.' >> "$GITHUB_STEP_SUMMARY"
