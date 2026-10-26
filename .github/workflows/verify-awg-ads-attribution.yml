@@ -8,10 +8,12 @@ on:
       - server/ads-attribution-ydb.mjs
       - server/ads-attribution-report.mjs
       - server/ads-attribution-privacy.mjs
+      - server/ads-attribution-maintenance.mjs
       - tests/ads-attribution.test.mjs
       - tests/ads-attribution-report.test.mjs
       - tests/ads-attribution-ydb-adapter.test.mjs
       - tests/ads-attribution-privacy.test.mjs
+      - tests/ads-attribution-maintenance.test.mjs
       - scripts/test-awg-ads-local-ydb.mjs
       - .github/workflows/verify-awg-ads-local-ydb.yml
       - .github/workflows/verify-awg-ads-ydb-restart.yml
@@ -42,7 +44,7 @@ jobs:
           while IFS= read -r path; do
             [ -n "$path" ] || continue
             case "$path" in
-              server/ads-attribution-core.mjs|server/ads-attribution-ydb.mjs|server/ads-attribution-report.mjs|server/ads-attribution-privacy.mjs|tests/ads-attribution.test.mjs|tests/ads-attribution-report.test.mjs|tests/ads-attribution-ydb-adapter.test.mjs|tests/ads-attribution-privacy.test.mjs|scripts/test-awg-ads-local-ydb.mjs|.github/workflows/verify-awg-ads-local-ydb.yml|.github/workflows/verify-awg-ads-ydb-restart.yml|docs/AWG_ADS_ATTRIBUTION_STAGE_A.md|.github/workflows/verify-awg-ads-attribution.yml) ;;
+              server/ads-attribution-core.mjs|server/ads-attribution-ydb.mjs|server/ads-attribution-report.mjs|server/ads-attribution-privacy.mjs|server/ads-attribution-maintenance.mjs|tests/ads-attribution.test.mjs|tests/ads-attribution-report.test.mjs|tests/ads-attribution-ydb-adapter.test.mjs|tests/ads-attribution-privacy.test.mjs|tests/ads-attribution-maintenance.test.mjs|scripts/test-awg-ads-local-ydb.mjs|.github/workflows/verify-awg-ads-local-ydb.yml|.github/workflows/verify-awg-ads-ydb-restart.yml|docs/AWG_ADS_ATTRIBUTION_STAGE_A.md|.github/workflows/verify-awg-ads-attribution.yml) ;;
               *) echo "::error::Unsafe AWG Ads branch path: $path"; exit 1 ;;
             esac
           done <<< "$changed"
@@ -54,10 +56,12 @@ jobs:
           node --check server/ads-attribution-ydb.mjs
           node --check server/ads-attribution-report.mjs
           node --check server/ads-attribution-privacy.mjs
+          node --check server/ads-attribution-maintenance.mjs
           node --check tests/ads-attribution.test.mjs
           node --check tests/ads-attribution-report.test.mjs
           node --check tests/ads-attribution-ydb-adapter.test.mjs
           node --check tests/ads-attribution-privacy.test.mjs
+          node --check tests/ads-attribution-maintenance.test.mjs
           node --check scripts/test-awg-ads-local-ydb.mjs
       - name: Unit tests without network, secrets or database
         run: node --test tests/ads-attribution*.test.mjs
