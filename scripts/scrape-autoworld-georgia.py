@@ -39,7 +39,24 @@ session = requests.Session()
 session.headers.update({"User-Agent": UA, "Accept-Language": "ru,en;q=0.8"})
 
 VIN_RE = re.compile(r"\b[A-HJ-NPR-Z0-9]{17}\b")
-ALLOW_NO_VIN_POST_IDS = {"3723","3290","3310","3262","3282","3357","3373","3893"}
+MULTI_CAR_RE = re.compile(r"\b(?:несколько|множество|два|три|четыре|пять|2|3|4|5)\s+(?:авто|автомобил\w*|машин\w*)\b|\b(?:подборка|каталог|прайс-лист)\s+(?:авто|автомобил\w*|машин\w*)", re.I)
+
+def is_single_vehicle_candidate(car):
+    raw = str(car.get("rawText") or "")
+    vins = {m.group(0) for m in VIN_RE.finditer(raw.upper())}
+    parsed = str(car.get("vin") or "").strip().upper()
+    if parsed:
+        if not VIN_RE.fullmatch(parsed):
+            return False
+        vins.add(parsed)
+    try:
+        year = int(car.get("year") or 0)
+    except (ValueError, TypeError):
+        year = 0
+    return (len(vins) <= 1 and not MULTI_CAR_RE.search(raw)
+            and str(car.get("sourcePostId") or "").isdigit()
+            and bool(car.get("brand")) and bool(car.get("model"))
+            and 2000 <= year <= 2030)
 MONEY_RE = re.compile(r"([0-9]+(?:[.,][0-9]+)?)")
 
 GEORGIA_MARKER_IDS = [
@@ -475,9 +492,9 @@ def enrich_photos(cars):
     limit = int(os.environ.get("MAX_PHOTOS_PER_CAR", "10"))
     for n, car in enumerate(cars, 1):
         post_id = str(car.get("sourcePostId") or "")
-        if not str(car.get("vin") or "").strip() and post_id not in ALLOW_NO_VIN_POST_IDS:
+        if not is_single_vehicle_candidate(car):
             car["photos"] = []
-            failed.append({"post": post_id, "photo": None, "url": "", "error": "skip_media_invalid_or_missing_vin"})
+            failed.append({"post": post_id, "photo": None, "url": "", "error": "skip_media_ambiguous_or_invalid_vehicle"})
             continue
         old = existing.get(car["sourcePostId"], {})
         old_photo_candidates = old.get("photos", [])
