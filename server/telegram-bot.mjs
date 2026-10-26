@@ -244,9 +244,9 @@ export function createTelegramService({
       const before=prevLeads.get(clean(lead.id));
       if(!before){
         const source=lead.clientCreated?'Новая заявка клиента':'Новый лид';
-        await toManagers(lead,`🚗 AUTO МИР · ${source.toLowerCase()}\n${clean(lead.name)||'Клиент'}\n${leadTitle(lead)}\n\${similarRequestDetails(lead,{manager:true})}\nКонтакт: \${clean(lead.contact)||'—'}`,{event:'lead_created',leadId:lead.id});
+        await toManagers(lead,`🚗 AUTO МИР · ${source.toLowerCase()}\n${clean(lead.name)||'Клиент'}\n${leadTitle(lead)}\n${similarRequestDetails(lead,{manager:true})}\nКонтакт: ${clean(lead.contact)||'—'}`,{event:'lead_created',leadId:lead.id});
         if(lead.clientCreated){
-          await toClient(lead,`🚗 AUTO МИР · заявка принята\n\n${leadTitle(lead)}\n\${similarRequestDetails(lead)}\nСтатус: \${clean(lead.status)||'Новый'}\n\nЗаявка передана менеджеру. Мы сообщим здесь, когда будет готов расчёт, а после оформления заказа — об оплатах и этапах доставки.`,{event:'lead_created_confirmation',leadId:lead.id});
+          await toClient(lead,`🚗 AUTO МИР · заявка принята\n\n${leadTitle(lead)}\n${similarRequestDetails(lead)}\nСтатус: ${clean(lead.status)||'Новый'}\n\nЗаявка передана менеджеру. Мы сообщим здесь, когда будет готов расчёт, а после оформления заказа — об оплатах и этапах доставки.`,{event:'lead_created_confirmation',leadId:lead.id});
         }
       }else if(before&&clean(before.status)!==clean(lead.status)){
         const clientMsg=`🚗 AUTO МИР\n\n${statusClientTitle(lead.status)}\n${leadTitle(lead)}\n\n${clean(lead.status)==='В работе'?'Менеджер уже работает с вашей заявкой. Сообщим, когда расчёт будет готов.':clean(lead.status)==='Ожидает клиента'?'Откройте AUTO МИР: расчёт готов и ждёт вашего решения.':'Следующее важное изменение мы также пришлём сюда.'}`;
@@ -276,8 +276,8 @@ export function createTelegramService({
       const total=num(quote.total)?'\n'+(simpleUs?'Предварительная стоимость автомобиля: ':'Стоимость: ')+(quote.origin==='Грузия'&&quote.tariffVersion===AWG_GEORGIA_TARIFF_VERSION?formatGeorgiaUsd(quote.total):money(quote.total)):'';
       const customs=simpleUs&&num(quote.customsAndRecyclingRub)>0?'\nТаможня + утильсбор РФ (справочно, оплачиваются клиентом): '+new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(num(quote.customsAndRecyclingRub))+' ₽':'';
       const costGuide=simpleUs?'Дополнительные расходы и окончательная договорная цена согласуются с менеджером в личном чате.':'Уточните условия сделки с менеджером.';
-      const clientMsg=`💰 AUTO МИР · расчёт\n\n${clean(quote.model)||leadTitle(lead)}\nСтатус: \${clean(quote.status)}\${total}\${customs}\n\n\${clean(quote.status)==='Отправлен'?'Предварительный расчёт готов. Откройте AUTO МИР, чтобы увидеть основные позиции. '+costGuide:clean(quote.status)==='Согласован'?'Расчёт согласован. Менеджер переходит к оформлению заказа.':'Следующее важное изменение мы также пришлём сюда.'}`;
-      const managerMsg=`💰 AUTO МИР · расчёт\nКлиент: ${clean(lead.name)||'—'}\nАвтомобиль: ${clean(quote.model)||leadTitle(lead)}\nСтатус: \${clean(quote.status)}\${total}`;
+      const clientMsg=`💰 AUTO МИР · расчёт\n\n${clean(quote.model)||leadTitle(lead)}\nСтатус: ${clean(quote.status)}${total}${customs}\n\n${clean(quote.status)==='Отправлен'?'Предварительный расчёт готов. Откройте AUTO МИР, чтобы увидеть основные позиции. '+costGuide:clean(quote.status)==='Согласован'?'Расчёт согласован. Менеджер переходит к оформлению заказа.':'Следующее важное изменение мы также пришлём сюда.'}`;
+      const managerMsg=`💰 AUTO МИР · расчёт\nКлиент: ${clean(lead.name)||'—'}\nАвтомобиль: ${clean(quote.model)||leadTitle(lead)}\nСтатус: ${clean(quote.status)}${total}`;
       await toClient(lead,clientMsg,{event:'quote_status',leadId:lead.id,quoteId:quote.id},'Посмотреть расчёт');
       await toManagers(lead,managerMsg,{event:'quote_status',leadId:lead.id,quoteId:quote.id});
     }
