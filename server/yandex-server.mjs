@@ -833,6 +833,25 @@ const server=http.createServer(async(req,res)=>{
       return;
     }
 
+    if(req.method==='GET'&&url.pathname==='/api/auto-sale/telegram/audit-linked-manager'){
+      // Authorized, read-only audit lookup: identical username+pin resolution
+      // used by the production manager delivery path. Never guess a chat ID.
+      if(!hasApiKey(req)){json(res,{error:'unauthorized'},401);return}
+      if(!telegram.enabled){json(res,{error:'telegram_not_configured'},503);return}
+      const requested=String(url.searchParams.get('name')||'').trim();
+      if(!requested){json(res,{error:'manager_name_required'},400);return}
+      const pins=await invitedAdminPins();
+      const routed=enrichStateWithAdminPins(await (await getDomainStore()).loadState(),pins);
+      const member=(Array.isArray(routed.team)?routed.team:[]).find(item=>
+        item?.active!==false&&String(item?.role||'').trim()==='Менеджер'&&
+        String(item?.name||'').trim()===requested&&
+        /^\d+$/.test(String(item?.telegramUserId||'')));
+      if(!member){json(res,{error:'manager_telegram_not_linked'},409);return}
+      json(res,{ok:true,member:{id:member.id,name:member.name,role:member.role,
+        telegramUsername:memberTelegramUsername(member),telegramUserId:String(member.telegramUserId)}});
+      return;
+    }
+
     if(req.method==='POST'&&url.pathname==='/api/auto-sale/telegram/test-manager-delivery'){
       if(!hasApiKey(req)){json(res,{error:'unauthorized'},401);return}
       if(!telegram.enabled){json(res,{error:'telegram_not_configured'},503);return}
