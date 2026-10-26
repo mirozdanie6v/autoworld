@@ -1,0 +1,59 @@
+name: Verify AWG Ads YDB persistent restart (isolated)
+on:
+  push:
+    branches: [feature/awg-ads-attribution]
+    paths:
+      - scripts/test-awg-ads-local-ydb.mjs
+      - server/ads-attribution-core.mjs
+      - server/ads-attribution-ydb.mjs
+      - server/ads-attribution-privacy.mjs
+      - .github/workflows/verify-awg-ads-ydb-restart.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  persistent-ydb-restart:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 17
+    env:
+      AWG_ADS_LOCAL_YDB_TEST: 'yes'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Locked dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Start real local YDB with a persistent host volume
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/awg-ads-ydb-data" "$RUNNER_TEMP/awg-ads-ydb-certs"
+          docker run -d --rm --name awg-ads-persist-ydb --hostname localhost \
+            --platform linux/amd64 \
+            -p 127.0.0.1:2136:2136 \
+            -v "$RUNNER_TEMP/awg-ads-ydb-data:/ydb_data" \
+            -v "$RUNNER_TEMP/awg-ads-ydb-certs:/ydb_certs" \
+            -e GRPC_PORT=2136 \
+            ydbplatform/local-ydb:latest
+          timeout 200 bash -c 'until (echo > /dev/tcp/127.0.0.1/2136) >/dev/null 2>&1; do sleep 3; done'
+          sleep 10
+      - name: Write test-only campaigns and receipts to local disk-backed YDB
+        run: node scripts/test-awg-ads-local-ydb.mjs run
+      - name: Restart the YDB server container and preserve its mounted disk
+        run: |
+          set -euo pipefail
+          docker restart awg-ads-persist-ydb
+          timeout 200 bash -c 'until (echo > /dev/tcp/127.0.0.1/2136) >/dev/null 2>&1; do sleep 3; done'
+          sleep 10
+      - name: Verify records survive database container restart
+        run: node scripts/test-awg-ads-local-ydb.mjs reconnect
+      - name: Check erasure and retention after database restart
+        run: node scripts/test-awg-ads-local-ydb.mjs privacy
+      - name: Stop persistent local YDB and inspect disk use
+        if: always()
+        run: |
+          docker logs awg-ads-persist-ydb --tail 50 || true
+          docker rm -f awg-ads-persist-ydb || true
+          df -h "$RUNNER_TEMP" || true
