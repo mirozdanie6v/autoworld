@@ -227,8 +227,21 @@ const auditClientUsername=String(process.env.AUDIT_CLIENT_TELEGRAM_USERNAME||'Fl
 const auditClientTelegramId=String(process.env.AUDIT_CLIENT_TELEGRAM_ID||'').trim();
 const manager=(initial.team||[]).find(x=>x.active!==false&&String(x.name||'').trim()===auditManagerName&&String(x.telegramUsername||x.telegram||'').replace(/^@/,'').toLowerCase()==='flyer_flyer');
 assert.ok(manager,`${auditManagerName} / Flyer_Flyer manager must exist in production team`);
-const managerTelegramUserId=/^\d+$/.test(String(manager.telegramUserId||''))?String(manager.telegramUserId):auditManagerTelegramId;
-assert.match(managerTelegramUserId,/^\d+$/,'Flyer_Flyer manager Telegram must be linked');
+const pinned=await req('/api/auto-sale/telegram/audit-linked-manager?name='+encodeURIComponent(auditManagerName));
+assert.equal(pinned.response.status,200,
+  'Trusted Telegram routing for '+auditManagerName+' is unavailable: '+JSON.stringify(pinned.data));
+assert.equal(pinned.data?.ok,true,'linked manager audit lookup must succeed');
+assert.equal(String(pinned.data.member?.name||''),auditManagerName,'pinned manager name must match');
+assert.equal(String(pinned.data.member?.telegramUsername||'').toLowerCase(),'flyer_flyer',
+  'pinned manager username must be @Flyer_Flyer');
+const managerTelegramUserId=String(pinned.data.member?.telegramUserId||'');
+assert.match(managerTelegramUserId,/^\d+$/,'Flyer_Flyer verified manager Telegram ID required');
+if(auditManagerTelegramId){
+  assert.equal(managerTelegramUserId,auditManagerTelegramId,'explicit manager ID must match the verified pin');
+}
+if(/^\d+$/.test(String(manager.telegramUserId||''))){
+  assert.equal(String(manager.telegramUserId),managerTelegramUserId,'stored manager ID must match verified pin');
+}
 const linkedClientLead=(initial.leads||[]).find(x=>
   String(x.telegramUsername||'').replace(/^@/,'').toLowerCase()===auditClientUsername.toLowerCase()
   && /^\d+$/.test(String(x.telegramUserId||''))
