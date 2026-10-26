@@ -7,6 +7,8 @@ const ID_PATTERN=/^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/;
 const TELEGRAM_ID_PATTERN=/^[1-9][0-9]{0,19}$/;
 const ALLOWED_EVENTS=new Set(['miniapp_open','vehicle_view','lead_submit','manager_contact']);
 const MAX_WINDOW_DAYS=90;
+const MAX_FUTURE_SKEW_MS=5*60*1000;
+const HASH_PATTERN=/^[a-f0-9]{64}$/;
 
 function id(value,label,{optional=false}={}){
   if(optional&&(value===undefined||value===null||value===''))return '';
@@ -20,6 +22,7 @@ function at(clock){
   return date;
 }
 function validateTelegramUserId(value){
+  if(typeof value==='number'&&(!Number.isSafeInteger(value)||value<=0))throw new Error('invalid_telegram_user_id');
   const normalized=String(value??'');
   if(!TELEGRAM_ID_PATTERN.test(normalized))throw new Error('invalid_telegram_user_id');
   return normalized;
@@ -56,8 +59,11 @@ function safeTouch(touch){
     timestamp:touch.timestamp
   };
 }
-function snapshot(subject,cutoff){
-  if(!subject||Date.parse(subject.lastTouch?.timestamp)<cutoff)return null;
+function snapshot(subject,cutoff,now){
+  const first=Date.parse(subject?.firstTouch?.timestamp);
+  const last=Date.parse(subject?.lastTouch?.timestamp);
+  if(!Number.isFinite(first)||!Number.isFinite(last)||first>last||last<cutoff||last>now+MAX_FUTURE_SKEW_MS)return null;
+  if(!subject.firstTouch?.campaignId||!subject.lastTouch?.campaignId)return null;
   return {
     firstTouch:safeTouch(subject.firstTouch),
     lastTouch:safeTouch(subject.lastTouch)
@@ -69,7 +75,7 @@ export function createAdsAttributionService({
   clock=()=>new Date(),
   attributionWindowDays=30
 }={}){
-  if(!repository||['createCampaign','findCampaignByTokenHash','recordTouch','readSubject','recordEvent'].some(k=>typeof repository[k]!=='function')){
+  if(!repository||['createCampaign','findCampaignByTokenHash','setCampaignTokenActive','recordTouch','readSubject','recordEvent','listEvents'].some(k=>typeof repository[k]!=='function')){
     throw new Error('ads_repository_required');
   }
   if(typeof subjectSecret!=='string'||subjectSecret.length<32)throw new Error('ads_subject_secret_required');
@@ -91,6 +97,11 @@ export function createAdsAttributionService({
     await repository.createCampaign({...campaign,tokenHash:hashAdsToken(token)});
     // The raw token is returned once. Only its hash is persisted.
     return {...campaign,token};
+  }
+  async function setCampaignTokenActive({tokenHash,active}={}){
+    if(typeof tokenHash!=='string'||!HASH_PATTERN.test(tokenHash))throw new Error('invalid_ads_token_hash');
+    if(typeof active!=='boolean')throw new Error('invalid_ads_token_active_state');
+    return repository.setCampaignTokenActive({tokenHash,active});
   }
   async function recordBotStart({telegramUserId,startPayload,updateId}={}){
     validateTelegramUserId(telegramUserId);
@@ -116,13 +127,15 @@ export function createAdsAttributionService({
   }
   async function getAttribution({telegramUserId}={}){
     const subject=await repository.readSubject(subjectKey(telegramUserId));
-    return snapshot(subject,at(clock).getTime()-windowMs);
+    const now=at(clock).getTime();
+    return snapshot(subject,now-windowMs,now);
   }
   async function recordTrustedEvent({telegramUserId,eventType,eventId}={}){
     if(!ALLOWED_EVENTS.has(eventType))throw new Error('invalid_ads_event_type');
     const key=subjectKey(telegramUserId);
     const subject=await repository.readSubject(key);
-    const attribution=snapshot(subject,at(clock).getTime()-windowMs);
+    const now=at(clock).getTime();
+    const attribution=snapshot(subject,now-windowMs,now);
     if(!attribution)return {status:'ignored',reason:'no_active_attribution'};
     const result=await repository.recordEvent({
       eventId:`ads:${validateEventId(eventId)}`,
@@ -137,7 +150,12 @@ export function createAdsAttributionService({
       ? {status:'recorded',attribution}
       : {status:'duplicate'};
   }
-  return {issueCampaign,recordBotStart,getAttribution,recordTrustedEvent};
+  async function listVerifiedEvents({cursor='',limit=250}={}){
+    if(typeof cursor!=='string'||cursor.length>120)throw new Error('invalid_ads_event_cursor');
+    if(!Number.isInteger(limit)||limit<1||limit>1000)throw new Error('invalid_ads_event_limit');
+    return repository.listEvents({cursor,limit});
+  }
+  return {issueCampaign,setCampaignTokenActive,recordBotStart,getAttribution,recordTrustedEvent,listVerifiedEvents};
 }
 
 // Test-only/in-memory adapter. Do not use for a persistent runtime.
@@ -152,8 +170,18 @@ export function createMemoryAdsAttributionRepository(){
       const row=campaigns.get(hash);
       return row?structuredClone(row):null;
     },
+    async setCampaignTokenActive({tokenHash,active}){
+      const existing=campaigns.get(tokenHash);
+      if(!existing)return {updated:false};
+      campaigns.set(tokenHash,{...existing,active});
+      return {updated:true};
+    },
     async recordTouch({eventId,subjectKey,touch}){
-      if(events.has(eventId))return {recorded:false};
+      if(events.has(eventId)){
+        const existing=events.get(eventId);
+        if(existing.subjectKey!==subjectKey)throw new Error('ads_event_id_collision');
+        return {recorded:false};
+      }
       const existing=subjects.get(subjectKey);
       const firstTouch=existing?.firstTouch&&existing.firstTouch.timestamp<=touch.timestamp
         ? existing.firstTouch:structuredClone(touch);
@@ -168,9 +196,21 @@ export function createMemoryAdsAttributionRepository(){
       return row?structuredClone(row):null;
     },
     async recordEvent(event){
-      if(events.has(event.eventId))return {recorded:false};
+      if(events.has(event.eventId)){
+        const existing=events.get(event.eventId);
+        if(existing.subjectKey!==event.subjectKey||existing.eventType!==event.eventType){
+          throw new Error('ads_event_id_collision');
+        }
+        return {recorded:false};
+      }
       events.set(event.eventId,structuredClone(event));
       return {recorded:true};
+    },
+    async listEvents({cursor='',limit=250}={}){
+      const sorted=[...events.values()].filter(event=>event.eventId>cursor)
+        .sort((a,b)=>a.eventId.localeCompare(b.eventId));
+      const result=sorted.slice(0,limit).map(event=>structuredClone(event));
+      return {events:result,nextCursor:sorted.length>limit?result.at(-1).eventId:null};
     },
     // For offline tests only; hashed subject identifiers, no raw Telegram IDs.
     snapshotForTests(){return {
