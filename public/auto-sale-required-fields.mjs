@@ -85,7 +85,8 @@ function requestRules(form){
   if(managerMode){['name','contact','model','manager','source','nextAction'].forEach(name=>requireField(form,name));}
   else{
     ['name','contact','model'].forEach(name=>requireField(form,name));
-    const budget=get(form,'budget');if(budget){ensureTag(budget,true);if(num(budget)<10000)addBlocker(budget,'Бюджет должен быть не меньше $10 000.');}
+    const budget=get(form,'budget');if(budget){ensureTag(budget,true);if(num(budget)<=0)addBlocker(budget,'Укажите бюджет автомобиля.');}
+    requireField(form,'yearFrom');requireField(form,'yearTo');
     validateYearRange(form);
   }
 }
