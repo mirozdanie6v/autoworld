@@ -49,7 +49,7 @@ export function georgiaQuoteErrors(q={}){
   if(!(Number(q.powerHp)>0))errors.push('Укажите мощность двигателя для таможни РФ.');
   if(!['petrol','diesel','petrol_electric','diesel_electric','electric','no_engine'].includes(q.engineType))errors.push('Выберите тип двигателя.');
   if(!['nat','jur'].includes(q.importerType))errors.push('Выберите статус импортёра.');
-  if(q.manufactureDate&&!/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(String(q.manufactureDate)))errors.push('Проверьте дату выпуска автомобиля.');
+  if(q.manufactureDate&&!/^\d{4}-(0[1-9]|1[0-2])(?:-(0[1-9]|[12]\d|3[01]))?$/.test(String(q.manufactureDate)))errors.push('Проверьте дату выпуска автомобиля.');
   if(!(Number(q.usdRubRate)>0))errors.push('Укажите фактический курс USD/RUB.');
   if(!/^\d{4}-\d{2}-\d{2}$/.test(String(q.exchangeRateDate||''))||!Number.isFinite(Date.parse(String(q.exchangeRateDate||'')+'T00:00:00Z'))||String(q.exchangeRateDate)>new Date().toISOString().slice(0,10))errors.push('Укажите реальную дату курса (не позднее сегодняшнего дня).');
   if(!['cbr','bank','agreed'].includes(q.exchangeRateSource))errors.push('Укажите источник курса (ЦБ РФ, банк или согласованный курс).');
