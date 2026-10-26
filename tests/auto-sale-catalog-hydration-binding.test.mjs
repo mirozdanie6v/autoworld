@@ -33,6 +33,7 @@ test('late production /state refresh preserves selected catalog car and customer
  assert.match(form.textContent,/карточки №AWG-TRAIL-SELECTED/);
  form.elements.name.value='Buyer';
  form.elements.contact.value='@test_account';
+ form.elements.budget.value='20000';
  form.elements.note.value='Уточните документы';
  localStorage.setItem('auto-sale-catalog-v1',JSON.stringify([car,{...car,id:'AWG-TRAIL-OTHER',priceRub:2160000}]));
  window.dispatchEvent(new dom.window.CustomEvent('auto-sale-server-synced',{detail:{revision:108}}));
@@ -43,6 +44,7 @@ test('late production /state refresh preserves selected catalog car and customer
  assert.equal(restored.elements.catalogIntent.value,'catalog');
  assert.equal(restored.elements.name.value,'Buyer');
  assert.equal(restored.elements.contact.value,'@test_account');
+ assert.equal(restored.elements.budget.value,'20000');
  assert.equal(restored.elements.note.value,'Уточните документы');
  assert.equal(restored.elements.yearFrom.value,'2023');
  assert.equal(restored.elements.yearTo.value,'2023');
