@@ -133,7 +133,7 @@ test('manager creates new-version Georgia quote without obsolete fees and indepe
   nextForm.elements.lot.value='15000';
   nextForm.elements.cbrRubRate.value='100';
   nextForm.elements.exchangeRateDate.value='2026-10-21';
-  nextForm.elements.engineCc.value='2000';
+  nextForm.elements.engineLiters.value='2';
   nextForm.elements.powerHp.value='150';
   nextForm.elements.engineType.value='petrol';
   nextForm.elements.importerType.value='nat';
