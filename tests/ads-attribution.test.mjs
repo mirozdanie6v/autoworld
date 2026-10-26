@@ -80,7 +80,11 @@ test('unregistered, malformed and inactive campaigns never write touches',async(
   assert.equal((await service.recordBotStart({telegramUserId:123,startPayload:'organic',updateId:1})).status,'ignored');
   assert.equal((await service.recordBotStart({telegramUserId:123,startPayload:generateAdsToken(),updateId:2})).reason,'unknown_or_inactive_campaign');
   const c=await service.issueCampaign({campaignId:'inactive'});
-  repository.snapshotForTests(); // verification-only snapshot cannot mutate actual rows
+  const tokenHash=hashAdsToken(c.token);
+  assert.deepEqual(await service.setCampaignTokenActive({tokenHash,active:false}),{updated:true});
+  assert.equal((await service.recordBotStart({telegramUserId:123,startPayload:c.token,updateId:3})).reason,'unknown_or_inactive_campaign');
+  assert.equal(repository.snapshotForTests().events.length,0);
+  assert.deepEqual(await service.setCampaignTokenActive({tokenHash,active:true}),{updated:true});
   assert.equal((await service.recordBotStart({telegramUserId:123,startPayload:c.token,updateId:3})).status,'recorded');
   assert.equal(repository.snapshotForTests().events.length,1);
   await assert.rejects(service.recordBotStart({telegramUserId:'victim',startPayload:c.token,updateId:4}),/invalid_telegram_user_id/);
@@ -141,4 +145,65 @@ test('reject anonymous or structurally invalid campaigns and event IDs',async()=
   await assert.rejects(service.issueCampaign({campaignId:'valid',creativeId:'invalid creative'}),/invalid_creative_id/);
   assert.equal(parseAdsStartPayload(null),null);
   assert.throws(()=>hashAdsToken('abc'),/invalid_ads_token/);
+});
+
+test('campaign suspension validates the token hash and active value',async()=>{
+  const {service}=fixture();
+  await assert.rejects(service.setCampaignTokenActive({tokenHash:'junk',active:false}),/invalid_ads_token_hash/);
+  await assert.rejects(service.setCampaignTokenActive({tokenHash:'a'.repeat(64),active:'no'}),/invalid_ads_token_active_state/);
+  assert.deepEqual(await service.setCampaignTokenActive({tokenHash:'a'.repeat(64),active:false}),{updated:false});
+});
+
+test('missing, corrupted, out-of-order and future timestamps fail closed',async()=>{
+  const repository=createMemoryAdsAttributionRepository();
+  const clock=()=>new Date('2026-10-26T08:00:00Z');
+  const service=createAdsAttributionService({repository,subjectSecret:secret,clock});
+  const cases=[
+    null,
+    {firstTouch:{campaignId:'A',timestamp:'bad'},lastTouch:{campaignId:'A',timestamp:'bad'}},
+    {firstTouch:{campaignId:'A',timestamp:'2026-10-27T00:00:00Z'},lastTouch:{campaignId:'A',timestamp:'2026-10-26T00:00:00Z'}},
+    {firstTouch:{campaignId:'A',timestamp:'2026-10-26T00:00:00Z'},lastTouch:{campaignId:'A',timestamp:'2100-01-01T00:00:00Z'}},
+    {firstTouch:null,lastTouch:{campaignId:'A',timestamp:'2026-10-26T00:00:00Z'}},
+  ];
+  for(const value of cases){
+    const mock={...repository,readSubject:async()=>value};
+    const stub=createAdsAttributionService({repository:mock,subjectSecret:secret,clock});
+    assert.equal(await stub.getAttribution({telegramUserId:42}),null);
+  }
+  assert.equal(await service.getAttribution({telegramUserId:42}),null);
+});
+
+test('event key collisions across Telegram users are explicit errors, not silent duplicates',async()=>{
+  const {service}=fixture();
+  const c=await service.issueCampaign({campaignId:'A'});
+  await service.recordBotStart({telegramUserId:111,startPayload:c.token,updateId:55});
+  await assert.rejects(service.recordBotStart({telegramUserId:222,startPayload:c.token,updateId:55}),/ads_event_id_collision/);
+  await service.recordBotStart({telegramUserId:222,startPayload:c.token,updateId:56});
+  await service.recordTrustedEvent({telegramUserId:111,eventType:'vehicle_view',eventId:'evt1'});
+  await assert.rejects(service.recordTrustedEvent({telegramUserId:222,eventType:'vehicle_view',eventId:'evt1'}),/ads_event_id_collision/);
+});
+
+test('bounded event pagination returns all receipts once in consistent primary-key order',async()=>{
+  const {service}=fixture();
+  const c=await service.issueCampaign({campaignId:'A'});
+  for(const [index,updateId] of [9,20,1].entries()){
+    await service.recordBotStart({telegramUserId:123,startPayload:c.token,updateId});
+  }
+  const all=[];
+  let cursor='';
+  for(let i=0;i<5;i++){
+    const page=await service.listVerifiedEvents({cursor,limit:2});
+    all.push(...page.events.map(e=>e.eventId));
+    if(!page.nextCursor)break;
+    cursor=page.nextCursor;
+  }
+  assert.deepEqual(all,['tg-start:1','tg-start:20','tg-start:9']);
+  assert.equal(new Set(all).size,3);
+  await assert.rejects(service.listVerifiedEvents({limit:1001}),/invalid_ads_event_limit/);
+  await assert.rejects(service.listVerifiedEvents({cursor:'x'.repeat(121)}),/invalid_ads_event_cursor/);
+});
+
+test('numeric Telegram IDs beyond Number.MAX_SAFE_INTEGER are rejected to avoid identity collisions',()=>{
+  assert.throws(()=>createAdsSubjectKey(9007199254740992,secret),/invalid_telegram_user_id/);
+  assert.match(createAdsSubjectKey('9007199254740992',secret),/^[a-f0-9]{64}$/);
 });
