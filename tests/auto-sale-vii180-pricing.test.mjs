@@ -61,7 +61,7 @@ test('new editor includes power, CC, source hint and single informational Russia
  for(const origin of ['США','Грузия']){
   const q={...sample(origin),status:'Черновик',sourceTurnkeyDeliveryRub:700000};
   const html=quoteV2Form(q,[{id:'L-1',name:'Client',model:'Camry',status:'Расчёт'}],['Черновик','Отправлен'],String);
-  for(const field of ['engineCc','powerHp','customsAndRecyclingRub','cbrRubRate','turnkeyDeliveryUsd'])assert.match(html,new RegExp('name="'+field+'"'));
+  for(const field of ['engineLiters','powerHp','customsAndRecyclingRub','cbrRubRate','turnkeyDeliveryUsd'])assert.match(html,new RegExp('name="'+field+'"'));
   for(const removed of ['name="legalization"','name="service"','name="recyclingRub"'])assert.equal(html.includes(removed),false);
   assert.ok(html.includes('700'));
   assert.ok(html.includes(origin==='США'?'Самовывоз — Минеральные Воды':'Самовывоз — Владикавказ'));
