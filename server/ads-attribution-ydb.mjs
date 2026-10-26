@@ -1,6 +1,7 @@
 // Optional YDB adapter for Stage A. Deliberately not imported by the live server.
 // Caller supplies a YDB query tag; no credentials, connections or migrations are
 // opened implicitly. Only use with a physically isolated test YDB database.
+import {Uint64} from '@ydbjs/value/primitive';
 
 export const ADS_ATTRIBUTION_TABLES=[
   'awg_ads_campaigns',
@@ -84,10 +85,21 @@ export function createYdbAdsAttributionRepository(sql){
         active:row.active===true
       };
     },
+    async setCampaignTokenActive({tokenHash,active}){
+      return sql.begin({isolation:'serializableReadWrite',idempotent:true},async tx=>{
+        const [rows]=await tx`SELECT token_hash FROM awg_ads_campaigns WHERE token_hash=${tokenHash}`;
+        if(!rows.length)return {updated:false};
+        await tx`UPDATE awg_ads_campaigns SET active=${active} WHERE token_hash=${tokenHash}`;
+        return {updated:true};
+      });
+    },
     async recordTouch({eventId,subjectKey,touch}){
       return sql.begin({isolation:'serializableReadWrite',idempotent:true},async tx=>{
-        const [already]=await tx`SELECT event_id FROM awg_ads_events WHERE event_id=${eventId}`;
-        if(already.length)return {recorded:false};
+        const [already]=await tx`SELECT event_id,subject_key FROM awg_ads_events WHERE event_id=${eventId}`;
+        if(already.length){
+          if(String(already[0].subject_key)!==subjectKey)throw new Error('ads_event_id_collision');
+          return {recorded:false};
+        }
         const [rows]=await tx`SELECT first_touch,last_touch FROM awg_ads_subjects WHERE subject_key=${subjectKey}`;
         const existing=rows[0];
         const originalFirst=existing?toTouch(existing.first_touch):null;
@@ -96,7 +108,7 @@ export function createYdbAdsAttributionRepository(sql){
         const last=originalLast&&originalLast.timestamp>touch.timestamp?originalLast:touch;
         await tx`
           UPSERT INTO awg_ads_subjects (subject_key,first_touch,last_touch,updated_at)
-          VALUES (${subjectKey},${JSON.stringify(first)},${JSON.stringify(last)},${touch.timestamp})
+          VALUES (${subjectKey},${JSON.stringify(first)},${JSON.stringify(last)},${last.timestamp})
         `;
         await tx`
           UPSERT INTO awg_ads_events
@@ -120,8 +132,13 @@ export function createYdbAdsAttributionRepository(sql){
     },
     async recordEvent(event){
       return sql.begin({isolation:'serializableReadWrite',idempotent:true},async tx=>{
-        const [existing]=await tx`SELECT event_id FROM awg_ads_events WHERE event_id=${event.eventId}`;
-        if(existing.length)return {recorded:false};
+        const [existing]=await tx`SELECT subject_key,event_type FROM awg_ads_events WHERE event_id=${event.eventId}`;
+        if(existing.length){
+          if(String(existing[0].subject_key)!==event.subjectKey||String(existing[0].event_type)!==event.eventType){
+            throw new Error('ads_event_id_collision');
+          }
+          return {recorded:false};
+        }
         await tx`
           UPSERT INTO awg_ads_events
             (event_id,subject_key,event_type,campaign_id,ad_id,creative_id,occurred_at)
@@ -131,6 +148,24 @@ export function createYdbAdsAttributionRepository(sql){
         `;
         return {recorded:true};
       });
+    },
+    async listEvents({cursor='',limit=250}={}){
+      if(!Number.isInteger(limit)||limit<1||limit>1000)throw new Error('invalid_ads_event_limit');
+      // event_id is the PRIMARY KEY; use keyset pagination to avoid offset scans.
+      const [rows]=await sql`
+        SELECT event_id,subject_key,event_type,campaign_id,ad_id,creative_id,occurred_at
+        FROM awg_ads_events
+        WHERE event_id > ${cursor}
+        ORDER BY event_id
+        LIMIT ${new Uint64(BigInt(limit+1))}
+      `;
+      const events=rows.slice(0,limit).map(row=>({
+        eventId:String(row.event_id),subjectKey:String(row.subject_key),
+        eventType:String(row.event_type),campaignId:String(row.campaign_id),
+        adId:String(row.ad_id||''),creativeId:String(row.creative_id||''),
+        occurredAt:String(row.occurred_at)
+      }));
+      return {events,nextCursor:rows.length>limit?events.at(-1).eventId:null};
     }
   };
 }
