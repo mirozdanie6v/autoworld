@@ -89,15 +89,15 @@ test('catalog auction date label keeps explicit visible spacing before value',()
   assert.match(app,/<b>\$\{esc\(auctionDateText\(c\.auctionDate\)\)\}<\/b>/);
 });
 
-test('completed auctions are marked and cannot request a calculation',()=>{
+test('completed auctions stay marked and offer a similar-car request',()=>{
   assert.match(app,/const auctionEnded=car=>/);
   assert.match(app,/Аукцион завершён/);
-  assert.match(app,/disabled aria-disabled="true" title="Аукцион завершён"/);
-  assert.match(app,/if\(!c\|\|auctionEnded\(c\)\)return/);
+  assert.match(app,/Найти похожий/);
   assert.match(details,/auctionEnded=car=>/);
-  assert.match(details,/request\.disabled\|\|!car\|\|auctionEnded\(car\)/);
+  assert.match(details,/data-car-detail-request/);
+  assert.match(details,/Найти похожий/);
+  assert.doesNotMatch(details,/request\.disabled\|\|!car\|\|auctionEnded\(car\)/);
   assert.match(clientCss,/\.auto-auction-date\.ended/);
-  assert.match(clientCss,/\.auto-btn\.primary:disabled/);
 });
 
 test('catalog and quote UI support USA and Georgia without forcing sea delivery',()=>{
