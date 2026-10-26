@@ -98,7 +98,7 @@ test('manager creates new-version Georgia quote without obsolete fees and indepe
   form.elements.customsAndRecyclingRub.value='520000';
   form.elements.cbrRubRate.value='100';
   form.elements.exchangeRateDate.value='2026-10-21';
-  form.elements.engineCc.value='2000';
+  form.elements.engineLiters.value='2';
   form.elements.powerHp.value='150';
   form.elements.engineType.value='petrol';
   form.elements.importerType.value='nat';
