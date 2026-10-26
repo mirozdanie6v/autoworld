@@ -9,6 +9,7 @@ on:
       - server/ads-attribution-report.mjs
       - tests/ads-attribution.test.mjs
       - tests/ads-attribution-report.test.mjs
+      - tests/ads-attribution-ydb-adapter.test.mjs
       - docs/AWG_ADS_ATTRIBUTION_STAGE_A.md
       - .github/workflows/verify-awg-ads-attribution.yml
   workflow_dispatch:
@@ -34,5 +35,6 @@ jobs:
           node --check server/ads-attribution-report.mjs
           node --check tests/ads-attribution.test.mjs
           node --check tests/ads-attribution-report.test.mjs
+          node --check tests/ads-attribution-ydb-adapter.test.mjs
       - name: Unit tests without network, secrets or database
         run: node --test tests/ads-attribution*.test.mjs
