@@ -1,6 +1,6 @@
 AWG production release
 requested_at=2026-10-26
-source_sha=1b14f00e840efa9d40b14deceabd119f47ac9415
-reason=one-time-physical-Telegram-full-lifecycle-Flyer_kg-Dmitriy
+source_sha=a2f0c63ed76a67c5c88e9814b27a35effb1a5e7a
+reason=repeat-one-time-physical-TG-lifecycle-after-verified-manager-pin-fix
 run_real_client_e2e=false
 telegram_lifecycle_audit=Flyer_kg-Dmitriy-20261026
