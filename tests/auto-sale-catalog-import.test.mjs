@@ -49,11 +49,12 @@ test('AWG deployment initializes normalized domain meta idempotently',async()=>{
   assert.ok(init.includes('domain.replaceSnapshot'));
 });
 
-test('catalog scraper skips media upload for invalid VIN posts',async()=>{
+test('catalog scraper skips ambiguous multi-vehicle media without rejecting missing-VIN singles',async()=>{
   const scraper=await root('scripts/scrape-autoworld-georgia.py');
-  assert.ok(scraper.includes('ALLOW_NO_VIN_POST_IDS'));
-  assert.ok(scraper.includes('skip_media_invalid_or_missing_vin'));
-  assert.ok(scraper.includes('if not str(car.get("vin")'));
+  assert.ok(scraper.includes('is_single_vehicle_candidate(car)'));
+  assert.ok(scraper.includes('skip_media_ambiguous_or_invalid_vehicle'));
+  assert.ok(scraper.includes('len(vins) <= 1'));
+  assert.ok(!scraper.includes('ALLOW_NO_VIN_POST_IDS'));
 });
 
 
