@@ -19,6 +19,9 @@ await driver.ready();
 const sql=query(driver);
 const repository=createYdbAdsAttributionRepository(sql);
 const subjectSecret='test-secret-only-for-local-ydb-attribution-rotate-example';
+const principal={id:'local-ydb-maintenance-test'};
+const authorizeOperation=async ({permission,principal:p})=>p.id===principal.id
+  &&(permission==='ads:erase'||permission==='ads:retention');
 const service=createAdsAttributionService({repository,subjectSecret,clock:()=>new Date('2026-10-26T12:00:00.000Z')});
 const tokenFile='.diagnostics/awg-ads-local-ydb-fixture.json';
 const fs=await import('node:fs/promises');
@@ -67,19 +70,24 @@ try {
   }else if(phase==='privacy'){
     // Explicit identity verified by the test; no real users/data involved.
     const privacy=createAdsPrivacyService({
-      repository,subjectSecrets:[subjectSecret],
+      repository,subjectSecrets:[subjectSecret],authorizeOperation,
       clock:()=>new Date('2027-03-01T12:00:00Z')
     });
-    const removed=await privacy.eraseVerifiedTelegramUser({telegramUserId:111,authorized:true});
+    const removed=await privacy.eraseVerifiedTelegramUser({telegramUserId:111,principal});
+    assert.equal(removed.status,'complete');
     assert.equal(removed.deletedSubjects,1);
     assert.equal(removed.deletedEvents,3);
     assert.equal(await service.getAttribution({telegramUserId:111}),null);
+    const replay=(await fs.readFile(tokenFile,'utf8'));
+    assert.equal((await service.recordBotStart({
+      telegramUserId:111,startPayload:JSON.parse(replay).a,updateId:9876001
+    })).reason,'erased_subject');
     assert.equal((await summarizeAdsCampaignsFromRepository({repository})).find(r=>r.campaignId==='real-ydb-B'),undefined);
     // All synthetic events are older than 90 days at the maintenance clock.
     let cursor='';
     let deletedEvents=0,deletedSubjects=0,compactedSubjects=0;
     for(let i=0;i<20;i++){
-      const result=await privacy.runRetentionSweep({authorized:true,cursor});
+      const result=await privacy.runRetentionSweep({principal,cursor});
       deletedEvents+=result.deletedEvents;
       deletedSubjects+=result.deletedSubjects;
       compactedSubjects+=result.compactedSubjects;
@@ -92,5 +100,56 @@ try {
     assert.equal((await repository.readSubject('f'.repeat(64))),null);
     assert.ok(deletedEvents>=8);
     console.log('AWG_ADS_REAL_LOCAL_YDB_PRIVACY_PASS',JSON.stringify({deletedEvents,deletedSubjects,compactedSubjects}));
+  }else if(phase==='load'){
+    const fixture=JSON.parse(await fs.readFile(tokenFile,'utf8'));
+    const raceUser=7777777;
+    const commonStart=9879000;
+    await service.recordBotStart({telegramUserId:raceUser,startPayload:fixture.a,updateId:commonStart});
+    const parallel=20;
+    const jobs=Array.from({length:parallel},(_,i)=>async()=>{
+      for(let retry=0;retry<12;retry++){
+        try{
+          return await service.recordBotStart({
+            telegramUserId:raceUser,startPayload:fixture.a,updateId:commonStart+i+1
+          });
+        }catch(error){
+          if(retry===11)throw error;
+          await new Promise(resolve=>setTimeout(resolve,20*(retry+1)));
+        }
+      }
+    });
+    const settled=await Promise.all(jobs.map(job=>job()));
+    assert.equal(settled.filter(item=>item.status==='recorded').length,parallel);
+    assert.equal((await service.getAttribution({telegramUserId:raceUser})).firstTouch.campaignId,'real-ydb-A');
+    const large=await service.issueCampaign({campaignId:'erasure-load'});
+    const heavyUser=8888888;
+    await service.recordBotStart({telegramUserId:heavyUser,startPayload:large.token,updateId:9890000});
+    for(let i=0;i<1010;i++){
+      if((await service.recordTrustedEvent({
+        telegramUserId:heavyUser,eventType:'vehicle_view',eventId:'heavy_'+i
+      })).status!=='recorded')throw new Error('large_event_write_failed');
+    }
+    const audits=[];
+    const privacy=createAdsPrivacyService({
+      repository,subjectSecrets:[subjectSecret],authorizeOperation,
+      onAudit:async record=>audits.push(record),
+      clock:()=>new Date('2026-10-26T12:00:00Z')
+    });
+    const start=Date.now();
+    const erased=await privacy.eraseVerifiedTelegramUser({telegramUserId:heavyUser,principal});
+    const durationMs=Date.now()-start;
+    assert.equal(erased.status,'complete');
+    assert.equal(erased.deletedEvents,1011);
+    assert.ok(erased.batches>10);
+    assert.equal((await service.recordBotStart({
+      telegramUserId:heavyUser,startPayload:large.token,updateId:9890000
+    })).reason,'erased_subject');
+    assert.equal((await service.recordBotStart({
+      telegramUserId:heavyUser,startPayload:large.token,updateId:9899999
+    })).reason,'erased_subject');
+    assert.equal(audits.at(-1).outcome,'success');
+    console.log('AWG_ADS_REAL_LOCAL_YDB_LOAD_PASS',
+      JSON.stringify({sameSubjectConcurrentStarts:parallel,largeSubjectEventsDeleted:erased.deletedEvents,
+        eraseBatches:erased.batches,eraseDurationMs:durationMs}));
   }else throw new Error('unknown_test_phase');
 }finally{await driver.close();}
