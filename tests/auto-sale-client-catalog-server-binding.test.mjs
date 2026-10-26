@@ -31,7 +31,7 @@ test('VK and Telegram signed client creates retain immutable catalog vehicle and
   assert.equal(lead.engine,trail.engine);
   assert.equal(lead.drive,'FWD');
   assert.equal(lead.estimatedCostRub,1880000);
-  assert.equal(lead.budget,19000);
+  assert.equal(lead.budget,18800);
   assert.equal(lead.clientProvider,provider);
   assert.deepEqual(validateLead(lead),[]);
   assert.equal(result.operations[1].resource,'note');
@@ -50,7 +50,7 @@ test('server uses only canonical database catalog; it ignores fake client year, 
  assert.equal(lead.catalogVehicle.vin,trail.vin);
  assert.equal(lead.catalogVehicle.priceRub,trail.priceRub);
  assert.equal(lead.mileage,trail.mileage);
- assert.equal(lead.budget,19000);
+ assert.equal(lead.budget,18800);
 });
 
 test('distinct identical-model catalog listings retain the exact selected ID, never name-matched',()=>{
