@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {toJs} from '@ydbjs/value';
 import {
   createYdbAdsAttributionRepository,
   ensureAdsAttributionSchema
@@ -61,7 +62,7 @@ function fakeYdb(){
       const [cursor,limit]=args;
       const rows=[...events.values()].filter(x=>x.event_id>cursor)
         .sort((a,b)=>a.event_id<b.event_id?-1:1)
-        .slice(0,Number(String(limit)));
+        .slice(0,Number(toJs(limit)));
       return result(rows);
     }
     throw new Error('Unexpected SQL: '+statement);
