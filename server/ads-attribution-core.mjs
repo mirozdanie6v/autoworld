@@ -188,7 +188,7 @@ export function createMemoryAdsAttributionRepository(){
       const lastTouch=existing?.lastTouch&&existing.lastTouch.timestamp>touch.timestamp
         ? existing.lastTouch:structuredClone(touch);
       subjects.set(subjectKey,{firstTouch,lastTouch});
-      events.set(eventId,{eventId,subjectKey,eventType:'bot_start',...touch});
+      events.set(eventId,{eventId,subjectKey,eventType:'bot_start',...touch,occurredAt:touch.timestamp});
       return {recorded:true};
     },
     async readSubject(key){
@@ -208,7 +208,7 @@ export function createMemoryAdsAttributionRepository(){
     },
     async listEvents({cursor='',limit=250}={}){
       const sorted=[...events.values()].filter(event=>event.eventId>cursor)
-        .sort((a,b)=>a.eventId.localeCompare(b.eventId));
+        .sort((a,b)=>a.eventId<b.eventId?-1:a.eventId>b.eventId?1:0);
       const result=sorted.slice(0,limit).map(event=>structuredClone(event));
       return {events:result,nextCursor:sorted.length>limit?result.at(-1).eventId:null};
     },
