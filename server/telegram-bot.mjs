@@ -95,8 +95,10 @@ export function createTelegramService({
   relayUrl=process.env.AUTO_SALE_TELEGRAM_RELAY_URL||'',
   relaySecret=process.env.AUTOWORLD_RELAY_SECRET||'',
   now=()=>Date.now(),
+  adsStartRecorder=null,
   maxInitDataAgeSec=86400
 }={}){
+  if(adsStartRecorder!==null&&typeof adsStartRecorder!=='function')throw new Error('ads_start_recorder_invalid');
   const botToken=clean(token);
   const fallbackManagers=parseManagerIds(managerChatIds);
   const telegramApiBase=clean(apiBaseUrl).replace(/\/$/,'')||'https://api.telegram.org';
@@ -332,6 +334,21 @@ export function createTelegramService({
     const chatId=String(message.chat.id),textValue=clean(message.text),firstName=clean(message.from?.first_name)||'';
     const command=textValue.split(/\s+/)[0].toLowerCase().replace(/@[^\s]+$/,'');
     const webAppUrl=clean(appUrl);
+    // Optional, intentionally disconnected until Stage A passes privacy and
+    // production YDB gates. The authenticated webhook supplies update_id.
+    // Never trust deep-link data as a campaign ID or expose the raw token.
+    if(command==='/start'&&adsStartRecorder){
+      const match=textValue.match(/^\/start(?:@[A-Za-z0-9_]{5,32})?\s+([A-Za-z0-9_-]{24,64})$/i);
+      if(match&&message.chat.type==='private'&&String(message.from?.id||'')===chatId
+         &&Number.isSafeInteger(Number(update?.update_id))&&Number(update.update_id)>=0){
+        try{
+          await adsStartRecorder({telegramUserId:chatId,startPayload:match[1],updateId:String(update.update_id)});
+        }catch(error){
+          // Failed attribution must never block the existing bot welcome path.
+          console.warn('AUTO SALE ad start record failed',clean(error?.code)||'ads_record_failed');
+        }
+      }
+    }
 
     if(command==='/start'||command==='/catalog'||command==='/app'){
       const greeting=command==='/start'
