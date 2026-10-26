@@ -265,7 +265,7 @@ def parse_title(text):
     for original in lines[:35]:
         title = re.sub(r"^[^A-Za-zА-Яа-я0-9]+", "", original).strip()
         date_m = re.search(r"\b(0?[1-9]|1[0-2])[/.-](20)?(\d{2})\s*г?\.?", title)
-        year_m = re.search(r"\b(20\d{2})\b", title) if not date_m else None
+        year_m = re.search(r"(?<!\d)(20\d{2})(?!\d)", title) if not date_m else None
         if date_m:
             year = 2000 + int(date_m.group(3))
             model_part = title[:date_m.start()].strip(" -–—")
