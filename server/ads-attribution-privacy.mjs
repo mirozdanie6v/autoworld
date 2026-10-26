@@ -29,7 +29,7 @@ function principalIsValid(principal){
 }
 export function createAdsPrivacyService({
   repository,subjectSecrets,clock=()=>new Date(),
-  policy=ADS_RETENTION_POLICY,authorizeOperation,onAudit=()=>{}
+  policy=ADS_RETENTION_POLICY,authorizeOperation,onAudit
 }={}){
   secrets(subjectSecrets);
   if(!repository||typeof repository.eraseSubjects!=='function'||typeof repository.purgeExpired!=='function')
