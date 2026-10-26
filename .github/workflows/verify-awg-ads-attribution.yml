@@ -1,0 +1,32 @@
+name: Verify AWG Ads Attribution (isolated)
+on:
+  push:
+    branches:
+      - feature/awg-ads-attribution
+    paths:
+      - server/ads-attribution-core.mjs
+      - server/ads-attribution-ydb.mjs
+      - tests/ads-attribution.test.mjs
+      - docs/AWG_ADS_ATTRIBUTION_STAGE_A.md
+      - .github/workflows/verify-awg-ads-attribution.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-unit-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Syntax checks
+        run: |
+          node --check server/ads-attribution-core.mjs
+          node --check server/ads-attribution-ydb.mjs
+          node --check tests/ads-attribution.test.mjs
+      - name: Unit tests without network, secrets or database
+        run: node --test tests/ads-attribution.test.mjs
