@@ -22,7 +22,9 @@ with the current `main` branch.
    validation and verification of Telegram's user ID and update ID, may call
    `recordBotStart({telegramUserId,startPayload,updateId})`.
    Do not accept user-supplied Telegram IDs or `initDataUnsafe`.
-3. Reject malformed, unknown or disabled tokens; do not attribute ordinary
+3. Support explicit suspension and reactivation by token hash via internal-only
+   `setCampaignTokenActive`. No public/admin HTTP route has been exposed.
+   Reject malformed, unknown or disabled tokens; do not attribute ordinary
    organic `/start` traffic. Atomic dedupe by Telegram `update_id`.
 4. Use HMAC-SHA256 with a stable private `subjectSecret` (>=32 characters)
    to pseudonymize Telegram user IDs. Keep the secret in secret management;
@@ -50,7 +52,12 @@ calculate CPL without actual spend and deduplicated lead counts.
 
 `server/ads-attribution-report.mjs` groups only verified server receipts
 into campaign-level bot starts, unique bot users, Mini App opens, vehicle views,
-submitted leads and manager contacts. It deduplicates by receipt ID. Paid clicks
+submitted leads and manager contacts. It deduplicates by receipt ID. `summarizeAdsCampaignsFromRepository`
+loads bounded keyset-paginated event pages from the adapter before reporting,
+refusing to silently return a partial report if pages are malformed or the
+maximum page count is exceeded. The aggregation is not a transactional
+cross-page snapshot; concurrent traffic can produce temporary differences.
+Paid clicks
 and ad impressions are explicitly `null` until separately verified data is
 ingested. Verified external spend can be supplied with currency, and CPL is
 calculated only when both spend and distinct lead events are present.
@@ -66,6 +73,11 @@ connected to the director dashboard yet.
 | `awg_ads_campaigns` | `token_hash` | Allowed campaigns, ad/creative references, enabled status |
 | `awg_ads_subjects` | `subject_key` | First and last verified touch |
 | `awg_ads_events` | `event_id` | Idempotent server-origin events |
+
+The adapter includes serializable campaign suspension, collision detection
+and paginated read-out of verified receipts. Its SQL contract is covered by a
+mocked transaction-driver test. **No real YDB server integration test has
+been run**; passing a mock does not establish live compatibility.
 
 The adapter accepts an explicit existing YDB query tag. It does **not** create
 a Driver, load credentials or run DDL when imported. The schema initializer
@@ -89,9 +101,32 @@ node --check server/ads-attribution-report.mjs
 node --test tests/ads-attribution*.test.mjs
 ```
 
+On 2026-10-26 the last verified run passed **24/24 tests** (including
+mocked YDB SQL transaction contract, campaign suspension, idempotency,
+corrupted timestamps, event pagination and campaign metrics). The workflow
+also validates that the branch diff only touches these isolated files.
+
 The dedicated GitHub Actions gate only runs Node unit tests from this branch.
 It has `contents: read`, no cloud authentication, no remote database and no
 deployment steps. Existing deployment workflows must remain main-only.
+
+## Remaining Stage A readiness gates (not complete)
+
+- [x] Cryptographic one-time campaign deep-link tokens and hash-only registry
+- [x] Active/inactive token management as an internal repository operation
+- [x] First/last bot-start attribution, strict input validation, 30-day eligibility
+- [x] Pseudonymized subject keys and idempotent event receipts
+- [x] YDB schema and transactional write/read adapter implemented
+- [x] Bounded paged campaign event reporting and unit/SQL-mock tests
+- [x] Main-vs-feature Git diff allowlist in CI; no production handlers edited
+- [ ] **Real isolated YDB** schema migration + transaction + restart / pagination / concurrency integration tests; no test YDB was provisioned
+- [ ] Approve data retention, deletion/erasure, incident logging and key rotation before collecting real user data
+- [ ] Verify eventual external spend provenance, ad-platform metrics contracts and director-only API authentication during Stage B
+
+Stage A code implementation is prepared, but operational readiness for connecting
+to a real YDB instance remains **conditional** on the outstanding isolation test
+and data-handling requirements. No deployment, schema migration or test fixture
+write has been performed against live YDB.
 
 ## Stage B integration gates — NOT authorized yet
 
