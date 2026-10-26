@@ -295,8 +295,10 @@ try{
     deposit:0,
     note:'Полный тест уведомлений. Не реальная покупка.'
   };
-  await batch('Новый',2,[{resource:'lead',operation:'create',id:leadId,input:lead}]);
+  // Mark the scenario for cleanup before the network request: delivery verification
+  // may fail after the server has already persisted the test lead.
   scenarioStarted=true;
+  await batch('Новый',2,[{resource:'lead',operation:'create',id:leadId,input:lead}]);
 
   for(const status of ['В работе','Расчёт']){
     await batch(status,2,[{resource:'lead',operation:'patch',id:leadId,input:{status}}]);
