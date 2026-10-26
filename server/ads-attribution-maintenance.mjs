@@ -32,3 +32,22 @@ export function createAdsMaintenanceJob({
     }
   };
 }
+
+/**
+ * Register daily execution with a trusted host scheduler. Stage A does not
+ * create cloud jobs, credentials, network listeners or production cron tasks.
+ * Scheduler must guarantee one registered job per deployment and supply its
+ * own signed/verified principal for authorization.
+ */
+export function registerAdsDailyRetention({
+  scheduler,runMaintenance,principal,cron='0 3 * * *',timeZone='UTC'
+}={}){
+  if(!scheduler||typeof scheduler.register!=='function'
+    ||typeof runMaintenance!=='function'||cron!=='0 3 * * *'||timeZone!=='UTC'
+    ||!principal||typeof principal.id!=='string')throw new Error('invalid_ads_retention_scheduler');
+  return scheduler.register({
+    id:'awg-ads-retention-daily',
+    cron,timeZone,
+    maxConcurrent:1
+  },()=>runMaintenance({principal}));
+}
