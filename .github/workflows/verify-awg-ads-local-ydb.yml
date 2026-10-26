@@ -6,6 +6,7 @@ on:
       - server/ads-attribution-core.mjs
       - server/ads-attribution-ydb.mjs
       - server/ads-attribution-report.mjs
+      - server/ads-attribution-privacy.mjs
       - scripts/test-awg-ads-local-ydb.mjs
       - .github/workflows/verify-awg-ads-local-ydb.yml
   workflow_dispatch:
@@ -40,6 +41,8 @@ jobs:
         run: node scripts/test-awg-ads-local-ydb.mjs run
       - name: Restart only the application process and verify saved rows
         run: node scripts/test-awg-ads-local-ydb.mjs reconnect
+      - name: Verify authorized erasure and retention against real YDB
+        run: node scripts/test-awg-ads-local-ydb.mjs privacy
       - name: Stop local database
         if: always()
         run: docker rm -f awg-ads-local-ydb || true
