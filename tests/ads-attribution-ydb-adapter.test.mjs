@@ -13,7 +13,7 @@ import {summarizeAdsCampaignsFromRepository} from '../server/ads-attribution-rep
 
 // SQL adapter contract test. This is NOT a substitute for a live YDB integration test.
 function fakeYdb(){
-  const campaigns=new Map(),subjects=new Map(),events=new Map(),ddl=[];
+  const campaigns=new Map(),subjects=new Map(),events=new Map(),blocks=new Map(),ddl=[];
   const sql=async(strings,...args)=>{
     const statement=strings.join('?').replace(/\s+/g,' ').trim();
     const result=rows=>[rows];
@@ -21,6 +21,12 @@ function fakeYdb(){
       ddl.push(statement);
       return result([]);
     }
+    if(statement.startsWith('SELECT subject_key FROM awg_ads_erasure_blocks')){
+      const row=blocks.get(args[0]);
+      return result(row?[{subject_key:args[0]}]:[]);
+    }
+    if(statement.startsWith('UPSERT INTO awg_ads_events_by_subject')||
+       statement.startsWith('UPSERT INTO awg_ads_events_by_time'))return result([]);
     if(statement.startsWith('SELECT token_hash FROM awg_ads_campaigns')){
       const row=campaigns.get(args[0]);
       return result(row?[{token_hash:row.token_hash}]:[]);
@@ -79,7 +85,7 @@ const secret='minimum-32-byte-test-secret-for-ads-attribution-123';
 test('YDB adapter contract: create /start, dedupe, two touches, suspend, retrieve events, report',async()=>{
   const db=fakeYdb();
   await ensureAdsAttributionSchema(db.sql,{target:'isolated-test-database'});
-  assert.equal(db.ddl.length,3);
+  assert.equal(db.ddl.length,6);
   const repository=createYdbAdsAttributionRepository(db.sql);
   let now='2026-10-26T09:00:00Z';
   const service=createAdsAttributionService({
