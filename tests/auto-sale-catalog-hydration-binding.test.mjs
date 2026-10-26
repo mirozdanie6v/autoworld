@@ -44,8 +44,9 @@ test('late production /state refresh preserves selected catalog car and customer
  assert.equal(restored.elements.name.value,'Buyer');
  assert.equal(restored.elements.contact.value,'@test_account');
  assert.equal(restored.elements.note.value,'Уточните документы');
- assert.equal(restored.elements.year.value,'2023');
- assert.equal(restored.elements.mileage.value,'44 000 км');
+ assert.equal(restored.elements.yearFrom.value,'2023');
+ assert.equal(restored.elements.yearTo.value,'2023');
+ assert.equal(restored.elements.mileageMax.value,'44000');
  restored.dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true}));
  await tick();await tick();
  const saved=JSON.parse(localStorage.getItem('auto-sale-leads-v2')||'[]').find(x=>x.name==='Buyer');
@@ -85,7 +86,9 @@ test('general client request remains general and is not assigned to a similar ca
  form.elements.contact.value='@test_account';
  form.elements.model.value='Chevrolet Trailblazer';
  form.elements.origin.value='Грузия';
- form.elements.ageRange.value='3–5 лет';
+ form.elements.budget.value='20000';
+ form.elements.yearFrom.value='2020';
+ form.elements.yearTo.value='2023';
  form.dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true}));
  await tick();await tick();
  const leads=JSON.parse(localStorage.getItem('auto-sale-leads-v2')||'[]');
