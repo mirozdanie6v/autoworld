@@ -110,7 +110,9 @@ export function createAdsAttributionService({
       subjectKey:subjectKey(telegramUserId),
       touch
     });
-    return {status:result.recorded?'recorded':'duplicate',campaignId:campaign.campaignId};
+    return result.recorded
+      ? {status:'recorded',campaignId:campaign.campaignId}
+      : {status:'duplicate'};
   }
   async function getAttribution({telegramUserId}={}){
     const subject=await repository.readSubject(subjectKey(telegramUserId));
@@ -131,7 +133,9 @@ export function createAdsAttributionService({
       adId:attribution.lastTouch.adId||'',
       creativeId:attribution.lastTouch.creativeId||''
     });
-    return {status:result.recorded?'recorded':'duplicate',attribution};
+    return result.recorded
+      ? {status:'recorded',attribution}
+      : {status:'duplicate'};
   }
   return {issueCampaign,recordBotStart,getAttribution,recordTrustedEvent};
 }
@@ -151,8 +155,10 @@ export function createMemoryAdsAttributionRepository(){
     async recordTouch({eventId,subjectKey,touch}){
       if(events.has(eventId))return {recorded:false};
       const existing=subjects.get(subjectKey);
-      const firstTouch=existing?.firstTouch||structuredClone(touch);
-      const lastTouch=structuredClone(touch);
+      const firstTouch=existing?.firstTouch&&existing.firstTouch.timestamp<=touch.timestamp
+        ? existing.firstTouch:structuredClone(touch);
+      const lastTouch=existing?.lastTouch&&existing.lastTouch.timestamp>touch.timestamp
+        ? existing.lastTouch:structuredClone(touch);
       subjects.set(subjectKey,{firstTouch,lastTouch});
       events.set(eventId,{eventId,subjectKey,eventType:'bot_start',...touch});
       return {recorded:true};
