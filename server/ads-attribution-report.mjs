@@ -72,3 +72,39 @@ export function summarizeAdsCampaigns({events=[],verifiedSpend=[]}={}){
   }
   return [...rows.values()].sort((a,b)=>a.campaignId.localeCompare(b.campaignId));
 }
+
+/**
+ * Read an entire bounded receipt stream from the repository before aggregating.
+ * Deliberately refuses to publish a partial report when the bound is exceeded.
+ * This is an application-level aggregation, not a transactional snapshot.
+ */
+export async function summarizeAdsCampaignsFromRepository({
+  repository,
+  verifiedSpend=[],
+  pageSize=250,
+  maxPages=100
+}={}){
+  if(!repository||typeof repository.listEvents!=='function')throw new Error('ads_report_repository_required');
+  if(!Number.isInteger(pageSize)||pageSize<1||pageSize>1000
+    ||!Number.isInteger(maxPages)||maxPages<1||maxPages>1000){
+    throw new Error('invalid_ads_report_pagination');
+  }
+  const events=[];
+  let cursor='';
+  for(let pageNumber=0;pageNumber<maxPages;pageNumber++){
+    const page=await repository.listEvents({cursor,limit:pageSize});
+    if(!page||!Array.isArray(page.events)||page.events.length>pageSize)throw new Error('invalid_ads_event_page');
+    let previous=cursor;
+    for(const event of page.events){
+      if(typeof event?.eventId!=='string'||event.eventId<=previous){
+        throw new Error('invalid_ads_event_order');
+      }
+      previous=event.eventId;
+      events.push(event);
+    }
+    if(page.nextCursor===null)return summarizeAdsCampaigns({events,verifiedSpend});
+    if(!page.events.length||page.nextCursor!==previous)throw new Error('invalid_ads_event_cursor');
+    cursor=page.nextCursor;
+  }
+  throw new Error('ads_report_page_limit_reached');
+}
