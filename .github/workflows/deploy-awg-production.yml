@@ -641,11 +641,20 @@ jobs:
           yc serverless container revision list --container-name "$YC_CONTAINER_NAME" --folder-id "$YC_FOLDER_ID" --format json | jq '.[0] | {id,status,network_id,subnet_id,created_at}' || true
 
       - name: Verify physical Telegram lifecycle
-        if: ${{ always() && inputs.telegram_lifecycle == true }}
+        if: ${{ always() && (inputs.telegram_lifecycle == true || github.event_name == 'push') }}
         env:
           AUDIT_CLIENT_TELEGRAM_USERNAME: ${{ inputs.telegram_client_username || 'Flyer_kg' }}
           AUDIT_CLIENT_TELEGRAM_ID: ${{ inputs.telegram_client_id || '' }}
-        run: node scripts/test-telegram-lifecycle.mjs
+          AUDIT_MANAGER_NAME: Дмитрий
+        run: |
+          set -euo pipefail
+          # One-time audit via the normal protected release marker; do not
+          # broadcast real Telegram messages on ordinary production releases.
+          if [ "${{ inputs.telegram_lifecycle }}" = 'true' ] || grep -Fqx 'telegram_lifecycle_audit=Flyer_kg-Dmitriy-20261026' .production/autoworld-release; then
+            node scripts/test-telegram-lifecycle.mjs
+          else
+            echo "Physical client/manager Telegram lifecycle was not requested."
+          fi
 
       - name: Upload Telegram delivery receipts
         if: always()
