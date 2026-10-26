@@ -140,9 +140,8 @@ export function createAdsAttributionService({
       subjectKey:previous?.key||subjectKey(telegramUserId),
       touch
     });
-    return result.recorded
-      ? {status:'recorded',campaignId:campaign.campaignId}
-      : {status:'duplicate'};
+    return result.blocked?{status:'ignored',reason:'erased_subject'}
+      :result.recorded?{status:'recorded',campaignId:campaign.campaignId}:{status:'duplicate'};
   }
   async function getAttribution({telegramUserId}={}){
     return (await activeSubject(telegramUserId,at(clock).getTime()))?.attribution||null;
@@ -161,9 +160,8 @@ export function createAdsAttributionService({
       adId:attribution.lastTouch.adId||'',
       creativeId:attribution.lastTouch.creativeId||''
     });
-    return result.recorded
-      ? {status:'recorded',attribution}
-      : {status:'duplicate'};
+    return result.blocked?{status:'ignored',reason:'erased_subject'}
+      :result.recorded?{status:'recorded',attribution}:{status:'duplicate'};
   }
   async function listVerifiedEvents({cursor='',limit=250}={}){
     if(typeof cursor!=='string'||cursor.length>120)throw new Error('invalid_ads_event_cursor');
@@ -175,7 +173,7 @@ export function createAdsAttributionService({
 
 // Test-only/in-memory adapter. Do not use for a persistent runtime.
 export function createMemoryAdsAttributionRepository(){
-  const campaigns=new Map(),subjects=new Map(),events=new Map();
+  const campaigns=new Map(),subjects=new Map(),events=new Map(),erasureBlocks=new Map();
   return {
     async createCampaign(campaign){
       if(campaigns.has(campaign.tokenHash))throw new Error('duplicate_ads_token_hash');
@@ -192,6 +190,7 @@ export function createMemoryAdsAttributionRepository(){
       return {updated:true};
     },
     async recordTouch({eventId,subjectKey,touch}){
+      if(erasureBlocks.has(subjectKey))return {recorded:false,blocked:true};
       if(events.has(eventId)){
         const existing=events.get(eventId);
         if(existing.subjectKey!==subjectKey)throw new Error('ads_event_id_collision');
@@ -211,6 +210,7 @@ export function createMemoryAdsAttributionRepository(){
       return row?structuredClone(row):null;
     },
     async recordEvent(event){
+      if(erasureBlocks.has(event.subjectKey))return {recorded:false,blocked:true};
       if(events.has(event.eventId)){
         const existing=events.get(event.eventId);
         if(existing.subjectKey!==event.subjectKey||existing.eventType!==event.eventType){
@@ -221,15 +221,17 @@ export function createMemoryAdsAttributionRepository(){
       events.set(event.eventId,structuredClone(event));
       return {recorded:true};
     },
-    async eraseSubjects({subjectKeys,maxEventsPerSubject=1000}={}){
-      let deletedSubjects=0,deletedEvents=0;
+    async eraseSubjects({subjectKeys,batchSize=50,blockedAt=new Date().toISOString()}={}){
+      let deletedSubjects=0,deletedEvents=0,hasMore=false;
       for(const key of subjectKeys){
-        const affected=[...events.values()].filter(event=>event.subjectKey===key);
-        if(affected.length>maxEventsPerSubject)throw new Error('ads_erasure_event_limit_exceeded');
-        for(const event of affected){events.delete(event.eventId);deletedEvents++;}
+        erasureBlocks.set(key,blockedAt);
+        const affected=[...events.values()].filter(event=>event.subjectKey===key)
+          .sort((a,b)=>a.eventId<b.eventId?-1:a.eventId>b.eventId?1:0);
+        if(affected.length>batchSize)hasMore=true;
+        for(const event of affected.slice(0,batchSize)){events.delete(event.eventId);deletedEvents++;}
         if(subjects.delete(key))deletedSubjects++;
       }
-      return {deletedSubjects,deletedEvents};
+      return {deletedSubjects,deletedEvents,hasMore};
     },
     async purgeExpired({eventCutoff,subjectCutoff,batchSize=100,cursor=''}={}){
       const oldEvents=[...events.values()].filter(e=>e.occurredAt<eventCutoff).slice(0,batchSize+1);
@@ -257,7 +259,8 @@ export function createMemoryAdsAttributionRepository(){
     snapshotForTests(){return {
       campaigns:Array.from(campaigns.values()).map(x=>structuredClone(x)),
       subjects:Array.from(subjects.values()).map(x=>structuredClone(x)),
-      events:Array.from(events.values()).map(x=>structuredClone(x))
+      events:Array.from(events.values()).map(x=>structuredClone(x)),
+      erasureBlocks:Array.from(erasureBlocks.keys())
     };}
   };
 }
