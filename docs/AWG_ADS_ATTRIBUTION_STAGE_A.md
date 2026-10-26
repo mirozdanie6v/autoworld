@@ -159,10 +159,24 @@ cloud connection string. It checks schema DDL, two campaigns, start receipts,
 deduplication, transactions, concurrent writes, paginated reads,
 deactivation, and persistence after a fresh application process connects
 to the same running database. A further privacy phase verifies erasure
-and retention against this real local server. This is **not** a managed
-Yandex Cloud database acceptance test and does not restart the database
-storage engine. It cannot establish production credentials, IAM or
-region-specific YDB settings.
+and retention against this real local server. An additional
+`Verify AWG Ads YDB persistent restart (isolated)` workflow runs a
+**disk-backed** local YDB with mounted volumes, performs the same writes,
+restarts the Docker container itself and checks that attribution data
+survives and erasure/retention still work.
+
+Verified evidence (2026-10-26):
+- Unit + SQL-contract test gate: **29/29 PASS** on
+  [GitHub Actions 40329827975](https://github.com/mirozdanie6v/autoworld/actions/runs/40329827975).
+- Live local YDB + synthetic privacy test:
+  [GitHub Actions 40329391349](https://github.com/mirozdanie6v/autoworld/actions/runs/40329391349) PASS.
+- Full disk-backed YDB container restart:
+  [GitHub Actions 40329798636](https://github.com/mirozdanie6v/autoworld/actions/runs/40329798636) PASS;
+  2 campaigns, 10 recorded bot starts, 1 synthetic lead,
+  successful cross-process reconciliation, and retention after restart.
+
+This is **not** a managed Yandex Cloud database acceptance test; it does
+not establish production credentials, IAM or region-specific YDB settings.
 
 CI only has `contents: read`; no deploy, app merge or production YDB write
 is authorized by this workflow.
@@ -172,7 +186,7 @@ is authorized by this workflow.
 - [x] Standalone campaign token, verified start, first/last attribution, TTL
 - [x] Event dedupe, collision guards, bounded report pagination, verified spend-only CPL
 - [x] SQL YDB adapter, schema and mocked transaction tests
-- [x] Actual local YDB DDL, writes, reads, concurrency, process reconnect tests
+- [x] Actual local YDB DDL, writes, reads, concurrency, process reconnect and full disk-backed YDB container restart
 - [x] Retention/erasure/key-overlap code and unit test coverage
 - [x] Explicit separation of Stage A from bot, Mini App, CRM and production
 - [ ] External legal/privacy approval of technical retention proposal before real data
