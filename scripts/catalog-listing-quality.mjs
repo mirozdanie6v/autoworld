@@ -2,7 +2,7 @@
 // VIN is optional; a source post, not an invented VIN, identifies a vehicle without one.
 const VIN_RE=/\b[A-HJ-NPR-Z0-9]{17}\b/g;
 const FULL_VIN=/^[A-HJ-NPR-Z0-9]{17}$/;
-const MULTI_VEHICLE=/\b(?:несколько|множество|два|три|четыре|пять|2|3|4|5)\s+(?:авто|автомобил\w*|машин\w*)\b|\b(?:подборка|каталог|прайс-лист)\s+(?:авто|автомобил\w*|машин\w*)/iu;
+const MULTI_VEHICLE=/(?:^|[\s(])(?:несколько|множество|два|три|четыре|пять|2|3|4|5|подборка|каталог|прайс-лист)\s+(?:авто|автомобил[а-яё]*|машин[а-яё]*)(?=$|[\s.,!?:;])/iu;
 
 export function catalogListingQuality({rawText='',vin='',brand='',model='',year=0,sourcePostId=''}={}){
   const raw=String(rawText||'');
