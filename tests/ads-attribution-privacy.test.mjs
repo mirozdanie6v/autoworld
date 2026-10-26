@@ -13,6 +13,8 @@ import {
 
 const aSecret='ads-test-subject-current-key-0123456789-ABCDEFG';
 const bSecret='ads-test-subject-prior-key-0123456789-ABCDEFG';
+const principal={id:'test-privacy-officer'};
+const authorizeOperation=async ({permission,principal:p})=>p.id==='test-privacy-officer'&&['ads:erase','ads:retention'].includes(permission);
 function setup(now='2026-10-26T12:00:00Z'){
   let current=now;
   const repository=createMemoryAdsAttributionRepository();
@@ -20,7 +22,7 @@ function setup(now='2026-10-26T12:00:00Z'){
     repository,subjectSecret:aSecret,clock:()=>new Date(current)
   });
   const privacy=createAdsPrivacyService({
-    repository,subjectSecrets:[aSecret,bSecret],clock:()=>new Date(current)
+    repository,subjectSecrets:[aSecret,bSecret],clock:()=>new Date(current),authorizeOperation
   });
   return {repository,service,privacy,setNow:t=>{current=t;}};
 }
@@ -31,10 +33,10 @@ test('erasure removes only authorized identity and all linked events, including 
   await service.recordBotStart({telegramUserId:111,startPayload:campaign.token,updateId:1});
   await service.recordBotStart({telegramUserId:222,startPayload:campaign.token,updateId:2});
   await service.recordTrustedEvent({telegramUserId:111,eventType:'lead_submit',eventId:'lead-1'});
-  await assert.rejects(privacy.eraseVerifiedTelegramUser({telegramUserId:111}),/authorization_required/);
+  await assert.rejects(privacy.eraseVerifiedTelegramUser({telegramUserId:111}),/ads_operation_forbidden/);
   assert.equal(repository.snapshotForTests().events.length,3);
-  assert.deepEqual(await privacy.eraseVerifiedTelegramUser({telegramUserId:111,authorized:true}),{
-    deletedSubjects:1,deletedEvents:2
+  assert.deepEqual(await privacy.eraseVerifiedTelegramUser({telegramUserId:111,principal}),{
+    status:'complete',deletedSubjects:1,deletedEvents:2,batches:1
   });
   assert.equal(await service.getAttribution({telegramUserId:111}),null);
   assert.equal(repository.snapshotForTests().events.length,1);
@@ -54,9 +56,9 @@ test('old pseudonymous identifiers remain readable through bounded dual-key rota
   assert.equal(repository.snapshotForTests().subjects.length,1);
   const subjects=repository.snapshotForTests().subjects;
   assert.equal(subjects[0].firstTouch.campaignId,'old-key');
-  const privacy=createAdsPrivacyService({repository,subjectSecrets:[aSecret,bSecret]});
-  assert.deepEqual(await privacy.eraseVerifiedTelegramUser({telegramUserId:100,authorized:true}),{
-    deletedSubjects:1,deletedEvents:3
+  const privacy=createAdsPrivacyService({repository,subjectSecrets:[aSecret,bSecret],authorizeOperation});
+  assert.deepEqual(await privacy.eraseVerifiedTelegramUser({telegramUserId:100,principal}),{
+    status:'complete',deletedSubjects:1,deletedEvents:3,batches:1
   });
   assert.equal((await rotated.getAttribution({telegramUserId:100})),null);
   assert.notEqual(createAdsSubjectKey(100,aSecret),createAdsSubjectKey(100,bSecret));
@@ -68,8 +70,8 @@ test('retention removes expired events/subjects while preserving fresh ones',asy
   await service.recordBotStart({telegramUserId:10,startPayload:token,updateId:1});
   setNow('2027-01-27T12:00:00Z'); // > 90 days after old touch
   await service.recordBotStart({telegramUserId:20,startPayload:token,updateId:2});
-  await assert.rejects(privacy.runRetentionSweep(),/authorization_required/);
-  const result=await privacy.runRetentionSweep({authorized:true});
+  await assert.rejects(privacy.runRetentionSweep(),/ads_operation_forbidden/);
+  const result=await privacy.runRetentionSweep({principal});
   assert.equal(result.deletedEvents,1);
   assert.equal(result.deletedSubjects,1);
   assert.equal(repository.snapshotForTests().events.length,1);
@@ -83,7 +85,7 @@ test('retention compacts an old first-touch even when newer last-touch remains',
   setNow('2027-01-20T12:00:00Z'); // within the 90 day retention window
   await service.recordBotStart({telegramUserId:10,startPayload:token,updateId:2});
   setNow('2027-01-27T12:00:00Z');
-  const result=await privacy.runRetentionSweep({authorized:true});
+  const result=await privacy.runRetentionSweep({principal});
   assert.equal(result.deletedEvents,1);
   assert.equal(result.compactedSubjects,1);
   assert.equal(repository.snapshotForTests().subjects.length,1);
@@ -92,9 +94,50 @@ test('retention compacts an old first-touch even when newer last-touch remains',
 test('privacy invalid parameters fail closed; keys never expose Telegram identity',async()=>{
   const {repository}=setup();
   assert.equal(ADS_RETENTION_POLICY.eventRetentionDays,90);
-  assert.throws(()=>createAdsPrivacyService({repository,subjectSecrets:['short']}),/invalid_ads_subject_secret_ring/);
-  assert.throws(()=>createAdsPrivacyService({repository,subjectSecrets:[aSecret,aSecret]}),/invalid_ads_subject_secret_ring/);
-  assert.throws(()=>createAdsPrivacyService({repository,subjectSecrets:[aSecret],policy:{...ADS_RETENTION_POLICY,batchSize:99999}}),/invalid_ads_retention_policy/);
+  assert.throws(()=>createAdsPrivacyService({repository,subjectSecrets:['short'],authorizeOperation}),/invalid_ads_subject_secret_ring/);
+  assert.throws(()=>createAdsPrivacyService({repository,subjectSecrets:[aSecret,aSecret],authorizeOperation}),/invalid_ads_subject_secret_ring/);
+  assert.throws(()=>createAdsPrivacyService({repository,subjectSecrets:[aSecret],authorizeOperation,policy:{...ADS_RETENTION_POLICY,batchSize:99999}}),/invalid_ads_retention_policy/);
   assert.throws(()=>createAdsAttributionService({repository,subjectSecret:aSecret,previousSubjectSecrets:[aSecret]}),/invalid_ads_previous_subject_secrets/);
   assert.doesNotMatch(adsSubjectKeysForIdentity('12345',[aSecret])[0],/12345/);
+});
+
+test('erasure handles over 1,000 events in bounded batches and blocks replay indefinitely',async()=>{
+  const {repository,service,privacy}=setup();
+  const token=(await service.issueCampaign({campaignId:'large'})).token;
+  await service.recordBotStart({telegramUserId:999,startPayload:token,updateId:700000});
+  for(let i=0;i<1010;i++){
+    assert.equal((await service.recordTrustedEvent({
+      telegramUserId:999,eventType:'vehicle_view',eventId:'view_'+i
+    })).status,'recorded');
+  }
+  const result=await privacy.eraseVerifiedTelegramUser({telegramUserId:999,principal});
+  assert.equal(result.status,'complete');
+  assert.equal(result.deletedEvents,1011);
+  assert.ok(result.batches>10);
+  assert.equal(repository.snapshotForTests().events.length,0);
+  assert.equal((await service.recordBotStart({
+    telegramUserId:999,startPayload:token,updateId:700000
+  })).reason,'erased_subject');
+  assert.equal((await service.recordBotStart({
+    telegramUserId:999,startPayload:token,updateId:700002
+  })).reason,'erased_subject');
+  assert.equal(repository.snapshotForTests().events.length,0);
+  assert.equal(repository.snapshotForTests().erasureBlocks.length,2);
+});
+test('retention cycle emits structured monitoring events and checks principal rights',async()=>{
+  const audit=[];
+  const repo=createMemoryAdsAttributionRepository();
+  const maintenance=createAdsPrivacyService({
+    repository:repo,subjectSecrets:[aSecret],authorizeOperation,
+    onAudit:async record=>audit.push(record),
+    clock:()=>new Date('2027-03-01T12:00:00Z')
+  });
+  await assert.rejects(maintenance.runRetentionCycle({principal:{id:'untrusted-caller'}}),/ads_operation_forbidden/);
+  const result=await maintenance.runRetentionCycle({principal});
+  assert.equal(result.status,'complete');
+  assert.equal(audit.length,1);
+  assert.equal(audit[0].actorId,principal.id);
+  assert.equal(audit[0].operation,'retention');
+  assert.equal(audit[0].outcome,'success');
+  assert.equal(JSON.stringify(audit).includes(aSecret),false);
 });
