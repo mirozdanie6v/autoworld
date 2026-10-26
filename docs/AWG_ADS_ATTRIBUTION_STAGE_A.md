@@ -110,23 +110,78 @@ The dedicated GitHub Actions gate only runs Node unit tests from this branch.
 It has `contents: read`, no cloud authentication, no remote database and no
 deployment steps. Existing deployment workflows must remain main-only.
 
-## Remaining Stage A readiness gates (not complete)
+## Privacy and key-handling baseline (technical implementation)
 
-- [x] Cryptographic one-time campaign deep-link tokens and hash-only registry
-- [x] Active/inactive token management as an internal repository operation
-- [x] First/last bot-start attribution, strict input validation, 30-day eligibility
-- [x] Pseudonymized subject keys and idempotent event receipts
-- [x] YDB schema and transactional write/read adapter implemented
-- [x] Bounded paged campaign event reporting and unit/SQL-mock tests
-- [x] Main-vs-feature Git diff allowlist in CI; no production handlers edited
-- [ ] **Real isolated YDB** schema migration + transaction + restart / pagination / concurrency integration tests; no test YDB was provisioned
-- [ ] Approve data retention, deletion/erasure, incident logging and key rotation before collecting real user data
-- [ ] Verify eventual external spend provenance, ad-platform metrics contracts and director-only API authentication during Stage B
+`server/ads-attribution-privacy.mjs` defines the suggested data-handling
+default (a **technical policy**, not an approved legal basis):
 
-Stage A code implementation is prepared, but operational readiness for connecting
-to a real YDB instance remains **conditional** on the outstanding isolation test
-and data-handling requirements. No deployment, schema migration or test fixture
-write has been performed against live YDB.
+- 30 days after last verified campaign touch: eligibility ends; no new lead
+  or event may be attributed using the expired context.
+- 90 days for event receipts and pseudonymous subject records: the explicit
+  `runRetentionSweep({authorized:true})` removes expired rows in bounded
+  transactions, also compacts out-of-retention first touches while newer
+  last touches are retained. Re-run until `nextCursor=null` and
+  `hasMoreEvents=false`. Always measure and alert on incomplete sweeps.
+- Verified-user erasure: `eraseVerifiedTelegramUser({telegramUserId,authorized:true})`
+  derives HMAC pseudonyms for the current and old secret keys, deletes the
+  subject row and event receipts, and returns counts. The host must first
+  authenticate the subject and authorize the erasure. No route accepts
+  raw Telegram IDs from an unauthenticated caller.
+- Key rotation: `previousSubjectSecrets` in the attribution service
+  permits old subject IDs to remain accessible during an explicitly bounded
+  overlap. New visitors get new keys; repeat visitors with valid previous
+  attribution keep the old key during overlap. Once the 90-day retention
+  window is drained and sweep is complete, retire/destroy the old secret.
+  **Do not remove an old key before erasure requests and retention sweep
+  are reconciled**, or pseudonymous records may become unreachable.
+- All secrets must be stored in a scoped secret store; do not commit them,
+  copy them to a web page, log them or expose an erasure endpoint without
+  role-specific authorization. Unit tests use fixed non-production strings.
+- Retention and deletion apply to this attribution module only. CRM leads
+  may independently contain personal data; their separate lifecycle and
+  applicable legal rules must be handled during integration.
+- By design the standalone Stage A code has no worker/cron schedule, no
+  public API, no permission to mutate the production database and no
+  storage of plaintext Telegram user IDs.
+
+The proposal requires legal/privacy sign-off before capturing **real**
+visitor data, including lawful basis, notice/consent requirements,
+controller/processor roles, retention adjustment if legally required,
+data-subject request handling, log retention and backup expiry.
+
+## Independent YDB proof
+
+GitHub Actions executes `Verify AWG Ads (real local YDB, isolated)` with
+the official Docker `ydbplatform/local-ydb` server on
+`grpc://localhost:2136/local` and anonymous local credentials.
+The test script hard-refuses any inherited production YDB credentials or
+cloud connection string. It checks schema DDL, two campaigns, start receipts,
+deduplication, transactions, concurrent writes, paginated reads,
+deactivation, and persistence after a fresh application process connects
+to the same running database. A further privacy phase verifies erasure
+and retention against this real local server. This is **not** a managed
+Yandex Cloud database acceptance test and does not restart the database
+storage engine. It cannot establish production credentials, IAM or
+region-specific YDB settings.
+
+CI only has `contents: read`; no deploy, app merge or production YDB write
+is authorized by this workflow.
+
+## Stage A acceptance boundary
+
+- [x] Standalone campaign token, verified start, first/last attribution, TTL
+- [x] Event dedupe, collision guards, bounded report pagination, verified spend-only CPL
+- [x] SQL YDB adapter, schema and mocked transaction tests
+- [x] Actual local YDB DDL, writes, reads, concurrency, process reconnect tests
+- [x] Retention/erasure/key-overlap code and unit test coverage
+- [x] Explicit separation of Stage A from bot, Mini App, CRM and production
+- [ ] External legal/privacy approval of technical retention proposal before real data
+- [ ] Scheduled retention execution, monitoring and end-to-end authenticated deletion route (Stage B)
+- [ ] Managed Yandex Cloud staging/database smoke tests with appropriate IAM (Stage B)
+
+**Technical Stage A is implemented and independently exercised.**
+Readiness for processing real personal data and publishing to production
+remains contingent on Stage B integration gates and external approvals.
 
 ## Stage B integration gates — NOT authorized yet
 
