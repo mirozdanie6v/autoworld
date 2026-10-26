@@ -70,7 +70,7 @@ try {
   }else if(phase==='privacy'){
     // Explicit identity verified by the test; no real users/data involved.
     const privacy=createAdsPrivacyService({
-      repository,subjectSecrets:[subjectSecret],authorizeOperation,
+      repository,subjectSecrets:[subjectSecret],authorizeOperation,onAudit:async()=>{},
       clock:()=>new Date('2027-03-01T12:00:00Z')
     });
     const removed=await privacy.eraseVerifiedTelegramUser({telegramUserId:111,principal});
