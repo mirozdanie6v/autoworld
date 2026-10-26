@@ -66,18 +66,21 @@ connected to the director dashboard yet.
 
 ## Isolated YDB model
 
-`server/ads-attribution-ydb.mjs` provides three new independent tables:
+`server/ads-attribution-ydb.mjs` provides six new independent tables:
 
 | Table | Primary key | Purpose |
 | --- | --- | --- |
 | `awg_ads_campaigns` | `token_hash` | Allowed campaigns, ad/creative references, enabled status |
 | `awg_ads_subjects` | `subject_key` | First and last verified touch |
 | `awg_ads_events` | `event_id` | Idempotent server-origin events |
+| `awg_ads_events_by_subject` | `subject_key,event_id` | Transactional subject-key access for bounded erasure |
+| `awg_ads_events_by_time` | `occurred_at,event_id` | Transactional timestamp-key access for retention |
+| `awg_ads_erasure_blocks` | `subject_key` | Persistent suppression after user erasure |
 
 The adapter includes serializable campaign suspension, collision detection
-and paginated read-out of verified receipts. Its SQL contract is covered by a
-mocked transaction-driver test. **No real YDB server integration test has
-been run**; passing a mock does not establish live compatibility.
+and paginated read-out of verified receipts. Its SQL contract is covered by mocked and real local YDB tests,
+including persistence after database restart. Managed Yandex Cloud staging has
+not been tested.
 
 The adapter accepts an explicit existing YDB query tag. It does **not** create
 a Driver, load credentials or run DDL when imported. The schema initializer
@@ -88,9 +91,10 @@ test database before calling it. **Never** run the schema initializer against
 the production YDB database.
 
 Idempotency depends on serializable YDB transactions, and a caller must
-handle retryable serialization failures. No append-only/event retention job
-has been deployed. A retention, deletion, access-control and consent policy
-must be approved before real user traffic is collected.
+handle retryable serialization failures. No production retention job has been deployed. The scheduler-neutral entry
+point, monitoring contract and authorization boundary are implemented in the
+isolated branch. Production IAM, alerts and retention scheduling must be bound
+and audited during Stage B; legal approval is required before collecting data.
 
 ## Local verification (no paid services)
 
@@ -101,53 +105,61 @@ node --check server/ads-attribution-report.mjs
 node --test tests/ads-attribution*.test.mjs
 ```
 
-On 2026-10-26 the last verified run passed **24/24 tests** (including
-mocked YDB SQL transaction contract, campaign suspension, idempotency,
-corrupted timestamps, event pagination and campaign metrics). The workflow
+Unit and SQL-contract checks now cover replay suppression, batch deletion of
+1,011 receipts, authorization, audit sinks, retention scheduling contract and
+monitoring. Refer to the linked GitHub Actions run for the current passing count. The workflow
 also validates that the branch diff only touches these isolated files.
 
 The dedicated GitHub Actions gate only runs Node unit tests from this branch.
 It has `contents: read`, no cloud authentication, no remote database and no
 deployment steps. Existing deployment workflows must remain main-only.
 
-## Privacy and key-handling baseline (technical implementation)
+## Privacy, access control and retention lifecycle
 
-`server/ads-attribution-privacy.mjs` defines the suggested data-handling
-default (a **technical policy**, not an approved legal basis):
+`server/ads-attribution-privacy.mjs` implements the technical (not yet legally
+approved) proposal:
 
-- 30 days after last verified campaign touch: eligibility ends; no new lead
-  or event may be attributed using the expired context.
-- 90 days for event receipts and pseudonymous subject records: the explicit
-  `runRetentionSweep({authorized:true})` removes expired rows in bounded
-  transactions, also compacts out-of-retention first touches while newer
-  last touches are retained. Re-run until `nextCursor=null` and
-  `hasMoreEvents=false`. Always measure and alert on incomplete sweeps.
-- Verified-user erasure: `eraseVerifiedTelegramUser({telegramUserId,authorized:true})`
-  derives HMAC pseudonyms for the current and old secret keys, deletes the
-  subject row and event receipts, and returns counts. The host must first
-  authenticate the subject and authorize the erasure. No route accepts
-  raw Telegram IDs from an unauthenticated caller.
-- Key rotation: `previousSubjectSecrets` in the attribution service
-  permits old subject IDs to remain accessible during an explicitly bounded
-  overlap. New visitors get new keys; repeat visitors with valid previous
-  attribution keep the old key during overlap. Once the 90-day retention
-  window is drained and sweep is complete, retire/destroy the old secret.
-  **Do not remove an old key before erasure requests and retention sweep
-  are reconciled**, or pseudonymous records may become unreachable.
-- All secrets must be stored in a scoped secret store; do not commit them,
-  copy them to a web page, log them or expose an erasure endpoint without
-  role-specific authorization. Unit tests use fixed non-production strings.
-- Retention and deletion apply to this attribution module only. CRM leads
-  may independently contain personal data; their separate lifecycle and
-  applicable legal rules must be handled during integration.
-- By design the standalone Stage A code has no worker/cron schedule, no
-  public API, no permission to mutate the production database and no
-  storage of plaintext Telegram user IDs.
+- Attribution eligibility: 30 days from the most recent valid touch.
+- Events and pseudonymous subject histories: 90-day retention default.
+  `runRetentionCycle({principal})` performs bounded transactional sweeps,
+  repeats until complete and reports `status:complete/incomplete`. A partial
+  cycle is never accepted as successful maintenance.
+- Verified identity deletion: `eraseVerifiedTelegramUser({telegramUserId,principal})`
+  HMAC-derives the current and previous subject keys. The YDB adapter writes
+  a suppression tombstone before removing subject data/events **in the same
+  serializable transaction**, and deletes indexed event receipts in batches
+  of 50 until complete. There is no hard total limit of 1,000 events.
+  An interrupted call returns an explicit incomplete result; retrying with
+  the same verified identity resumes safely.
+- Old/replayed Telegram updates and new events for a previously erased
+  pseudonym are blocked by `awg_ads_erasure_blocks`. The blocked subject
+  key is a **retained minimal pseudonymous suppression record**, not complete
+  elimination of all user-linked information. A legally reviewed path for
+  renewed consent/reactivation and tombstone lifecycle is required before
+  collecting real personal data.
+- `authorizeOperation({permission,principal})` must be supplied by the
+  authenticated host. The permissions are `ads:erase` and
+  `ads:retention`; the old `authorized:true` bypass is removed.
+  `principal` must be a verified server-side actor supplied by the host,
+  never accepted directly from the browser or Telegram client.
+- `onAudit` is mandatory. Successful, failed and incomplete erasure/retention
+  operations emit structured outcome, actor ID, counts and timestamp **without
+  raw Telegram ID, key or token**. Deployments must use a durable, restricted
+  audit sink; the test environment uses no-op or in-memory listeners.
+- `server/ads-attribution-maintenance.mjs` wraps a complete sweep and
+  emits counters, duration, success/failure and high-severity alerts on an
+  incomplete run. `registerAdsDailyRetention` exposes a 03:00 UTC
+  non-overlapping scheduler registration contract. **It has not been bound
+  to a production scheduler**; only the isolated code/tests are present.
+- Scoped secrets are required. Rotation supports up to two old HMAC keys
+  during a controlled overlap. Removing any old key before its retention
+  and erasure window closes can orphan pseudonymous records.
+- CRM lead personal data remains subject to a **separate** data lifecycle
+  and cannot be deleted through this standalone ads-only service.
 
-The proposal requires legal/privacy sign-off before capturing **real**
-visitor data, including lawful basis, notice/consent requirements,
-controller/processor roles, retention adjustment if legally required,
-data-subject request handling, log retention and backup expiry.
+Legal/privacy review before live use must approve the lawful basis,
+privacy notice, tombstone retention, deletion and renewed-consent semantics,
+processor roles, backup expiry, and any jurisdiction-specific obligations.
 
 ## Independent YDB proof
 
@@ -187,10 +199,12 @@ is authorized by this workflow.
 - [x] Event dedupe, collision guards, bounded report pagination, verified spend-only CPL
 - [x] SQL YDB adapter, schema and mocked transaction tests
 - [x] Actual local YDB DDL, writes, reads, concurrency, process reconnect and full disk-backed YDB container restart
-- [x] Retention/erasure/key-overlap code and unit test coverage
+- [x] Authorization and audit-hook enforcement, idempotent paginated erasure, retention/key-overlap code and unit tests
+- [x] Transactional subject/time lookup tables and suppression after erasure
+- [x] Scheduler-neutral daily maintenance contract and monitored fail-closed runner
 - [x] Explicit separation of Stage A from bot, Mini App, CRM and production
 - [ ] External legal/privacy approval of technical retention proposal before real data
-- [ ] Scheduled retention execution, monitoring and end-to-end authenticated deletion route (Stage B)
+- [ ] Bind daily scheduler, durable logs, alerts, IAM and authenticated deletion route in staging and production (Stage B)
 - [ ] Managed Yandex Cloud staging/database smoke tests with appropriate IAM (Stage B)
 
 **Technical Stage A is implemented and independently exercised.**
