@@ -22,7 +22,7 @@ function setup(now='2026-10-26T12:00:00Z'){
     repository,subjectSecret:aSecret,clock:()=>new Date(current)
   });
   const privacy=createAdsPrivacyService({
-    repository,subjectSecrets:[aSecret,bSecret],clock:()=>new Date(current),authorizeOperation
+    repository,subjectSecrets:[aSecret,bSecret],clock:()=>new Date(current),authorizeOperation,onAudit:async()=>{}
   });
   return {repository,service,privacy,setNow:t=>{current=t;}};
 }
@@ -56,7 +56,7 @@ test('old pseudonymous identifiers remain readable through bounded dual-key rota
   assert.equal(repository.snapshotForTests().subjects.length,1);
   const subjects=repository.snapshotForTests().subjects;
   assert.equal(subjects[0].firstTouch.campaignId,'old-key');
-  const privacy=createAdsPrivacyService({repository,subjectSecrets:[aSecret,bSecret],authorizeOperation});
+  const privacy=createAdsPrivacyService({repository,subjectSecrets:[aSecret,bSecret],authorizeOperation,onAudit:async()=>{}});
   assert.deepEqual(await privacy.eraseVerifiedTelegramUser({telegramUserId:100,principal}),{
     status:'complete',deletedSubjects:1,deletedEvents:3,batches:1
   });
@@ -94,9 +94,9 @@ test('retention compacts an old first-touch even when newer last-touch remains',
 test('privacy invalid parameters fail closed; keys never expose Telegram identity',async()=>{
   const {repository}=setup();
   assert.equal(ADS_RETENTION_POLICY.eventRetentionDays,90);
-  assert.throws(()=>createAdsPrivacyService({repository,subjectSecrets:['short'],authorizeOperation}),/invalid_ads_subject_secret_ring/);
-  assert.throws(()=>createAdsPrivacyService({repository,subjectSecrets:[aSecret,aSecret],authorizeOperation}),/invalid_ads_subject_secret_ring/);
-  assert.throws(()=>createAdsPrivacyService({repository,subjectSecrets:[aSecret],authorizeOperation,policy:{...ADS_RETENTION_POLICY,batchSize:99999}}),/invalid_ads_retention_policy/);
+  assert.throws(()=>createAdsPrivacyService({repository,subjectSecrets:['short'],authorizeOperation,onAudit:async()=>{}}),/invalid_ads_subject_secret_ring/);
+  assert.throws(()=>createAdsPrivacyService({repository,subjectSecrets:[aSecret,aSecret],authorizeOperation,onAudit:async()=>{}}),/invalid_ads_subject_secret_ring/);
+  assert.throws(()=>createAdsPrivacyService({repository,subjectSecrets:[aSecret],authorizeOperation,onAudit:async()=>{},policy:{...ADS_RETENTION_POLICY,batchSize:99999}}),/invalid_ads_retention_policy/);
   assert.throws(()=>createAdsAttributionService({repository,subjectSecret:aSecret,previousSubjectSecrets:[aSecret]}),/invalid_ads_previous_subject_secrets/);
   assert.doesNotMatch(adsSubjectKeysForIdentity('12345',[aSecret])[0],/12345/);
 });
@@ -140,4 +140,11 @@ test('retention cycle emits structured monitoring events and checks principal ri
   assert.equal(audit[0].operation,'retention');
   assert.equal(audit[0].outcome,'success');
   assert.equal(JSON.stringify(audit).includes(aSecret),false);
+});
+
+test('privacy operations refuse missing audit sink even with an authorizer',()=>{
+  const repo=createMemoryAdsAttributionRepository();
+  assert.throws(()=>createAdsPrivacyService({
+    repository:repo,subjectSecrets:[aSecret],authorizeOperation
+  }),/ads_audit_handler_required/);
 });
