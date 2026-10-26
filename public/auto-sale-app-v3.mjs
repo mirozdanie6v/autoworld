@@ -564,7 +564,7 @@ function modalQuoteV2(q,lead,requestedOrigin=''){
   const base=q||{
     id:'',version:1,status:'Черновик',leadId:lead?.id||'',model:lead?.model||'',
     origin,transportMode:Number(linked.car?.turnkeyDeliveryRub)>0?'Доставка под ключ':modesV2(origin)[0],
-    tariffVersion:AWG_QUOTE_V2_TARIFF,quoteSchema:AWG_QUOTE_V2_SCHEMA,
+    tariffVersion:origin==='США'?AWG_US_SIMPLE_TARIFF:AWG_QUOTE_V2_TARIFF,quoteSchema:origin==='США'?AWG_US_SIMPLE_SCHEMA:AWG_QUOTE_V2_SCHEMA,
     ageCategory:facts?.ageCategory||age||'',
     manufactureDate:facts?.manufactureDate||'',engineCc:facts?.engineCc||0,
     powerHp:facts?.powerHp||0,powerUnit:'ps',engineType:facts?.engineType||'',importerType:'nat',
@@ -759,9 +759,9 @@ async function cloneQuote(id){
   const q={...old,id:nextId('Q',quotes),version:(old.version||1)+1,status:'Черновик',validUntil:old.tariffVersion===AWG_GEORGIA_TARIFF_VERSION?'':addDays(today,7),updatedAt:new Date().toISOString(),revisionOf:old.id};
   // Only the NEW draft migrates to the 22 October terms. The original approved
   // customer quote remains immutable and its historical sums are unchanged.
-  if(['Грузия','США'].includes(old.origin)&&!v2Quote(old)){
+  if(['Грузия','США'].includes(old.origin)&&(!v2Quote(old)||(old.origin==='США'&&!simpleUsQuote(old)))){
     Object.assign(q,{
-      tariffVersion:origin==='США'?AWG_US_SIMPLE_TARIFF:AWG_QUOTE_V2_TARIFF,quoteSchema:origin==='США'?AWG_US_SIMPLE_SCHEMA:AWG_QUOTE_V2_SCHEMA,
+      tariffVersion:old.origin==='США'?AWG_US_SIMPLE_TARIFF:AWG_QUOTE_V2_TARIFF,quoteSchema:old.origin==='США'?AWG_US_SIMPLE_SCHEMA:AWG_QUOTE_V2_SCHEMA,
       transportMode:(Number(old.turnkeyDeliveryUsd)>0?'Доставка под ключ':modesV2(old.origin)[0]),
       legalization:0,service:0,customs:0,recyclingFee:0,georgiaDelivery:0,
       customsAndRecyclingRub:Number(old.customsAndRecyclingRub)||(Number(old.customsRub)||0)+(Number(old.recyclingRub)||0),
@@ -809,8 +809,7 @@ root.addEventListener('change',async event=>{const t=event.target;if(t.name==='t
     if(t.name==='transportMode'){
       const turnkey=t.value==='Доставка под ключ';
       form.querySelector('#quoteTurnkeyDeliveryField')?.classList.toggle('auto-conditional-hidden',!turnkey);
-       form.querySelector('#quoteDeliveryCityField')?.classList.toggle('auto-conditional-hidden',!turnkey);
-       form.querySelector('#quoteDeliveryCityField')?.classList.toggle('auto-conditional-hidden',!turnkey);
+      form.querySelector('#quoteDeliveryCityField')?.classList.toggle('auto-conditional-hidden',!turnkey);
       if(!turnkey&&form.elements.turnkeyDeliveryUsd)form.elements.turnkeyDeliveryUsd.value='0';
     }
     if(t.name==='manufactureDate'){
