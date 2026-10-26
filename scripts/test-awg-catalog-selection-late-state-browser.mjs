@@ -6,7 +6,7 @@ import {join,resolve,extname} from 'node:path';
 import {once} from 'node:events';
 import {chromium} from 'playwright';
 
-const car={id:'AWG-TRAIL-SELECTED',brand:'Chevrolet',model:'Trailblazer',origin:'Грузия',year:2023,
+const car={id:'AWG-TRAIL-SELECTED',brand:'Chevrolet',model:'Trailblazer',origin:'США',auction:'Copart',auctionDate:'2024-01-05',year:2023,
  mileage:'44 000 км',engine:'1,3l на 155HP',drive:'FWD',image:'https://example.invalid/vehicle.jpg',
  priceRub:1770000,price:0,active:true,delivery:'5–10 дней'};
 const root=resolve('dist');
@@ -70,7 +70,10 @@ try{
   await page.goto(url,{waitUntil:'domcontentloaded',timeout:45000});
   await page.locator('[data-go="catalog"]').first().waitFor({state:'visible',timeout:25000});
   await page.locator('[data-go="catalog"]').first().click();
-  await page.locator('[data-request-car="'+car.id+'"]').first().click();
+  const cardButton=page.locator('[data-request-car="'+car.id+'"]').first();
+  assert.equal(await cardButton.isEnabled(),true,'ended auction must allow a similar-car request');
+  assert.match(await cardButton.innerText(),/Найти похожий/);
+  await cardButton.click();
   const form=page.locator('#requestForm');
   await form.waitFor({state:'visible'});
   assert.equal(await form.locator('[name="carId"]').inputValue(),car.id);
@@ -78,6 +81,11 @@ try{
   await form.locator('[name="name"]').fill('Browser Test');
   await form.locator('[name="contact"]').fill('@synthetic');
   await form.locator('[name="note"]').fill('Same exact catalog car after state reload');
+  await form.locator('[name="budget"]').fill('20000');
+  assert.equal(await form.locator('[name="yearFrom"]').inputValue(),'2023');
+  assert.equal(await form.locator('[name="yearTo"]').inputValue(),'2023');
+  assert.equal(await form.locator('[name="mileageMax"]').inputValue(),'44000');
+  assert.equal(await form.locator('[name="budget"]').getAttribute('step'),'200');
   await page.screenshot({path:join(out,platform+'-before-sync.png')});
   resumeState();
   await page.waitForFunction(()=>window.__AUTO_SALE_SERVER__?.revision===108,null,{timeout:18000});
@@ -89,8 +97,10 @@ try{
   assert.equal(await again.locator('[name="name"]').inputValue(),'Browser Test');
   assert.equal(await again.locator('[name="contact"]').inputValue(),'@synthetic');
   assert.equal(await again.locator('[name="note"]').inputValue(),'Same exact catalog car after state reload');
-  assert.equal(await again.locator('[name="year"]').inputValue(),'2023');
-  assert.equal(await again.locator('[name="mileage"]').inputValue(),'44 000 км');
+  assert.equal(await again.locator('[name="yearFrom"]').inputValue(),'2023');
+  assert.equal(await again.locator('[name="yearTo"]').inputValue(),'2023');
+  assert.equal(await again.locator('[name="mileageMax"]').inputValue(),'44000');
+  assert.equal(await again.locator('[name="budget"]').inputValue(),'20000');
   await page.screenshot({path:join(out,platform+'-after-sync.png')});
   await again.locator('[type="submit"]').click();
   await page.waitForFunction(()=>document.querySelector('#requestForm')===null,null,{timeout:15000});
@@ -102,6 +112,9 @@ try{
   assert.equal(created.input.year,'2023');
   assert.equal(created.input.mileage,'44 000 км');
   assert.equal(created.input.engine,'1,3l на 155HP');
+  assert.equal(created.input.yearFrom,'2023');
+  assert.equal(created.input.yearTo,'2023');
+  assert.equal(created.input.budget,20000);
   assert.equal(pageErrors.length,0,'JavaScript browser errors: '+JSON.stringify(pageErrors));
   const x=await page.evaluate(()=>({width:innerWidth,documentWidth:document.documentElement.scrollWidth}));
   assert.ok(x.documentWidth<=x.width+3,'unexpected horizontal overflow '+JSON.stringify(x));

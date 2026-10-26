@@ -2,7 +2,10 @@
 // Do not reinterpret immutable historical Georgia / USA quote versions.
 export const AWG_QUOTE_V2_SCHEMA='awg-quote-2026-10-23';
 export const AWG_QUOTE_V2_TARIFF='2026-10-23-cross-origin';
-export const v2Quote=q=>q?.quoteSchema===AWG_QUOTE_V2_SCHEMA&&q?.tariffVersion===AWG_QUOTE_V2_TARIFF;
+export const AWG_US_SIMPLE_SCHEMA='awg-quote-us-simple-2026-10-26';
+export const AWG_US_SIMPLE_TARIFF='2026-10-26-us-car-plus-repair';
+export const simpleUsQuote=q=>q?.origin==='США'&&q?.quoteSchema===AWG_US_SIMPLE_SCHEMA&&q?.tariffVersion===AWG_US_SIMPLE_TARIFF;
+export const v2Quote=q=>Boolean(simpleUsQuote(q)||(q?.quoteSchema===AWG_QUOTE_V2_SCHEMA&&q?.tariffVersion===AWG_QUOTE_V2_TARIFF));
 export const modesV2=origin=>origin==='США'?['Самовывоз — Минеральные Воды','Доставка под ключ']:['Самовывоз — Владикавказ','Доставка под ключ'];
 const n=v=>Number.isFinite(Number(v))?Number(v):0;
 const positive=v=>Math.max(0,n(v));
@@ -15,6 +18,7 @@ export function quoteV2Rate(q={}){
 export const quoteV2RubToUsd=(rub,cbrRubRate)=>{const rate=quoteV2Rate({cbrRubRate}).calculationRubRate;return rate>0?Math.round(positive(rub)/rate*100)/100:0;};
 export const quoteV2Transfer=(lot,delivery,percent=3.5)=>Math.round((positive(lot)+positive(delivery))*positive(percent))/100;
 export function quoteV2Amounts(q={}){
+  if(simpleUsQuote(q))return {lot:positive(q.lot),repair:positive(q.repair),turnkeyDeliveryUsd:0,cryptoFee:0,auction:0,inland:0,ocean:0,partsCost:0,customs:0,recyclingFee:0,legalization:0,service:0,georgiaDelivery:0};
   const origin=q.origin==='США'?'США':'Грузия';
   const delivery=q.transportMode==='Доставка под ключ'?positive(q.turnkeyDeliveryUsd):0;
   return {
@@ -31,6 +35,11 @@ export function quoteV2Amounts(q={}){
 export const quoteV2Total=q=>Object.values(quoteV2Amounts(q)).reduce((a,b)=>a+b,0);
 export const quoteV2TotalRub=q=>Math.round(quoteV2Total(q)*quoteV2Rate(q).calculationRubRate);
 export function quoteV2Rows(q={}){
+  if(simpleUsQuote(q))return [
+    {key:'lot',label:'Стоимость автомобиля',value:positive(q.lot)},
+    {key:'customsReference',label:'Таможня + утильсбор РФ (справочно, клиент оплачивает сам)',value:0,displayValue:rub(q.customsAndRecyclingRub)},
+    {key:'repair',label:'Ремонт (приблизительно)',value:positive(q.repair)}
+  ];
   const a=quoteV2Amounts(q);
   const rows=[{key:'lot',label:'Стоимость автомобиля',value:a.lot}];
   if(a.turnkeyDeliveryUsd>0)rows.push({key:'turnkeyDeliveryUsd',label:'Доставка под ключ',value:a.turnkeyDeliveryUsd});
@@ -44,6 +53,13 @@ export function quoteV2Rows(q={}){
 export function quoteV2Errors(q={}){
   if(!v2Quote(q)||q.status==='Черновик')return[];
   const errors=[];
+  if(simpleUsQuote(q)){
+    if(!(n(q.lot)>0))errors.push('Укажите стоимость автомобиля.');
+    if(!Number.isFinite(Number(q.repair))||n(q.repair)<0)errors.push('Ремонт не может быть отрицательным.');
+    if(n(q.customsAndRecyclingRub)<0)errors.push('Таможня и утильсбор не могут быть отрицательными.');
+    for(const [key,val] of Object.entries(quoteV2Amounts(q)))if(Math.abs(n(q[key])-val)>0.011)errors.push('Некорректная сумма статьи '+key);
+    return errors;
+  }
   if(!['США','Грузия'].includes(q.origin))errors.push('Выберите сценарий покупки.');
   if(!modesV2(q.origin).includes(q.transportMode))errors.push('Выберите способ получения.');
   if(q.transportMode==='Доставка под ключ'&&!(n(q.turnkeyDeliveryUsd)>0))errors.push('Укажите стоимость доставки под ключ.');
@@ -69,9 +85,10 @@ export function quoteV2Form(q={},leads=[],statuses=[],esc=String,verificationPho
   const selected=(value,current)=>String(value)===String(current)?' selected':'';
   const option=(v,l,current)=>'<option value="'+safe(v)+'"'+selected(v,current)+'>'+safe(l)+'</option>';
   const origin=q.origin==='США'?'США':'Грузия';
+  const simpleUs=simpleUsQuote(q);
   const modes=modesV2(origin);
   const defaultMode=q.transportMode||modes[0];
-  const usFields=origin==='США'?[
+  const usFields=origin==='США'&&!simpleUs?[
     ['auction','Аукционный сбор'],['inland','Доставка по США (отдельная)'],
     ['ocean','Морская перевозка (отдельная)'],['repair','Ремонт (отдельно)'],['partsCost','Запчасти (отдельно)']
   ].map(([key,title])=>number(key,title,'$',"0.01")).join(''):'';
@@ -85,40 +102,42 @@ export function quoteV2Form(q={},leads=[],statuses=[],esc=String,verificationPho
     '<div class="auto-modal-head"><div><span class="auto-eyebrow">'+safe(q.id||'НОВЫЙ РАСЧЁТ')+' · '+safe(origin)+'</span><h2>'+safe(q.model||'Расчёт автомобиля')+'</h2></div><button class="auto-close" data-close>×</button></div>'+
     '<form class="auto-form" id="quoteForm" data-awg-quote-v2="true">'+
     '<input type="hidden" name="id" value="'+safe(q.id||'')+'"><input type="hidden" name="version" value="'+safe(q.version||1)+'">'+
-    '<input type="hidden" name="tariffVersion" value="'+AWG_QUOTE_V2_TARIFF+'"><input type="hidden" name="quoteSchema" value="'+AWG_QUOTE_V2_SCHEMA+'">'+
+    '<input type="hidden" name="tariffVersion" value="'+safe(q.tariffVersion||AWG_QUOTE_V2_TARIFF)+'"><input type="hidden" name="quoteSchema" value="'+safe(q.quoteSchema||AWG_QUOTE_V2_SCHEMA)+'">'+
     '<label>Сценарий покупки<select name="origin" id="quoteOrigin">'+option('Грузия','Авто в Грузии',origin)+option('США','Аукцион США',origin)+'</select></label>'+
     '<label>Заявка<select name="leadId" required>'+leadOptions+'</select></label>'+
     '<label>Автомобиль<input name="model" required value="'+safe(q.model||'')+'"></label>'+
-    '<label>Возраст автомобиля<select name="ageCategory">'+[['','Уточните возраст'],['under3','До 3 лет'],['3to5','От 3 до 5 лет'],['other','Старше 5 лет — индивидуально']].map(v=>option(v[0],v[1],q.ageCategory)).join('')+'</select></label>'+
+    (simpleUs?'':'<label>Возраст автомобиля<select name="ageCategory">'+[['','Уточните возраст'],['under3','До 3 лет'],['3to5','От 3 до 5 лет'],['other','Старше 5 лет — индивидуально']].map(v=>option(v[0],v[1],q.ageCategory)).join('')+'</select></label>')+
     '<div class="full auto-form-divider">Характеристики автомобиля</div>'+
     '<input type="hidden" name="catalogSourceId" value="'+safe(q.catalogSourceId||'')+'">'+
     '<input type="hidden" name="catalogVin" value="'+safe(q.catalogVin||'')+'">'+
+    (simpleUs?'<label>VIN<input name="vin" value="'+safe(q.vin||q.catalogVin||'')+'"></label>':'')+
     '<input type="hidden" name="sourcePriceRub" value="'+safe(q.sourcePriceRub||0)+'">'+
     '<input type="hidden" name="sourceTurnkeyDeliveryRub" value="'+safe(q.sourceTurnkeyDeliveryRub||0)+'">'+
-    '<label>Месяц выпуска<input name="manufactureDate" type="month" value="'+safe(q.manufactureDate||'')+'"></label>'+
-    number('engineCc','Объём двигателя','см³')+
+    '<label>Дата выпуска<input name="manufactureDate" type="date" value="'+safe(/^\d{4}-\d{2}-\d{2}$/.test(q.manufactureDate||'')?q.manufactureDate:'')+'"></label>'+
+    '<label>Объём двигателя, л<input name="engineLiters" type="number" min="0" step="0.001" value="'+safe(Number(q.engineCc)>0?Number(q.engineCc)/1000:'')+'"></label>'+
     '<label>Мощность двигателя, л.с.<input type="number" name="powerHp" min="0" step="0.01" value="'+safe(q.powerHp||0)+'"></label>'+
     '<input type="hidden" name="powerUnit" value="ps">'+
     '<label>Тип двигателя<select name="engineType">'+engineOptions+'</select></label>'+
     '<label>Статус импортёра<select name="importerType">'+option('','Выберите',q.importerType)+option('nat','Физлицо',q.importerType)+option('jur','Юрлицо',q.importerType)+'</select></label>'+
     '<label>Способ получения<select name="transportMode">'+modes.map(x=>option(x,x,defaultMode)).join('')+'</select></label>'+
     number('lot','Стоимость автомобиля','$','0.01')+
-    '<label id="quoteTurnkeyDeliveryField" class="'+(checked?'':'auto-conditional-hidden')+'">Стоимость доставки под ключ, $<input name="turnkeyDeliveryUsd" type="number" min="0" step="0.01" value="'+safe(checked?q.turnkeyDeliveryUsd||0:0)+'"></label>'+
-    '<p class="full auto-rule-hint">Доставка включается в сумму отдельно. Если использована разница между ценой автомобиля и ценой в России с ремонтом, менеджер должен проверить состав затрат, чтобы не учесть их дважды.</p>'+
+    '<label id="quoteDeliveryCityField" class="'+(checked?'':'auto-conditional-hidden')+'">Город<input name="deliveryCity" value="'+safe(q.deliveryCity||'')+'"></label>'+
+    (simpleUs?'':'<label id="quoteTurnkeyDeliveryField" class="'+(checked?'':'auto-conditional-hidden')+'">Стоимость доставки под ключ, $<input name="turnkeyDeliveryUsd" type="number" min="0" step="0.01" value="'+safe(checked?q.turnkeyDeliveryUsd||0:0)+'"></label>')+
+    '<p class="full auto-rule-hint">'+(simpleUs?'Доставка и дополнительные расходы уточняются с менеджером и не входят в предварительный итог США.':'Доставка включается в сумму отдельно; проверяйте состав затрат во избежание двойного учёта.')+'</p>'+
     (q.sourcePriceRub>0?'<p class="full auto-note">Цена автомобиля из объявления: '+rub(q.sourcePriceRub)+'. После указания официального курса ЦБ РФ она автоматически пересчитывается в доллары по расчётному курсу, если менеджер ещё не ввёл цену вручную.</p>':'')+
     (q.sourceTurnkeyDeliveryRub>0?'<p class="full auto-note">По объявлению: разница между ценой автомобиля и ценой в России с ремонтом — '+rub(q.sourceTurnkeyDeliveryRub)+'. Сверьте состав и переведите в $ по курсу перед внесением доставки.</p>':'')+
-    usFields+
-    number('customsAndRecyclingRub','Таможня + утильсбор РФ (включены в доставку)','₽')+
-    '<p class="full auto-rule-hint">Таможню и утильсбор проверяет менеджер. Это справочная сумма, она уже включена в стоимость под ключ и повторно к итогу не прибавляется.</p>'+
-    number('internationalTransferPercent','Международный перевод','%','0.01')+
-    '<p class="full auto-rule-hint">База перевода — стоимость автомобиля плюс доставка под ключ. Отдельные затраты не включаются в эту базу.</p>'+
+    (simpleUs?number('repair','Ремонт (приблизительно)','$','0.01'):usFields)+
+    number('customsAndRecyclingRub',simpleUs?'Таможня + утильсбор РФ (справочно, оплачивает клиент)':'Таможня + утильсбор РФ (включены в доставку)','₽')+
+    '<p class="auto-rule-hint full">'+(simpleUs?'Таможню и утильсбор клиент оплачивает самостоятельно в рублях; они не входят в предварительную стоимость США.':'Таможня и утильсбор включены в стоимость под ключ и повторно не прибавляются.')+'</p>'+
+    (simpleUs?'':number('internationalTransferPercent','Международный перевод','%','0.01'))+
+    (simpleUs?'':'<p class="full auto-rule-hint">База перевода — стоимость автомобиля плюс доставка под ключ. Отдельные затраты не включаются в эту базу.</p>')+
     '<div class="full auto-form-divider">Курс ЦБ РФ и конвертация</div>'+
     number('cbrRubRate','Официальный курс ЦБ РФ за 1 USD','₽','0.0001')+
     '<label>Дата курса ЦБ РФ<input name="exchangeRateDate" type="date" value="'+safe(q.exchangeRateDate||'')+'"></label>'+
     '<input type="hidden" name="exchangeRateSource" value="cbr">'+
     '<p class="full auto-rule-hint">Официальный курс ЦБ РФ отображается клиенту. Для фактического пересчёта USD → RUB применяется курс ЦБ РФ + 4%; клиентский итог в рублях включает эту разницу.</p>'+
     '<label class="full">Общедоступный комментарий<textarea name="publicComment" rows="3">'+safe(q.publicComment||'')+'</textarea></label>'+
-    (origin==='США'?'<div class="full auto-form-divider">Досье проверки автомобиля США</div>'+
+    (origin==='США'&&!simpleUs?'<div class="full auto-form-divider">Досье проверки автомобиля США</div>'+
     '<label>LOT / номер лота<input name="verificationLot" value="'+safe(q.verification?.lotNumber||'')+'"></label>'+
     '<label>VIN<input name="verificationVin" value="'+safe(q.verification?.vin||'')+'"></label>'+
     '<label>Год автомобиля<input name="verificationYear" type="number" min="1900" max="2030" value="'+safe(q.verification?.year||q.catalogYear||'')+'"></label>'+
@@ -129,7 +148,7 @@ export function quoteV2Form(q={},leads=[],statuses=[],esc=String,verificationPho
     '<label class="full">История<textarea name="verificationHistory">'+safe(q.verification?.history||'')+'</textarea></label>'+
     '<label>Итог проверки<select name="verificationResult">'+[['Не проверено','Не проверено'],['Одобрен к покупке','Одобрен к покупке'],['Не рекомендован','Не рекомендован']].map(v=>option(v[0],v[1],q.verification?.result||'Не проверено')).join('')+'</select></label>'+verificationPhotos:'')+
     '<label>Статус<select name="status">'+statusOptions+'</select></label>'+
-    '<div class="auto-quote-total full"><span>Итого, USD</span><b id="quoteTotal">'+moneyUsd(preview)+'</b><small id="quoteCostPreview">ЦБ РФ: '+safe(rate.cbrRubRate)+' ₽/$; для конвертации +4%; в рублях ≈ '+rub(quoteV2TotalRub(q))+'</small></div>'+
+    '<div class="auto-quote-total full"><span>'+(simpleUs?'Предварительная стоимость, USD':'Итого, USD')+'</span><b id="quoteTotal">'+moneyUsd(preview)+'</b><small id="quoteCostPreview">ЦБ РФ: '+safe(rate.cbrRubRate)+' ₽/$; для конвертации +4%; в рублях ≈ '+rub(quoteV2TotalRub(q))+'</small></div>'+
     '<div class="auto-form-actions"><button type="button" class="auto-btn ghost" data-close>Отмена</button><button type="submit" class="auto-btn primary">Сохранить расчёт</button></div>'+
     '</form></div></div>';
 }

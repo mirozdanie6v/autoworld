@@ -69,9 +69,11 @@ test('catalog selected request must preserve original id and cannot silently bec
  assert.match(form.textContent,/Связь с выбранным автомобилем потеряна/);
  assert.equal(JSON.parse(localStorage.getItem('auto-sale-leads-v2')||'[]').filter(x=>x.name==='Клиент').length,0);
  form.elements.carId.value=CAR.id;
+ form.elements.budget.value='20000';
  form.elements.model.value='Модель клиента, отличающаяся от каталога';
- form.elements.year.value='2019';
- form.elements.mileage.value='999999';
+ form.elements.yearFrom.value='2019';
+ form.elements.yearTo.value='2019';
+ form.elements.mileageMax.value='999999';
  form.dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true}));
  await tick();await tick();
  const saved=JSON.parse(localStorage.getItem('auto-sale-leads-v2')||'[]').find(x=>x.name==='Клиент');
@@ -103,8 +105,8 @@ test('manager Georgia calculation autofills customs parameters from linked lead,
  const form=root.querySelector('#quoteForm');
  assert.equal(form.dataset.awgQuoteV2,'true');
  assert.equal(form.elements.leadId.value,'L-GEO-CUSTOMS');
- assert.equal(form.elements.manufactureDate.value,'2022-06');
- assert.equal(form.elements.engineCc.value,'1998');
+ assert.equal(form.elements.manufactureDate.value,'','month-only source cannot generate an invented manufacture day');
+ assert.equal(form.elements.engineLiters.value,'1.998');
  assert.equal(form.elements.powerHp.value,'150');
  assert.equal(form.elements.engineType.value,'petrol');
  assert.equal(form.elements.ageCategory.value,'3to5');

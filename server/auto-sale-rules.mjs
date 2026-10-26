@@ -1,4 +1,4 @@
-import {v2Quote,quoteV2Errors} from '../public/auto-sale-quote-v2.mjs';
+import {v2Quote,simpleUsQuote,quoteV2Total,quoteV2Errors} from '../public/auto-sale-quote-v2.mjs';
 import {quoteAuditErrors} from '../public/auto-sale-quote-audit.mjs';
 import {AWG_GEORGIA_TARIFF_VERSION,georgiaQuoteErrors} from '../public/auto-sale-georgia-quote.mjs';
 export const LEAD_STATUSES=['Новый','В работе','Расчёт','Ожидает клиента','Сделка','Отказ'];
@@ -80,7 +80,7 @@ export function validateQuote(quote){
     for(const key of (v2Quote(quote)?['lot']:['lot','service']))if(num(quote[key])<=0)errors.push(`${key}_positive_required`);
     for(const key of ['auction','inland','ocean','customs','repair','georgiaDelivery','legalization','recyclingFee','cryptoFee','partsCost'])if(num(quote[key])<0)errors.push(`${key}_nonnegative_required`);
     if(num(quote.total)<=0)errors.push('positive_total_required');
-    if(num(quote.total)!==quoteSum(quote))errors.push('quote_total_mismatch');
+    if(Math.abs(num(quote.total)-(simpleUsQuote(quote)?quoteV2Total(quote):quoteSum(quote)))>0.011)errors.push('quote_total_mismatch');
     if(!v2Quote(quote)&&!text(quote.validUntil)&&quote.tariffVersion!==AWG_GEORGIA_TARIFF_VERSION)errors.push('valid_until_required');
     if(quote.tariffVersion==='2026-10-20'){
       if(!['under3','3to5'].includes(quote.ageCategory))errors.push('age_category_required');

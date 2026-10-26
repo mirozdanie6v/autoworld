@@ -49,7 +49,7 @@ export function georgiaQuoteErrors(q={}){
   if(!(Number(q.powerHp)>0))errors.push('Укажите мощность двигателя для таможни РФ.');
   if(!['petrol','diesel','petrol_electric','diesel_electric','electric','no_engine'].includes(q.engineType))errors.push('Выберите тип двигателя.');
   if(!['nat','jur'].includes(q.importerType))errors.push('Выберите статус импортёра.');
-  if(q.manufactureDate&&!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(q.manufactureDate)))errors.push('Проверьте месяц выпуска автомобиля.');
+  if(q.manufactureDate&&!/^\d{4}-(0[1-9]|1[0-2])(?:-(0[1-9]|[12]\d|3[01]))?$/.test(String(q.manufactureDate)))errors.push('Проверьте дату выпуска автомобиля.');
   if(!(Number(q.usdRubRate)>0))errors.push('Укажите фактический курс USD/RUB.');
   if(!/^\d{4}-\d{2}-\d{2}$/.test(String(q.exchangeRateDate||''))||!Number.isFinite(Date.parse(String(q.exchangeRateDate||'')+'T00:00:00Z'))||String(q.exchangeRateDate)>new Date().toISOString().slice(0,10))errors.push('Укажите реальную дату курса (не позднее сегодняшнего дня).');
   if(!['cbr','bank','agreed'].includes(q.exchangeRateSource))errors.push('Укажите источник курса (ЦБ РФ, банк или согласованный курс).');
@@ -91,13 +91,14 @@ export function georgiaQuoteForm(q,leads,statuses,esc,money){
     <input type="hidden" name="catalogYear" value="${safe(q.catalogYear||'')}">
     <input type="hidden" name="catalogEngine" value="${safe(q.catalogEngine||'')}">
     <input type="hidden" name="catalogMileage" value="${safe(q.catalogMileage||'')}">
-    <label>Дата выпуска (год и месяц)<input type="month" name="manufactureDate" value="${safe(q.manufactureDate||'')}"></label>
+    <label>Дата выпуска<input type="date" name="manufactureDate" value="${safe(/^\d{4}-\d{2}-\d{2}$/.test(q.manufactureDate||'')?q.manufactureDate:'')}"></label>
     ${numberField('engineCc','Объём двигателя','см³')}
     <p class="full auto-rule-hint">Проверьте точный объём по документам: обозначение двигателя «2.5» не всегда означает 2500 см³. <a href="https://www.tks.ru/auto/calc/" target="_blank" rel="noopener noreferrer">Калькулятор таможни ТКС</a></p>
     <label><span class="auto-quote-power-heading">Мощность двигателя <select name="powerUnit" data-previous-unit="${safe(q.powerUnit||'ps')}" aria-label="Единица мощности"><option value="ps" ${q.powerUnit==='hp'?'':'selected'}>л.с.</option><option value="hp" ${q.powerUnit==='hp'?'selected':''}>hp</option></select></span><input name="powerHp" type="number" min="0" step="any" value="${safe(q.powerInput??q.powerHp??0)}"></label>
     <label>Тип двигателя<select name="engineType">${engOptions}</select></label>
     <label>Статус импортёра<select name="importerType">${importerOptions}</select></label>
     <label>Способ получения<select name="transportMode">${modeSelect}</select></label>
+    <label id="quoteDeliveryCityField" class="${q.transportMode==='Доставка под ключ'?'':'auto-conditional-hidden'}">Город<input name="deliveryCity" value="${safe(q.deliveryCity||'')}"></label>
     <label id="quoteTurnkeyDeliveryField" class="${q.transportMode==='Доставка под ключ'?'':'auto-conditional-hidden'}">Стоимость доставки под ключ, $<input name="turnkeyDeliveryUsd" type="number" min="0" step="0.01" value="${safe(q.transportMode==='Доставка под ключ'?(q.turnkeyDeliveryUsd??0):0)}"></label>
     <p class="full auto-rule-hint">Доставка под ключ оплачивается отдельно и прибавляется к итоговой стоимости. Для самовывоза доплата за эту услугу отсутствует.</p>
     ${numberField('lot','Стоимость автомобиля','$','0.01')}

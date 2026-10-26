@@ -11,12 +11,12 @@ const selected={id:'AWG-POST-9081',brand:'Toyota',model:'RAV4 2024',origin:'Гр
   transmission:'Автомат',image:'https://example.com/rav4.jpg',active:true};
 const fxData=()=>({Date:new Date().toISOString(),Valute:{USD:{Value:100}}});
 
-test('catalog ruble price converts to nearest $500 and never uses old price',()=>{
+test('catalog ruble price converts to nearest $200 and never uses old price',()=>{
   assert.equal(catalogPriceRub(selected),2570000);
-  assert.equal(catalogBudgetUsd(selected,100),25500);
+  assert.equal(catalogBudgetUsd(selected,100),25800);
   assert.equal(catalogBudgetUsd({...selected,priceRub:2500000},100),25000);
   assert.equal(catalogBudgetUsd(selected,0),0,'no rate means no fabricated budget');
-  assert.equal(catalogBudgetUsd({...selected,price:19349},0),19500,'USD-listed car needs no rate');
+  assert.equal(catalogBudgetUsd({...selected,price:19349},0),19400,'USD-listed car needs no rate');
 });
 test('legacy client lead maps only to exactly one matching catalog car',()=>{
   const lead={id:'L-HISTORY',model:'Toyota RAV4 2024',clientCreated:true,origin:'Грузия',budget:0};
@@ -60,7 +60,7 @@ test('client chooses catalog card → submitted lead persists original year, mil
     assert.equal(saved.estimatedCostRub,2570000);
     assert.equal(saved.catalogVehicle.priceRub,2570000);
     assert.equal(saved.catalogVehicle.transmission,'Автомат');
-    assert.equal(saved.budget,25500);
+    assert.equal(saved.budget,25800);
     assert.equal(saved.catalogUsdRubRate,100);
   }finally{globalThis.fetch=originalFetch;dom.window.close()}
 });
@@ -89,8 +89,8 @@ test('existing client lead without carId renders selected car characteristics, r
     assert.equal(form.elements.year.value,'2024');
     assert.equal(form.elements.mileage.value,'45 200 км');
     assert.equal(form.elements.engine.value,'2.5 Hybrid');
-    assert.equal(form.elements.drive.value,'4WD');
-    assert.equal(form.elements.budget.value,'25500');
+    assert.equal(form.elements.drive.value,'Полный');
+    assert.equal(form.elements.budget.value,'25800');
     assert.equal(form.elements.catalogUsdRubRate.value,'100');
     assert.match(form.textContent,/Источник|Стоимость из карточки/);
     assert.match(form.textContent,/2.5 Hybrid/);
@@ -101,7 +101,7 @@ test('existing client lead without carId renders selected car characteristics, r
     assert.equal(saved.catalogVehicle.year,'2024');
     assert.equal(saved.year,'2024');
     assert.equal(saved.mileage,'45 200 км');
-    assert.equal(saved.budget,25500);
+    assert.equal(saved.budget,25800);
     assert.equal(saved.catalogUsdRubRate,100);
   }finally{globalThis.fetch=originalFetch;dom.window.close()}
 });

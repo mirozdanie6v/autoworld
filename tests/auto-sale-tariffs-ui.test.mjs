@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {JSDOM} from 'jsdom';
 import {seedLeads,seedQuotes,seedOrders,seedTeam} from './fixtures/auto-sale-business.mjs';
 const tick=()=>new Promise(r=>setTimeout(r,0));
-test('new USA quote removes legalization/company service; totals include international transfer on car plus delivery',async()=>{
+test('new USA quote uses preliminary car plus approximate repair with zero transfer and optional customs',async()=>{
   const dom=new JSDOM('<!doctype html><div id="app"></div>',{url:'https://awgcars.ru/'});
   Object.assign(globalThis,{window:dom.window,document:dom.window.document,localStorage:dom.window.localStorage,sessionStorage:dom.window.sessionStorage,FormData:dom.window.FormData,Event:dom.window.Event,CustomEvent:dom.window.CustomEvent});
   localStorage.setItem('auto-sale-leads-v2',JSON.stringify(seedLeads()));
@@ -25,21 +25,22 @@ test('new USA quote removes legalization/company service; totals include interna
   assert.equal(form.elements.service,undefined);
   assert.equal(form.elements.legalization,undefined);
   assert.equal(form.elements.transportMode.value,'Самовывоз — Минеральные Воды');
-  form.elements.ageCategory.value='3to5';
+  assert.equal(form.elements.ageCategory,undefined);
   form.elements.model.value='Test US 2022';
-  form.elements.engineCc.value='2000';
+  form.elements.engineLiters.value='2';
   form.elements.powerHp.value='150';
   form.elements.engineType.value='petrol';
   form.elements.importerType.value='nat';
   form.elements.cbrRubRate.value='100';
   form.elements.exchangeRateDate.value='2026-10-22';
   form.elements.lot.value='10000';
-  form.elements.auction.value='800';
-  form.elements.inland.value='400';
+  form.elements.repair.value='400';
+  assert.equal(form.elements.auction,undefined);
+  assert.equal(form.elements.inland,undefined);
   form.elements.customsAndRecyclingRub.value='850000';
   form.elements.status.value='Отправлен';
   form.elements.lot.dispatchEvent(new dom.window.Event('input',{bubbles:true}));
-  assert.match(form.querySelector('#quoteTotal').textContent,/11,550/);
+  assert.match(form.querySelector('#quoteTotal').textContent,/10,400/);
   form.dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true}));
   await tick();await tick();
   const q=JSON.parse(localStorage.getItem('auto-sale-quotes-v2')).find(q=>q.model==='Test US 2022');
@@ -49,7 +50,7 @@ test('new USA quote removes legalization/company service; totals include interna
   assert.equal(q.legalization,0);
   assert.equal(q.customsAndRecyclingRub,850000);
   assert.equal(q.usdRubRate,104);
-  assert.equal(q.cryptoFee,350);
-  assert.equal(q.total,11550);
+  assert.equal(q.cryptoFee,0);
+  assert.equal(q.total,10400);
   dom.window.close();
 });

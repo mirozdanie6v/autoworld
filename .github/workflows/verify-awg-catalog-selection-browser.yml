@@ -6,6 +6,11 @@ on:
       - .github/workflows/verify-awg-catalog-selection-browser.yml
       - scripts/test-awg-catalog-selection-late-state-browser.mjs
       - public/auto-sale-app-v3.mjs
+  pull_request:
+    paths:
+      - .github/workflows/verify-awg-catalog-selection-browser.yml
+      - scripts/test-awg-catalog-selection-late-state-browser.mjs
+      - public/auto-sale-app-v3.mjs
   workflow_dispatch:
 permissions:
   contents: read

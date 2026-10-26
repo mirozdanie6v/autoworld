@@ -21,19 +21,19 @@ test('new US quote editor preserves customs inputs and derives official FX + 4% 
     f=root.querySelector('#quoteForm');
   }
   assert.equal(f.dataset.awgQuoteV2,'true');
-  for(const key of ['manufactureDate','engineCc','powerHp','customsAndRecyclingRub','cbrRubRate'])assert.ok(f.elements[key],key);
+  for(const key of ['manufactureDate','engineLiters','powerHp','customsAndRecyclingRub','cbrRubRate','vin'])assert.ok(f.elements[key],key);
   assert.ok(!f.elements.legalization&&!f.elements.service);
   assert.match(f.textContent,/Таможня \+ утильсбор РФ/);
   assert.match(f.textContent,/Минеральные Воды/);
-  f.elements.manufactureDate.value='2024-01';
+  f.elements.manufactureDate.value='2024-01-15';
   f.elements.manufactureDate.dispatchEvent(new dom.window.Event('change',{bubbles:true}));
-  assert.equal(f.elements.ageCategory.value,'under3');
+  assert.equal(f.elements.ageCategory,undefined);
   f.elements.lot.value='10000';
   f.elements.cbrRubRate.value='90';
   f.elements.exchangeRateDate.value='2026-10-22';
   f.elements.customsAndRecyclingRub.value='135000';
   f.elements.customsAndRecyclingRub.dispatchEvent(new dom.window.Event('input',{bubbles:true}));
   assert.match(root.querySelector('#quoteCostPreview').textContent,/\+4%/);
-  assert.match(root.querySelector('#quoteTotal').textContent,/10,350/);
+  assert.match(root.querySelector('#quoteTotal').textContent,/10,000/);
   dom.window.close();
 });

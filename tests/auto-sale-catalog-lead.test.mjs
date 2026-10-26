@@ -43,10 +43,11 @@ test('catalog card -> client form -> saved lead -> manager edit preserves exact 
   root.querySelector('[data-request-car="CAR-AUDIT-2026"]').click();
   const form=root.querySelector('#requestForm');
   assert.equal(form.elements.carId.value,car.id);
-  assert.equal(form.elements.year.value,'2024');
-  assert.equal(form.elements.mileage.value,'42 500 км');
+  assert.equal(form.elements.yearFrom.value,'2024');
+  assert.equal(form.elements.yearTo.value,'2024');
+  assert.equal(form.elements.mileageMax.value,'42500');
   assert.equal(form.elements.engine.value,'2.5 Hybrid');
-  assert.equal(form.elements.drive.value,'4WD');
+  assert.equal(form.elements.drive.value,'Полный');
   form.elements.name.value='Клиент Проверка';
   form.elements.contact.value='@catalog_audit';
   form.dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true}));
@@ -73,7 +74,7 @@ test('catalog card -> client form -> saved lead -> manager edit preserves exact 
   assert.equal(edit.elements.year.value,'2024');
   assert.equal(edit.elements.mileage.value,'42 500 км');
   assert.equal(edit.elements.engine.value,'2.5 Hybrid');
-  assert.equal(edit.elements.drive.value,'4WD');
+  assert.equal(edit.elements.drive.value,'Полный');
   edit.elements.year.value='2023';
   edit.elements.mileage.value='42 600 км';
   edit.dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true}));
@@ -83,7 +84,7 @@ test('catalog card -> client form -> saved lead -> manager edit preserves exact 
   assert.equal(lead.year,'2023');
   assert.equal(lead.mileage,'42 600 км');
   assert.equal(lead.engine,'2.5 Hybrid');
-  assert.equal(lead.drive,'4WD');
+  assert.equal(lead.drive,'Полный');
   assert.equal(lead.catalogVehicle.year,'2024','original catalog snapshot remains unmodified');
   dom.window.close();
 });
