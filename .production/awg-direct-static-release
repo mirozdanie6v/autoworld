@@ -1,10 +1,10 @@
 release=direct-object-storage
-source=5f1acb396bc6dd73bfb15641553ff2557728aac7
-reason=manager-quote-legalization-caption-no-extra-linebreaks-PR-52
+source=b141c3873a71abaa67e116b1f8e1301a1dbe81d6
+reason=russian-delivery-estimate-and-spinner-free-numeric-fields-PR-75
 preserve_backend=true
 preserve_ydb=true
 preserve_telegram=true
 vk_auth=enabled
 vk_messaging=enabled
-verified_run=39428561846
+verified_run=40329652910
 browser_rollback_gate=true
