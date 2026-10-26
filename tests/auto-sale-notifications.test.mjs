@@ -106,3 +106,24 @@ test('both fixture suppression headers require API-key authorization and suppres
   }
   assert.equal(notificationsSuppressed({},{apiKey:true}),false);
 });
+
+
+test('physical Telegram E2E does not notify about drafts or duplicate lead status on quote publication',async()=>{
+  const s=services({token:'test-telegram-token'});
+  s.vk={messagingEnabled:false};
+  const customer={id:'L-FULL-TELEGRAM',name:'Test',model:'BMW X5',source:'Mini App',
+    manager:'Дмитрий',clientCreated:true,clientProvider:'telegram',
+    telegramUserId:'800',managerTelegramUserId:'900',status:'Расчёт'};
+  let previous={...empty(),leads:[customer]};
+  let next={...previous,revision:2,quotes:[{id:'Q-REAL-E2E',leadId:customer.id,
+    status:'Черновик',model:'BMW X5',total:39000}]};
+  const draft=await collectSaleNotifications(previous,next,s);
+  assert.equal(draft.length,0,'a draft quote is internal and sends no Telegram notifications');
+  previous=next;
+  next={...previous,revision:3,leads:[{...customer,status:'Ожидает клиента'}],
+    quotes:[{...previous.quotes[0],status:'Отправлен',sentAt:'2026-10-26T00:00:00Z'}]};
+  const published=await collectSaleNotifications(previous,next,s);
+  assert.equal(published.length,2,'quote sent to one client and one manager, no duplicate lead status');
+  assert.deepEqual(published.map(n=>[n.target,n.event]).sort(),
+    [['client','quote_status'],['manager','quote_status']]);
+});
