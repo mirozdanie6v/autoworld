@@ -76,7 +76,7 @@ export function quoteV2Errors(q={}){
   if(n(q.customsAndRecyclingRub)<0)errors.push('Таможня + утильсбор не могут быть отрицательными.');
   const expected=quoteV2Amounts(q);
   for(const [key,value] of Object.entries(expected))if(Math.abs(n(q[key])-value)>0.011)errors.push('Некорректная сумма статьи '+key);
-  if(Math.abs(n(q.usdRubRate)-quoteV2Rate(q).calculationRubRate)>0.00011)errors.push('Расчётный курс должен быть ЦБ РФ + 4%.');
+  if(Math.abs(n(q.usdRubRate)-quoteV2Rate(q).calculationRubRate)>0.00011)errors.push('Расчётный курс не соответствует тарифу.');
   return errors;
 }
 export function quoteV2Form(q={},leads=[],statuses=[],esc=String,verificationPhotos=''){
@@ -135,7 +135,7 @@ export function quoteV2Form(q={},leads=[],statuses=[],esc=String,verificationPho
     number('cbrRubRate','Официальный курс ЦБ РФ за 1 USD','₽','0.0001')+
     '<label>Дата курса ЦБ РФ<input name="exchangeRateDate" type="date" value="'+safe(q.exchangeRateDate||'')+'"></label>'+
     '<input type="hidden" name="exchangeRateSource" value="cbr">'+
-    '<p class="full auto-rule-hint">Официальный курс ЦБ РФ отображается клиенту. Для фактического пересчёта USD → RUB применяется курс ЦБ РФ + 4%; клиентский итог в рублях включает эту разницу.</p>'+
+    '<p class="full auto-rule-hint">Официальный курс ЦБ РФ и дата берутся из актуальной публикации ЦБ. Конвертация и рублёвый итог рассчитываются автоматически; при недоступности источника укажите проверенный курс вручную.</p>'+
     '<label class="full">Общедоступный комментарий<textarea name="publicComment" rows="3">'+safe(q.publicComment||'')+'</textarea></label>'+
     (origin==='США'&&!simpleUs?'<div class="full auto-form-divider">Досье проверки автомобиля США</div>'+
     '<label>LOT / номер лота<input name="verificationLot" value="'+safe(q.verification?.lotNumber||'')+'"></label>'+
@@ -148,7 +148,7 @@ export function quoteV2Form(q={},leads=[],statuses=[],esc=String,verificationPho
     '<label class="full">История<textarea name="verificationHistory">'+safe(q.verification?.history||'')+'</textarea></label>'+
     '<label>Итог проверки<select name="verificationResult">'+[['Не проверено','Не проверено'],['Одобрен к покупке','Одобрен к покупке'],['Не рекомендован','Не рекомендован']].map(v=>option(v[0],v[1],q.verification?.result||'Не проверено')).join('')+'</select></label>'+verificationPhotos:'')+
     '<label>Статус<select name="status">'+statusOptions+'</select></label>'+
-    '<div class="auto-quote-total full"><span>'+(simpleUs?'Предварительная стоимость, USD':'Итого, USD')+'</span><b id="quoteTotal">'+moneyUsd(preview)+'</b><small id="quoteCostPreview">ЦБ РФ: '+safe(rate.cbrRubRate)+' ₽/$; для конвертации +4%; в рублях ≈ '+rub(quoteV2TotalRub(q))+'</small></div>'+
+    '<div class="auto-quote-total full"><span>'+(simpleUs?'Предварительная стоимость, USD':'Итого, USD')+'</span><b id="quoteTotal">'+moneyUsd(preview)+'</b><small id="quoteCostPreview">ЦБ РФ: '+safe(rate.cbrRubRate)+' ₽/$ · '+safe(q.exchangeRateDate||'дата уточняется')+' · в рублях ≈ '+rub(quoteV2TotalRub(q))+'</small></div>'+
     '<div class="auto-form-actions"><button type="button" class="auto-btn ghost" data-close>Отмена</button><button type="submit" class="auto-btn primary">Сохранить расчёт</button></div>'+
     '</form></div></div>';
 }

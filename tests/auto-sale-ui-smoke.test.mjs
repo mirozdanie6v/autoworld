@@ -177,7 +177,7 @@ test('bootstrap has no whole-state writer and refreshes on entity conflicts',()=
   assert.doesNotMatch(bootstrap,/legacyAutosync|__AUTO_SALE_FLUSH__|rebaseAutoSaleState/);
   assert.doesNotMatch(bootstrap,/method:'PUT'/);
   assert.match(bootstrap,/response\.status===409&&data\.error==='entity_conflict'/);
-  assert.match(bootstrap,/await pullInitialState\(\)/);
+  assert.match(bootstrap,/await pullInitialState\(\{attempts:1,timeoutMs:6000\}\)/);
   assert.match(bootstrap,/auto-sale-entity-conflict/);
 });
 

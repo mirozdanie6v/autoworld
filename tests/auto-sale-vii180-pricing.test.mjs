@@ -55,7 +55,7 @@ test('only the 4% marked up calculation rate applies to ruble conversion',()=>{
  assert.equal(quoteV2Rate(q).spreadPercent,4);
  q.cbrRubRate=0;assert.ok(quoteV2Errors(q).length);
  q.cbrRubRate=100;q.usdRubRate=100;
- assert.ok(quoteV2Errors(q).some(x=>x.includes('4%')));
+ assert.ok(quoteV2Errors(q).some(x=>x.includes('не соответствует тарифу')));
 });
 test('new editor includes power, CC, source hint and single informational Russian customs field',()=>{
  for(const origin of ['США','Грузия']){

@@ -503,7 +503,7 @@ function managerLeads(){const rows=filterLeads(leads,{query:state.leadQuery,stat
 function quoteBreakdown(q){
  const origin=q?.origin||'Уточняется',mode=q?.transportMode||defaultTransportMode(origin),rows=quoteCostRows(q);
  const duration=origin==='США'?'2,5–3,5 месяца':'5–10 дней';
- const context='<div class="auto-quote-context"><span>Сценарий: <b>'+esc(purchaseScenarioLabel(origin))+'</b></span><span>Перевозка: <b>'+esc(mode)+'</b></span>'+(v2Quote(q)?'<span>Курс ЦБ РФ: <b>'+esc(q.cbrRubRate)+' ₽/$ · '+esc(q.exchangeRateDate||'не указан')+'</b> (для расчёта +4%)</span>':(q?.tariffVersion===AWG_GEORGIA_TARIFF_VERSION?'<span>Курс: <b>'+esc(q.usdRubRate)+' ₽/$ · '+esc(q.exchangeRateDate||'не указан')+'</b></span>':''))+((!v2Quote(q)&&(q?.tariffVersion===AWG_TARIFF_VERSION||q?.tariffVersion===AWG_GEORGIA_TARIFF_VERSION))?'<span>Легализация с услугой: <b>'+money(awgPackageUsd(q))+'</b></span><span>Срок доставки: <b>'+duration+'</b></span>':'')+'</div>';
+ const context='<div class="auto-quote-context"><span>Сценарий: <b>'+esc(purchaseScenarioLabel(origin))+'</b></span><span>Перевозка: <b>'+esc(mode)+'</b></span>'+(v2Quote(q)?'<span>Курс ЦБ РФ: <b>'+esc(q.cbrRubRate)+' ₽/$ · '+esc(q.exchangeRateDate||'не указан')+'</b></span>':(q?.tariffVersion===AWG_GEORGIA_TARIFF_VERSION?'<span>Курс: <b>'+esc(q.usdRubRate)+' ₽/$ · '+esc(q.exchangeRateDate||'не указан')+'</b></span>':''))+((!v2Quote(q)&&(q?.tariffVersion===AWG_TARIFF_VERSION||q?.tariffVersion===AWG_GEORGIA_TARIFF_VERSION))?'<span>Легализация с услугой: <b>'+money(awgPackageUsd(q))+'</b></span><span>Срок доставки: <b>'+duration+'</b></span>':'')+'</div>';
  const details='<div class="auto-quote-grid">'+rows.map(x=>'<span><b>'+esc(x.label)+'</b>'+(x.displayValue?esc(x.displayValue):((q?.tariffVersion===AWG_GEORGIA_TARIFF_VERSION||v2Quote(q))?formatGeorgiaUsd(x.value):money(x.value)))+'</span>').join('')+'</div>';
  return context+details;
 }
@@ -644,7 +644,32 @@ async function hydrateCatalogRequestRate(){
     if(hint)hint.textContent='Цена из каталога · курс ЦБ РФ на '+date+': '+rate+' ₽/$, бюджет с шагом $200.';
   }catch{const hint=form.querySelector('#catalogRequestPriceHint');if(hint)hint.textContent='Цена сохранится в рублях. Курс доллара менеджер сможет указать в заявке.'}
 }
-function render(){root.innerHTML=shell(page());if(state.role==='client')window.__AUTO_SALE_RENDER_VK_MESSAGES_HINT__?.();void hydrateCatalogLeadBudget();void hydrateCatalogRequestRate()}
+const quoteRateInflight=new WeakSet();
+async function hydrateQuoteRate(form){
+  if(!form?.isConnected||quoteRateInflight.has(form))return;
+  const v2=form.dataset.awgQuoteV2==='true',georgia=form.dataset.georgiaQuote==='true';
+  if(!v2&&!georgia)return;
+  const field=form.elements[v2?'cbrRubRate':'usdRubRate'];
+  if(!field)return;
+  // Preserve manually entered and previously saved rates. New quotations use
+  // the latest *published* CBR rate (weekends/holidays may retain an earlier date).
+  const needsRate=!(Number(field.value)>0);
+  if(!needsRate)return;
+  quoteRateInflight.add(form);
+  const hint=form.querySelector('#quoteCostPreview');
+  if(hint)hint.textContent='Загружаем официальный курс ЦБ РФ…';
+  try{
+    const {rate,date}=await catalogRubPerUsd();
+    if(!form.isConnected||field.dataset.manuallyEdited==='1'||Number(field.value)>0)return;
+    field.value=String(rate);
+    if(form.elements.exchangeRateDate)form.elements.exchangeRateDate.value=date;
+    if(form.elements.exchangeRateSource)form.elements.exchangeRateSource.value='cbr';
+    updateQuotePreview(form);
+  }catch{
+    if(form.isConnected&&hint)hint.textContent='Курс ЦБ РФ недоступен. Введите проверенный курс и дату вручную.';
+  }finally{quoteRateInflight.delete(form)}
+}
+function render(){root.innerHTML=shell(page());if(state.role==='client')window.__AUTO_SALE_RENDER_VK_MESSAGES_HINT__?.();void hydrateCatalogLeadBudget();void hydrateCatalogRequestRate();void hydrateQuoteRate(root.querySelector('#quoteForm'))}
 function focusAfterRender(id){render();queueMicrotask(()=>{const el=document.getElementById(id);if(el){el.focus();if('selectionStart'in el){const n=el.value.length;el.setSelectionRange(n,n)}}})}
 function syncQuoteCurrency(form,changed){
  if(!form)return;
@@ -667,7 +692,7 @@ function updateQuotePreview(form){
     const sourcedPrice=Number(form.elements.sourcePriceRub?.value)||0;
     const sourcedDelivery=Number(form.elements.sourceTurnkeyDeliveryRub?.value)||0;
     if(cbr>0){
-      if(sourcedPrice>0&&form.elements.lot&&!form.elements.lot.dataset.manuallyEdited&&!(Number(form.elements.lot.value)>0)){
+      if(sourcedPrice>0&&form.elements.lot&&!form.elements.lot.dataset.manuallyEdited){
         form.elements.lot.value=String(quoteV2RubToUsd(sourcedPrice,cbr));
       }
       if(sourcedDelivery>0&&form.elements.transportMode?.value==='Доставка под ключ'&&form.elements.turnkeyDeliveryUsd&&!form.elements.turnkeyDeliveryUsd.dataset.manuallyEdited&&!(Number(form.elements.turnkeyDeliveryUsd.value)>0)){
@@ -678,7 +703,7 @@ function updateQuotePreview(form){
     const total=calculateQuote(quoteV2Amounts(data));
     const node=form.querySelector('#quoteTotal');if(node)node.textContent=formatGeorgiaUsd(total);
     const cost=form.querySelector('#quoteCostPreview');
-    if(cost)cost.textContent='Курс ЦБ РФ: '+(Number(data.cbrRubRate)||0)+' ₽/$ · расчётный курс +4% · в рублях ≈ '+rubMoney(quoteV2TotalRub(data));
+    if(cost)cost.textContent=cbr>0?'Курс ЦБ РФ: '+cbr+' ₽/$ · '+(data.exchangeRateDate||'дата уточняется')+' · стоимость в рублях ≈ '+rubMoney(quoteV2TotalRub(data)):'Укажите курс ЦБ РФ для пересчёта стоимости автомобиля';
     return;
   }
   if(form.dataset.georgiaQuote==='true'){
@@ -819,7 +844,7 @@ root.addEventListener('change',async event=>{const t=event.target;if(t.name==='t
     updateQuotePreview(form);return;
   }if(t.dataset.verificationPhotoUpload!==undefined){await handleVerificationPhotoUpload(t);return}if(t.dataset.catalogPhotoUpload){await handleCatalogPhotoUpload(t);return}if(t.name==='imageUrl'&&t.closest('#catalogCarForm')&&t.value.trim()){t.closest('#catalogCarForm').elements.image.value=t.value.trim();updateCatalogPhotoPreviews(t.closest('#catalogCarForm'));return}if(t.id==='brandFilter'){state.brand=t.value;render()}if(t.id==='originFilter'){state.origin=t.value;render()}if(t.id==='budgetFilter'){state.budget=t.value;render()}if(t.id==='leadStatusFilter'){state.leadStatus=t.value;render()}if(t.id==='leadSourceFilter'){state.leadSource=t.value;render()}if(t.id==='leadManagerFilter'){state.leadManager=t.value;render()}if(t.id==='orderStageFilter'){state.orderStage=t.value;render()}if(t.id==='orderManagerFilter'){state.orderManager=t.value;render()}if(t.id==='orderRiskFilter'){state.orderRisk=t.value;render()}if(t.id==='leadStatus'){const field=root.querySelector('#lostReasonField');if(field)field.classList.toggle('auto-conditional-hidden',t.value!=='Отказ')}if(t.id==='riskType'){const field=root.querySelector('#riskNoteField');if(field)field.classList.toggle('auto-conditional-hidden',t.value==='Нет')}if(t.name==='leadId'&&t.closest('#quoteForm[data-georgia-quote="true"]')&&!t.closest('#quoteForm').elements.id.value){state.modal={type:'quote',leadId:t.value,origin:'Грузия'};render();return}
 if(t.name==='manufactureDate'&&t.closest('#quoteForm')){const form=t.closest('#quoteForm'),category=/^\d{4}-\d{2}-\d{2}$/.test(t.value)?ageCategoryForDate(t.value,today):ageCategoryForMonth(t.value,today);if(form.elements.ageCategory)form.elements.ageCategory.value=['under3','3to5'].includes(category)?category:'';if(form.dataset.georgiaQuote==='true'){updateQuotePreview(form);return;}syncQuoteScenario(form)}if(t.id==='quoteOrigin'&&!t.closest('#quoteForm')?.elements.id?.value&&((t.value==='Грузия'&&t.closest('#quoteForm')?.dataset.georgiaQuote!=='true')||(t.value==='США'&&t.closest('#quoteForm')?.dataset.georgiaQuote==='true'))){state.modal={type:'quote',leadId:t.closest('#quoteForm')?.elements.leadId?.value||'',origin:t.value};render();return}if(t.name==='transportMode'&&t.closest('#quoteForm[data-georgia-quote="true"]')){const form=t.closest('#quoteForm'),turnkey=t.value==='Доставка под ключ';form.querySelector('#quoteTurnkeyDeliveryField')?.classList.toggle('auto-conditional-hidden',!turnkey);form.querySelector('#quoteDeliveryCityField')?.classList.toggle('auto-conditional-hidden',!turnkey);if(!turnkey&&form.elements.turnkeyDeliveryUsd)form.elements.turnkeyDeliveryUsd.value='0';updateQuotePreview(form);return;}if(t.id==='quoteOrigin'||t.id==='quoteAgeCategory'){syncQuoteScenario(t.closest('#quoteForm'))}if(t.name==='powerUnit'&&t.closest('#quoteForm')){const input=t.closest('#quoteForm').elements.powerHp;if(input)input.value=convertPowerInput(input.value,t.dataset.previousUnit,t.value);t.dataset.previousUnit=normalizePowerUnit(t.value);updateQuotePreview(t.closest('#quoteForm'));return}if(t.closest('#quoteForm')&&['customsConfirmed','recyclingConfirmed','cryptoBaseConfirmed','repairReviewed'].includes(t.name))updateQuotePreview(t.closest('#quoteForm'))});
-root.addEventListener('input',event=>{const t=event.target;if(t.closest('#requestForm')&&t.name==='budget')t.dataset.manuallyEdited='1';if(t.closest?.('#quoteForm[data-awg-quote-v2="true"]')){if(['lot','turnkeyDeliveryUsd'].includes(t.name))t.dataset.manuallyEdited='1';updateQuotePreview(t.closest('#quoteForm'));return;}if(t.closest?.('#leadEditForm')&&t.name==='budget')t.dataset.manuallyEdited='1';if(t.closest?.('#leadEditForm')&&t.name==='catalogUsdRubRate'){const form=t.closest('#leadEditForm'),lead=leads.find(x=>x.id===form.elements.id.value),car=catalogCarForLead(lead,cars).car;const amount=catalogBudgetUsd(car,Number(t.value));if(amount>0&&!form.elements.budget.dataset.manuallyEdited)form.elements.budget.value=String(amount);const hint=form.querySelector('#catalogLeadBudgetHint');if(hint)hint.textContent=amount>0?'Бюджет по цене автомобиля и выбранному курсу: '+money(amount)+' (шаг $200).':'Введите положительный курс для расчёта.';return}if(t.closest?.('#quoteForm[data-georgia-quote="true"]')){updateQuotePreview(t.closest('#quoteForm'));return;}if(t.id==='autoSearch'){state.query=t.value;focusAfterRender('autoSearch')}if(t.id==='leadSearch'){state.leadQuery=t.value;focusAfterRender('leadSearch')}if(t.id==='orderSearch'){state.orderQuery=t.value;focusAfterRender('orderSearch')}if(t.closest('#quoteForm')&&['usdRubRate','customsRub','recyclingRub','customs','recyclingFee'].includes(t.name))syncQuoteCurrency(t.closest('#quoteForm'),t.name);
+root.addEventListener('input',event=>{const t=event.target;if(t.closest('#requestForm')&&t.name==='budget')t.dataset.manuallyEdited='1';if(t.closest?.('#quoteForm[data-awg-quote-v2="true"]')){if(['lot','turnkeyDeliveryUsd','cbrRubRate'].includes(t.name))t.dataset.manuallyEdited='1';updateQuotePreview(t.closest('#quoteForm'));return;}if(t.closest?.('#leadEditForm')&&t.name==='budget')t.dataset.manuallyEdited='1';if(t.closest?.('#leadEditForm')&&t.name==='catalogUsdRubRate'){const form=t.closest('#leadEditForm'),lead=leads.find(x=>x.id===form.elements.id.value),car=catalogCarForLead(lead,cars).car;const amount=catalogBudgetUsd(car,Number(t.value));if(amount>0&&!form.elements.budget.dataset.manuallyEdited)form.elements.budget.value=String(amount);const hint=form.querySelector('#catalogLeadBudgetHint');if(hint)hint.textContent=amount>0?'Бюджет по цене автомобиля и выбранному курсу: '+money(amount)+' (шаг $200).':'Введите положительный курс для расчёта.';return}if(t.closest?.('#quoteForm[data-georgia-quote="true"]')){if(t.name==='usdRubRate')t.dataset.manuallyEdited='1';updateQuotePreview(t.closest('#quoteForm'));return;}if(t.id==='autoSearch'){state.query=t.value;focusAfterRender('autoSearch')}if(t.id==='leadSearch'){state.leadQuery=t.value;focusAfterRender('leadSearch')}if(t.id==='orderSearch'){state.orderQuery=t.value;focusAfterRender('orderSearch')}if(t.closest('#quoteForm')&&['usdRubRate','customsRub','recyclingRub','customs','recyclingFee'].includes(t.name))syncQuoteCurrency(t.closest('#quoteForm'),t.name);
 if(t.closest('#quoteForm')&&['engineCc','powerHp','invoiceUsd','manufactureDate','engineType','importerType','priceSource','customsSource'].includes(t.name))updateQuotePreview(t.closest('#quoteForm'));
 if(t.closest('#quoteForm')&&['lot','auction','inland','ocean','customs','repair','partsCost','service','georgiaDelivery','legalization','recyclingFee','usdRubRate','customsRub','recyclingRub'].includes(t.name)){
   const form=t.closest('#quoteForm');
@@ -887,7 +912,9 @@ async function submitLead(form){
   Object.assign(lead,nextLead);notes[lead.id]=notes[lead.id]||[];notes[lead.id].push(note);saveAll();state.modal={type:'lead',id:lead.id};render();
 }
 async function submitQuote(form){
-  const data=Object.fromEntries(new FormData(form).entries()),lead=leads.find(x=>x.id===data.leadId);if(!lead)return;
+  try{
+  const data=Object.fromEntries(new FormData(form).entries()),lead=leads.find(x=>x.id===data.leadId);
+  if(!lead){showErrors(form,['Выберите клиента для расчёта.']);return;}
   if(data.engineLiters!==undefined)data.engineCc=Math.round((Number(data.engineLiters)||0)*1000);
    const verification=simpleUsQuote(data)?{}:normalizeVehicleVerification(data);const existing=quotes.find(x=>x.id===data.id);
   if(existing&&!quoteAllowedStatuses(existing).includes(data.status)){showErrors(form,['Недопустимый переход статуса расчёта.']);return}
@@ -907,6 +934,18 @@ async function submitQuote(form){
   const saved=window.__AUTO_SALE_ENTITY_BATCH__?await commitEntities([{resource:'quote',operation:existing?'patch':'create',id:q.id,input:q},{resource:'lead',operation:'patch',id:lead.id,input:nextLead},{resource:'note',operation:'create',leadId:lead.id,input:note}],form):{ok:true,localOnly:true};if(!saved)return;
   if(existing)Object.assign(existing,q);else quotes.push(q);Object.assign(lead,nextLead);notes[lead.id]=notes[lead.id]||[];notes[lead.id].push(note);saveAll();
   state.modal=null;state.role='manager';state.route='quotes';sessionStorage.setItem(KEYS.role,'manager');render();
+  }catch(error){
+    showErrors(form,[entityErrorText(error)]);
+  }finally{
+    // The save indicator is set by quote-save-fix on submit capture. Revert
+    // it on validation errors, rejected operations and exception paths.
+    const button=form.querySelector('button[type="submit"]');
+    if(button?.isConnected){
+      button.textContent=button.dataset.originalText||'Сохранить расчёт';
+      button.removeAttribute('aria-busy');
+      button.disabled=false;
+    }
+  }
 }
 async function submitOrder(form){
   const data=Object.fromEntries(new FormData(form).entries()),order=orders.find(x=>x.id===data.id);if(!order)return;

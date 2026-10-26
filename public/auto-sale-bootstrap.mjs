@@ -105,7 +105,7 @@ async function ensureEntityVersion(resource,id){
   const plural=({lead:'leads',quote:'quotes',order:'orders',team:'team',catalog:'catalog'})[resource];
   if(!plural||!id)return null;
   try{
-    const response=await fetch('/api/auto-sale/'+plural+'/'+encodeURIComponent(id),{headers:authHeaders({accept:'application/json'}),cache:'no-store'});
+    const response=await fetch('/api/auto-sale/'+plural+'/'+encodeURIComponent(id),{headers:authHeaders({accept:'application/json'}),cache:'no-store',signal:AbortSignal.timeout(10000)});
     const data=await response.json().catch(()=>({}));
     if(!response.ok)return null;
     const value=Number(data.rowVersion);
@@ -121,14 +121,14 @@ async function ensureEntityVersion(resource,id){
 
 function readCache(key,fallback){try{return JSON.parse(localStorage.getItem(key)||'null')??fallback}catch{return fallback}}
 function applyServerState(state){if(!state||!state.initialized)return;writeCache(DATA_KEYS.leads,state.leads||[]);writeCache(DATA_KEYS.quotes,state.quotes||[]);writeCache(DATA_KEYS.orders,state.orders||[]);writeCache(DATA_KEYS.notes,state.notes||{});writeCache(DATA_KEYS.team,state.team||[]);if(Array.isArray(state.catalog))writeCache(DATA_KEYS.catalog,state.catalog)}
-async function pullInitialState(){
+async function pullInitialState({attempts=3,timeoutMs=18000}={}){
   let lastError=null;
-  for(let attempt=1;attempt<=3;attempt++){
+  for(let attempt=1;attempt<=attempts;attempt++){
     try{
       const response=await fetch('/api/auto-sale/state',{
         headers:authHeaders({accept:'application/json'}),
         cache:'no-store',
-        signal:AbortSignal.timeout(18000)
+        signal:AbortSignal.timeout(timeoutMs)
       });
       if(response.ok){
         const state=await response.json();
@@ -147,7 +147,7 @@ async function pullInitialState(){
       lastError=error;
       if(error?.name!=='TimeoutError'&&!/timeout|aborted/i.test(String(error?.message||'')))break;
     }
-    if(attempt<3)await new Promise(resolve=>setTimeout(resolve,350*attempt));
+    if(attempt<attempts)await new Promise(resolve=>setTimeout(resolve,350*attempt));
   }
   console.warn('AUTO SALE using offline cache',lastError);
   window.__AUTO_SALE_SERVER__={online:false,revision,error:String(lastError?.message||'state_read_failed')};
@@ -194,9 +194,9 @@ function refreshOperationVersions(operations){
   });
 }
 async function reconcileAmbiguousBatch(expected,status){
-  for(let attempt=1;attempt<=3;attempt++){
+  for(let attempt=1;attempt<=2;attempt++){
     if(attempt>1)await new Promise(resolve=>setTimeout(resolve,700*attempt));
-    const state=await pullInitialState();
+    const state=await pullInitialState({attempts:1,timeoutMs:6000});
     if(state&&expected.every(operation=>operationAppliedToState(state,operation))){
       const recovered={ok:true,revision,rowVersions:{},notifications:null,recovered:true,recoveredStatus:status};
       window.__AUTO_SALE_SERVER__={online:true,revision,initialized:true,entityMode:true,recovered:true,recoveredStatus:status};
@@ -232,7 +232,8 @@ async function entityBatch(operations){
       const response=await fetch('/api/auto-sale/entities/batch',{
         method:'POST',
         headers:authHeaders({'content-type':'application/json'}),
-        body:JSON.stringify({operations:prepared})
+        body:JSON.stringify({operations:prepared}),
+        signal:AbortSignal.timeout(14000)
       });
       const data=await response.json().catch(()=>({}));
       if(response.ok){
@@ -269,6 +270,13 @@ async function entityBatch(operations){
     throw lastError||new Error('entity_command_failed');
   }catch(error){
     if(error?.code==='entity_conflict')throw error;
+    if(error?.name==='TimeoutError'||error?.name==='AbortError'){
+      // The server may have persisted the request before the connection timed out.
+      // Read authoritative state instead of blindly submitting duplicate writes.
+      const recovered=await reconcileAmbiguousBatch(raw,'timeout');
+      if(recovered)return recovered;
+      error=Object.assign(new Error('entity_request_timeout'),{code:'entity_request_timeout',cause:error});
+    }
     console.warn('AUTO SALE entity command failed',error);
     window.__AUTO_SALE_SERVER__={online:false,revision,error:error?.code||'entity_command_failed'};
     throw error;
