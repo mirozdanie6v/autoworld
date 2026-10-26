@@ -17,7 +17,7 @@ permissions:
 jobs:
   real-local-ydb:
     runs-on: ubuntu-24.04
-    timeout-minutes: 16
+    timeout-minutes: 25
     env:
       AWG_ADS_LOCAL_YDB_TEST: 'yes'
     steps:
@@ -43,6 +43,8 @@ jobs:
         run: node scripts/test-awg-ads-local-ydb.mjs reconnect
       - name: Verify authorized erasure and retention against real YDB
         run: node scripts/test-awg-ads-local-ydb.mjs privacy
+      - name: Exercise same-user contention and large (>1000) erasure on real YDB
+        run: node scripts/test-awg-ads-local-ydb.mjs load
       - name: Stop local database
         if: always()
         run: docker rm -f awg-ads-local-ydb || true
