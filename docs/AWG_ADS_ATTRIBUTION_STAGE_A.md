@@ -46,6 +46,17 @@ spend and impressions require verified reporting data from the advertiser/
 reseller or its supported API. Do not label a bot start as an ad click or
 calculate CPL without actual spend and deduplicated lead counts.
 
+## Read-only campaign reporting
+
+`server/ads-attribution-report.mjs` groups only verified server receipts
+into campaign-level bot starts, unique bot users, Mini App opens, vehicle views,
+submitted leads and manager contacts. It deduplicates by receipt ID. Paid clicks
+and ad impressions are explicitly `null` until separately verified data is
+ingested. Verified external spend can be supplied with currency, and CPL is
+calculated only when both spend and distinct lead events are present.
+This module does not read CRM or advertising accounts directly, and is not
+connected to the director dashboard yet.
+
 ## Isolated YDB model
 
 `server/ads-attribution-ydb.mjs` provides three new independent tables:
@@ -74,7 +85,8 @@ must be approved before real user traffic is collected.
 ```sh
 node --check server/ads-attribution-core.mjs
 node --check server/ads-attribution-ydb.mjs
-node --test tests/ads-attribution.test.mjs
+node --check server/ads-attribution-report.mjs
+node --test tests/ads-attribution*.test.mjs
 ```
 
 The dedicated GitHub Actions gate only runs Node unit tests from this branch.
