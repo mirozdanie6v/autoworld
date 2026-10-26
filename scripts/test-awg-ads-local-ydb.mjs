@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {Driver} from '@ydbjs/core';
 import {query} from '@ydbjs/query';
 import {AnonymousCredentialsProvider} from '@ydbjs/auth/anonymous';
-import {createAdsAttributionService,hashAdsToken} from '../server/ads-attribution-core.mjs';
+import {createAdsAttributionService,hashAdsToken,createAdsSubjectKey} from '../server/ads-attribution-core.mjs';
 import {createYdbAdsAttributionRepository,ensureAdsAttributionSchema} from '../server/ads-attribution-ydb.mjs';
 import {summarizeAdsCampaignsFromRepository} from '../server/ads-attribution-report.mjs';
 import {createAdsPrivacyService} from '../server/ads-attribution-privacy.mjs';
@@ -160,6 +160,39 @@ try {
       telegramUserId:heavyUser,startPayload:large.token,updateId:9899999
     })).reason,'erased_subject');
     assert.equal(audits.at(-1).outcome,'success');
+    // Concurrent ingestion and erasure must not recreate a subject or receipt.
+    const deletionUser=999777;
+    await service.recordBotStart({telegramUserId:deletionUser,startPayload:large.token,updateId:9899900});
+    const raceWrites=Array.from({length:24},(_,i)=>service.recordTrustedEvent({
+      telegramUserId:deletionUser,eventType:'vehicle_view',eventId:'delete_race_'+i
+    }));
+    const deleteRace=async()=>{
+      for(let i=0;i<12;i++){
+        try{return await privacy.eraseVerifiedTelegramUser({telegramUserId:deletionUser,principal});}
+        catch(error){
+          if(i===11)throw error;
+          await new Promise(resolve=>setTimeout(resolve,50*(i+1)));
+        }
+      }
+    };
+    const deletionResults=await Promise.allSettled([deleteRace(),...raceWrites]);
+    if(deletionResults[0].status!=='fulfilled'||deletionResults[0].value.status!=='complete')
+      throw new Error('ads_concurrent_erasure_failed');
+    const erasedSubjectKey=createAdsSubjectKey(deletionUser,subjectSecret);
+    let remaining=0,cursor='';
+    for(let i=0;i<20;i++){
+      const page=await repository.listEvents({cursor,limit:250});
+      remaining+=page.events.filter(event=>event.subjectKey===erasedSubjectKey).length;
+      if(page.nextCursor===null)break;
+      cursor=page.nextCursor;
+    }
+    assert.equal(remaining,0,'new data must not reappear after concurrent erasure');
+    assert.equal(await service.getAttribution({telegramUserId:deletionUser}),null);
+    assert.equal((await service.recordBotStart({
+      telegramUserId:deletionUser,startPayload:large.token,updateId:9899900
+    })).reason,'erased_subject');
+    console.log('AWG_ADS_REAL_LOCAL_YDB_DELETE_RACE_PASS',
+      JSON.stringify({concurrentWriters:raceWrites.length,remainingReceipts:remaining}));
     console.log('AWG_ADS_REAL_LOCAL_YDB_LOAD_PASS',
       JSON.stringify({sameSubjectConcurrentStarts:parallel,largeSubjectEventsDeleted:erased.deletedEvents,
         eraseBatches:erased.batches,eraseDurationMs:durationMs}));
