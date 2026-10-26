@@ -149,6 +149,75 @@ export function createYdbAdsAttributionRepository(sql){
         return {recorded:true};
       });
     },
+    async eraseSubjects({subjectKeys,maxEventsPerSubject=1000}={}){
+      if(!Array.isArray(subjectKeys)||subjectKeys.length<1||subjectKeys.length>3
+        ||subjectKeys.some(k=>typeof k!=='string'||!/^[a-f0-9]{64}$/.test(k))
+        ||!Number.isInteger(maxEventsPerSubject)||maxEventsPerSubject<1||maxEventsPerSubject>5000){
+        throw new Error('invalid_ads_erasure_request');
+      }
+      return sql.begin({isolation:'serializableReadWrite',idempotent:true},async tx=>{
+        let deletedSubjects=0,deletedEvents=0;
+        for(const subjectKey of subjectKeys){
+          const [eventRows]=await tx`
+            SELECT event_id FROM awg_ads_events
+            WHERE subject_key=${subjectKey}
+            LIMIT ${new Uint64(BigInt(maxEventsPerSubject+1))}
+          `;
+          if(eventRows.length>maxEventsPerSubject)throw new Error('ads_erasure_event_limit_exceeded');
+          const [subjectRows]=await tx`SELECT subject_key FROM awg_ads_subjects WHERE subject_key=${subjectKey}`;
+          for(const item of eventRows){
+            await tx`DELETE FROM awg_ads_events WHERE event_id=${String(item.event_id)}`;
+            deletedEvents++;
+          }
+          await tx`DELETE FROM awg_ads_subjects WHERE subject_key=${subjectKey}`;
+          if(subjectRows.length)deletedSubjects++;
+        }
+        return {deletedSubjects,deletedEvents};
+      });
+    },
+    async purgeExpired({eventCutoff,subjectCutoff,batchSize=100,cursor=''}={}){
+      if(typeof eventCutoff!=='string'||!Number.isFinite(Date.parse(eventCutoff))
+        ||typeof subjectCutoff!=='string'||!Number.isFinite(Date.parse(subjectCutoff))
+        ||!Number.isInteger(batchSize)||batchSize<1||batchSize>500
+        ||typeof cursor!=='string'||cursor.length>120){
+        throw new Error('invalid_ads_purge_request');
+      }
+      return sql.begin({isolation:'serializableReadWrite',idempotent:true},async tx=>{
+        const [eventRows]=await tx`
+          SELECT event_id FROM awg_ads_events
+          WHERE occurred_at < ${eventCutoff}
+          LIMIT ${new Uint64(BigInt(batchSize+1))}
+        `;
+        const [subjectRows]=await tx`
+          SELECT subject_key,first_touch,last_touch,updated_at FROM awg_ads_subjects
+          WHERE subject_key > ${cursor}
+          ORDER BY subject_key
+          LIMIT ${new Uint64(BigInt(batchSize+1))}
+        `;
+        const expiredEvents=eventRows.slice(0,batchSize);
+        let deletedSubjects=0,compactedSubjects=0;
+        for(const item of expiredEvents){
+          await tx`DELETE FROM awg_ads_events WHERE event_id=${String(item.event_id)}`;
+        }
+        for(const subject of subjectRows.slice(0,batchSize)){
+          const key=String(subject.subject_key);
+          const first=toTouch(subject.first_touch);
+          const last=toTouch(subject.last_touch);
+          if(String(subject.updated_at)<subjectCutoff){
+            await tx`DELETE FROM awg_ads_subjects WHERE subject_key=${key}`;
+            deletedSubjects++;
+          }else if(first&&last&&first.timestamp<subjectCutoff){
+            await tx`UPDATE awg_ads_subjects SET first_touch=${JSON.stringify(last)} WHERE subject_key=${key}`;
+            compactedSubjects++;
+          }
+        }
+        return {
+          deletedEvents:expiredEvents.length,deletedSubjects,compactedSubjects,
+          hasMoreEvents:eventRows.length>batchSize,
+          nextCursor:subjectRows.length>batchSize?String(subjectRows[batchSize-1].subject_key):null
+        };
+      });
+    },
     async listEvents({cursor='',limit=250}={}){
       if(!Number.isInteger(limit)||limit<1||limit>1000)throw new Error('invalid_ads_event_limit');
       // event_id is the PRIMARY KEY; use keyset pagination to avoid offset scans.
