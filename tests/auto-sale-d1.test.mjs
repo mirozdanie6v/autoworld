@@ -56,7 +56,7 @@ test('browser hydrates team from server state and persists later saves through e
   assert.match(bootstrap,/\/api\/auto-sale\/entities\/batch/);
   assert.match(bootstrap,/response\.status===409&&data\.error==='entity_conflict'/);
   assert.match(bootstrap,/auto-sale-entity-rejected/);
-  assert.match(bootstrap,/await pullInitialState\(\)/);
+  assert.match(bootstrap,/await pullInitialState\(\{attempts:1,timeoutMs:6000\}\)/);
   assert.match(bootstrap,/auto-sale-director-team\.mjs/);
   assert.doesNotMatch(bootstrap,/method:'PUT'/);
   assert.doesNotMatch(bootstrap,/location\.reload\s*\(/);
