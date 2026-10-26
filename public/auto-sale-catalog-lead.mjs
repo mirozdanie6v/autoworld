@@ -108,7 +108,7 @@ export function catalogCarForLead(lead={},cars=[]){
 export function catalogPriceRub(car){
   return Number(car?.priceRub)||Number(car?.priceAfterDiscountRub)||0;
 }
-export function catalogBudgetUsd(car,rubPerUsd,step=500){
+export function catalogBudgetUsd(car,rubPerUsd,step=200){
   const usd=Number(car?.price)>0?Number(car.price):catalogPriceRub(car)/Number(rubPerUsd);
   if(!(usd>0&&Number.isFinite(usd))||!(Number(step)>0))return 0;
   return Math.max(step,Math.round(usd/step)*step);
