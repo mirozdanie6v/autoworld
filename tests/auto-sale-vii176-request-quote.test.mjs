@@ -23,7 +23,7 @@ test('negative extra fees cannot be sent in a quote',()=>{
 });
 
 test('request can reference a catalog car without applying USD minimum',()=>{
-  const car={name:'A',contact:'@a',model:'BMW X5',origin:'Грузия',carId:'CAR-1',estimatedCostRub:2400000,year:2021,mileage:'63 000 км',engine:'2.0',drive:'AWD'};
+  const car={name:'A',contact:'@a',model:'BMW X5',origin:'Грузия',budget:20000,yearFrom:2020,yearTo:2024,carId:'CAR-1',estimatedCostRub:2400000,year:2021,mileage:'63 000 км',engine:'2.0',drive:'AWD'};
   assert.deepEqual(validateClientRequest(car),[]);
-  assert.ok(validateClientRequest({...car,carId:'',ageRange:''}).length>0);
+  assert.ok(validateClientRequest({...car,carId:'',yearFrom:''}).length>0);
 });
