@@ -202,7 +202,11 @@ async function batch(label,expected,operations){
       });
       if(response.ok){
         applyVersions(data.rowVersions);
-        await delivered(data.notifications,expected,label,Number(data.revision)||0);
+        if(expected===0){
+          assert.equal(Number(data.notifications?.queued||0),0,label+' must not create notifications');
+        }else{
+          await delivered(data.notifications,expected,label,Number(data.revision)||0);
+        }
         await sleep(1200);
         return data;
       }
@@ -322,9 +326,9 @@ try{
     lot:25000,auction:1000,inland:1000,ocean:2500,customs:6500,repair:1500,service:1500,total:39000,
     status:'Черновик',version:1,validUntil:future,verification,updatedAt:new Date().toISOString()
   };
-  await batch('Черновик расчёта',2,[{resource:'quote',operation:'create',id:quoteId,input:quote}]);
+  await batch('Черновик расчёта — без уведомлений',0,[{resource:'quote',operation:'create',id:quoteId,input:quote}]);
 
-  await batch('Расчёт отправлен',4,[
+  await batch('Расчёт отправлен',2,[
     {resource:'lead',operation:'patch',id:leadId,input:{status:'Ожидает клиента'}},
     {resource:'quote',operation:'patch',id:quoteId,input:{status:'Отправлен',sentAt:new Date().toISOString()}}
   ]);
