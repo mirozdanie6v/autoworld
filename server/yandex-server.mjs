@@ -399,7 +399,9 @@ const server=http.createServer(async(req,res)=>{
         const sameVin=!exact&&vin?existingByVin.get(vin):null;
         if(exact){
           retainedIds.add(exact.id);
-          const next={...exact,...item,id:exact.id,source:sourceName};
+          const next={...exact,...item,id:exact.id,source:sourceName,
+            // A source refresh must never undo a manager's decision to hide this car.
+            active:exact.active===false?false:item.active};
           if(stableJson(exact)===stableJson(next)){skipped++;continue}
           const rowVersion=await entityStores.domainStore.entityRowVersion('catalog',exact.id);
           if(rowVersion===null){json(res,{error:'catalog_shadow_missing',id:exact.id},409);return}
@@ -414,7 +416,8 @@ const server=http.createServer(async(req,res)=>{
           const rowVersion=await entityStores.domainStore.entityRowVersion('catalog',sameVin.id);
           if(rowVersion===null){json(res,{error:'catalog_shadow_missing',id:sameVin.id},409);return}
           operations.push({resource:'catalog',operation:'delete',id:sameVin.id,baseRowVersion:rowVersion});
-          operations.push({resource:'catalog',operation:'create',id:item.id,input:item});
+          operations.push({resource:'catalog',operation:'create',id:item.id,
+            input:{...item,active:sameVin.active===false?false:item.active}});
           retainedIds.add(item.id);
           replaced++;
           continue;

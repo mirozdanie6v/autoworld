@@ -1,4 +1,5 @@
 import {readFile,writeFile} from 'node:fs/promises';
+import {catalogListingQuality} from './catalog-listing-quality.mjs';
 
 const SOURCE_PATH=process.env.SOURCE_PATH||'data/autoworld-georgia-recent/cars.json';
 const OUTPUT_PATH=process.env.OUTPUT_PATH||'data/autoworld-georgia-recent/catalog-import.json';
@@ -7,8 +8,6 @@ const STATE_URL=process.env.AUTO_SALE_STATE_URL||'https://awgcars.ru/api/auto-sa
 const DRY_RUN=/^(1|true|yes)$/i.test(String(process.env.DRY_RUN||''));
 const REPLACE_SOURCE_ALL=/^(1|true|yes)$/i.test(String(process.env.REPLACE_SOURCE_ALL||''));
 const ONLY_POST_IDS=new Set(String(process.env.ONLY_POST_IDS||'').split(',').map(x=>x.trim()).filter(Boolean));
-const ALLOW_NO_VIN_POST_IDS=new Set(['3723','3290','3310','3262','3282','3357','3373','3893']);
-const allowNoVin=source=>ALLOW_NO_VIN_POST_IDS.has(String(source?.sourcePostId||''));
 
 const clean=value=>String(value??'').replace(/\u00a0/g,' ').replace(/[ \t]+/g,' ').trim();
 const unique=list=>[...new Set((Array.isArray(list)?list:[]).filter(Boolean))];
@@ -144,9 +143,8 @@ function sourceQualityReason(source){
   const title=titleFromRaw(source.rawText);
   const vin=clean(source.vin).toUpperCase();
   const photos=unique(source.photos).filter(url=>/^https:\/\/storage\.yandexcloud\.net\//i.test(url));
-  if(vin ? vin.length!==17 : !allowNoVin(source))return'invalid_or_missing_vin';
-  if(!title.brand||!title.model)return'missing_vehicle_title';
-  if(Number(title.year)<2000||Number(title.year)>2030)return'invalid_year';
+  const quality=catalogListingQuality({rawText:source.rawText,vin,brand:title.brand,model:title.model,year:title.year,sourcePostId:source.sourcePostId});
+  if(quality)return quality;
   if(!photos.length)return'missing_recovered_photos';
   return'';
 }
@@ -217,7 +215,7 @@ function normalizeCar(source){
   const photos=unique(source.photos).filter(url=>/^https:\/\/storage\.yandexcloud\.net\//i.test(url));
   const names=canonicalVehicleName(rawBrand,rawModel,title.title||source.title,vin);
   const brand=names.brand,model=names.model;
-  if((vin ? vin.length!==17 : !allowNoVin(source))||!brand||!model||year<2000||year>2030||!photos.length)return null;
+  if(catalogListingQuality({rawText:source.rawText,vin,brand,model,year,sourcePostId:source.sourcePostId})||!photos.length)return null;
 
   const engine=clean(source.engine)||field(source.rawText,'Двигатель');
   const transmission=clean(source.transmission)||field(source.rawText,'Коробка');
@@ -339,7 +337,7 @@ async function main(){
   const brandCounts={};
   for(const car of imported)brandCounts[car.brand]=(brandCounts[car.brand]||0)+1;
   const vinGroups={};
-  for(const car of candidates)(vinGroups[car.vin]??=[]).push(car.sourcePostId);
+  for(const car of candidates)if(car.vin)(vinGroups[car.vin]??=[]).push(car.sourcePostId);
   const duplicateVins=Object.entries(vinGroups).filter(([,posts])=>posts.length>1).map(([vin,posts])=>({vin,posts}));
   const skipped=normalizedRows.filter(x=>!x.car).map(x=>({
     sourcePostId:String(x.source.sourcePostId||''),
