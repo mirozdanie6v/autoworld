@@ -169,7 +169,7 @@ test('webhook help command explains the customer flow',async()=>{
   const sent=[];
   const service=createTelegramService({token:TOKEN,fetchImpl:fakeFetch(sent),relayUrl:''});
   await service.handleWebhookUpdate({message:{chat:{id:700},from:{id:700},text:'/help'}},{appUrl:'https://example.test/'});
-  assert.match(sent[0].body.text,/Выбрать авто из США или Грузии/);
+  assert.match(sent[0].body.text,/заказать поиск похожей/);
   assert.match(sent[0].body.text,/Следить за этапами заказа и оплатами/);
 });
 
