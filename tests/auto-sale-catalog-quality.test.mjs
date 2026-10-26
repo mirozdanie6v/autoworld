@@ -54,7 +54,7 @@ import json, re, sys
 with open('scripts/scrape-autoworld-georgia.py',encoding='utf8') as fp:
     source=fp.read()
 start=source.index('def parse_title(text):')
-end=source.index('\\n\\ndef ',start+10)
+end=source.index(chr(10)*2+'def ',start+10)
 namespace={'re':re}
 exec(source[start:end],namespace)
 print(json.dumps([[row['sourcePostId'],*namespace['parse_title'](row['rawText'])[1:]] for row in json.load(sys.stdin)]))
