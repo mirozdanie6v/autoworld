@@ -124,10 +124,22 @@ try {
     const large=await service.issueCampaign({campaignId:'erasure-load'});
     const heavyUser=8888888;
     await service.recordBotStart({telegramUserId:heavyUser,startPayload:large.token,updateId:9890000});
-    for(let i=0;i<1010;i++){
-      if((await service.recordTrustedEvent({
-        telegramUserId:heavyUser,eventType:'vehicle_view',eventId:'heavy_'+i
-      })).status!=='recorded')throw new Error('large_event_write_failed');
+    // Controlled parallel batches simulate the intake rate without sending
+    // >1,000 sequential network round-trips. Distinct receipt IDs remain stable.
+    for(let offset=0;offset<1010;offset+=12){
+      const count=Math.min(12,1010-offset);
+      const results=await Promise.all(Array.from({length:count},async (_,i)=>{
+        const eventId='heavy_'+(offset+i);
+        for(let attempt=0;attempt<7;attempt++){
+          try{return await service.recordTrustedEvent({
+            telegramUserId:heavyUser,eventType:'vehicle_view',eventId
+          });}catch(error){
+            if(attempt===6)throw error;
+            await new Promise(resolve=>setTimeout(resolve,30*(attempt+1)));
+          }
+        }
+      }));
+      if(results.some(x=>x.status!=='recorded'))throw new Error('large_event_write_failed');
     }
     const audits=[];
     const privacy=createAdsPrivacyService({
