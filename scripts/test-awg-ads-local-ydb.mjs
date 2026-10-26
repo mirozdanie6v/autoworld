@@ -5,6 +5,7 @@ import {AnonymousCredentialsProvider} from '@ydbjs/auth/anonymous';
 import {createAdsAttributionService,hashAdsToken} from '../server/ads-attribution-core.mjs';
 import {createYdbAdsAttributionRepository,ensureAdsAttributionSchema} from '../server/ads-attribution-ydb.mjs';
 import {summarizeAdsCampaignsFromRepository} from '../server/ads-attribution-report.mjs';
+import {createAdsPrivacyService} from '../server/ads-attribution-privacy.mjs';
 
 // Strictly localhost-only. Never pass a connection string from the project's cloud environment.
 const connection='grpc://localhost:2136/local';
@@ -63,5 +64,33 @@ try {
     assert.equal(report.find(r=>r.campaignId==='real-ydb-A').botStarts,9);
     assert.equal(report.find(r=>r.campaignId==='real-ydb-B').leadSubmissions,1);
     console.log('AWG_ADS_REAL_LOCAL_YDB_RECONNECT_PASS');
+  }else if(phase==='privacy'){
+    // Explicit identity verified by the test; no real users/data involved.
+    const privacy=createAdsPrivacyService({
+      repository,subjectSecrets:[subjectSecret],
+      clock:()=>new Date('2027-03-01T12:00:00Z')
+    });
+    const removed=await privacy.eraseVerifiedTelegramUser({telegramUserId:111,authorized:true});
+    assert.equal(removed.deletedSubjects,1);
+    assert.equal(removed.deletedEvents,3);
+    assert.equal(await service.getAttribution({telegramUserId:111}),null);
+    assert.equal((await summarizeAdsCampaignsFromRepository({repository})).find(r=>r.campaignId==='real-ydb-B'),undefined);
+    // All synthetic events are older than 90 days at the maintenance clock.
+    let cursor='';
+    let deletedEvents=0,deletedSubjects=0,compactedSubjects=0;
+    for(let i=0;i<20;i++){
+      const result=await privacy.runRetentionSweep({authorized:true,cursor});
+      deletedEvents+=result.deletedEvents;
+      deletedSubjects+=result.deletedSubjects;
+      compactedSubjects+=result.compactedSubjects;
+      if(!result.nextCursor&&!result.hasMoreEvents)break;
+      cursor=result.nextCursor||'';
+      if(i===19)throw new Error('retention_did_not_converge');
+    }
+    const report=await summarizeAdsCampaignsFromRepository({repository});
+    assert.equal(report.length,0);
+    assert.equal((await repository.readSubject('f'.repeat(64))),null);
+    assert.ok(deletedEvents>=8);
+    console.log('AWG_ADS_REAL_LOCAL_YDB_PRIVACY_PASS',JSON.stringify({deletedEvents,deletedSubjects,compactedSubjects}));
   }else throw new Error('unknown_test_phase');
 }finally{await driver.close();}
