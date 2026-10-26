@@ -1,10 +1,10 @@
 release=direct-object-storage
-source=b141c3873a71abaa67e116b1f8e1301a1dbe81d6
-reason=russian-delivery-estimate-and-spinner-free-numeric-fields-PR-75
+source=2139ac730747636fb82db898865f153342091601
+reason=georgia-logistics-stage-context-and-lot-guard-PR-77
 preserve_backend=true
 preserve_ydb=true
 preserve_telegram=true
 vk_auth=enabled
 vk_messaging=enabled
-verified_run=40329652910
+verified_run=40331546173
 browser_rollback_gate=true
