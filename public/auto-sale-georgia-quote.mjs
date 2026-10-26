@@ -113,7 +113,7 @@ export function georgiaQuoteForm(q,leads,statuses,esc,money){
     ${numberField('usdRubRate','Курс RUB за 1 USD','₽','0.0001')}
     <label>Дата курса<input type="date" name="exchangeRateDate" value="${safe(q.exchangeRateDate||'')}"></label>
     <label>Источник курса<select name="exchangeRateSource">${rateSourceOptions}</select></label>
-    <p class="full auto-rule-hint">В итоговом расчёте клиент увидит курс и дату. Значение указывает менеджер, автоматический курс не подставляется.</p>
+    <p class="full auto-rule-hint">Курс и дата загружаются из последней официальной публикации ЦБ РФ. Если источник недоступен, введите проверенные значения вручную.</p>
     <label class="full">Общедоступный комментарий (виден клиенту)<textarea name="publicComment" rows="3" maxlength="3000" placeholder="Пояснения для клиента к расчёту, срокам доставки или оплате">${safe(q.publicComment||'')}</textarea></label>
     ${q.comment?'<div class="full auto-note"><b>Старый внутренний комментарий (клиенту не показывается)</b><p>'+safe(q.comment)+'</p><small>Если эта информация предназначена клиенту, внесите её в общедоступный комментарий выше.</small></div>':''}
     ${q.migrationPending?'<p class="full auto-rule-hint">Это ранее сохранённый черновик. Прежние логистические статьи удалены из предварительной суммы; заново проверьте тариф, способ получения, таможню, утильсбор и курс перед отправкой.</p>':''}
