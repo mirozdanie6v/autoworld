@@ -259,28 +259,31 @@ def parse_price_pair(text):
     return None, primary or emoji_price or russia_price, None
 
 def parse_title(text):
+    # Publication captions frequently begin with "на 08.09" (pricing date).
+    # Select a REAL make/model followed by a production date, not the first date.
     lines = [x.strip(" -*•🌟✨") for x in text.splitlines() if x.strip()]
-    candidates = []
-    for line in lines[:12]:
-        if re.search(r"(?:0[1-9]|1[0-2])[/.-](?:20)?\d{2}", line) or re.search(r"\b20\d{2}\b", line):
-            candidates.append(line)
-    title = candidates[0] if candidates else (lines[0] if lines else "")
-    title = re.sub(r"^[^A-Za-zА-Яа-я0-9]+", "", title).strip()
-    date_m = re.search(r"\b(0?[1-9]|1[0-2])[/.-](20)?(\d{2})\s*г?\.?", title)
-    year = None
-    model_part = title
-    if date_m:
-        year = 2000 + int(date_m.group(3))
-        model_part = title[:date_m.start()].strip(" -–—")
-    else:
-        y = re.search(r"\b(20\d{2})\b", title)
-        if y:
-            year = int(y.group(1))
-            model_part = title[:y.start()].strip(" -–—")
-    tokens = model_part.split()
-    brand = tokens[0] if tokens else ""
-    model = " ".join(tokens[1:]) if len(tokens) > 1 else ""
-    return title, brand, model, year
+    for original in lines[:35]:
+        title = re.sub(r"^[^A-Za-zА-Яа-я0-9]+", "", original).strip()
+        date_m = re.search(r"\b(0?[1-9]|1[0-2])[/.-](20)?(\d{2})\s*г?\.?", title)
+        year_m = re.search(r"\b(20\d{2})\b", title) if not date_m else None
+        if date_m:
+            year = 2000 + int(date_m.group(3))
+            model_part = title[:date_m.start()].strip(" -–—")
+        elif year_m:
+            year = int(year_m.group(1))
+            model_part = title[:year_m.start()].strip(" -–—")
+        else:
+            continue
+        tokens = model_part.split()
+        if len(tokens) < 2 or not 2000 <= year <= 2030:
+            continue
+        if re.match(r"^(?:на|до|расч[её]т|пробег|доставка|торги|аукцион|цена)$", tokens[0], re.I):
+            continue
+        if not re.search(r"[A-Za-zА-Яа-я]", tokens[0]) or not re.search(r"[A-Za-zА-Яа-я0-9]", tokens[1]):
+            continue
+        return title, tokens[0], " ".join(tokens[1:]), year
+    # Do not manufacture a model/year from price dates or editorial captions.
+    return "", "", "", None
 
 def looks_like_car(text):
     score = 0
