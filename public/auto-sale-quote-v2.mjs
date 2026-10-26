@@ -2,7 +2,10 @@
 // Do not reinterpret immutable historical Georgia / USA quote versions.
 export const AWG_QUOTE_V2_SCHEMA='awg-quote-2026-10-23';
 export const AWG_QUOTE_V2_TARIFF='2026-10-23-cross-origin';
-export const v2Quote=q=>q?.quoteSchema===AWG_QUOTE_V2_SCHEMA&&q?.tariffVersion===AWG_QUOTE_V2_TARIFF;
+export const AWG_US_SIMPLE_SCHEMA='awg-quote-us-simple-2026-10-26';
+export const AWG_US_SIMPLE_TARIFF='2026-10-26-us-car-plus-repair';
+export const simpleUsQuote=q=>q?.origin==='США'&&q?.quoteSchema===AWG_US_SIMPLE_SCHEMA&&q?.tariffVersion===AWG_US_SIMPLE_TARIFF;
+export const v2Quote=q=>Boolean(simpleUsQuote(q)||(q?.quoteSchema===AWG_QUOTE_V2_SCHEMA&&q?.tariffVersion===AWG_QUOTE_V2_TARIFF));
 export const modesV2=origin=>origin==='США'?['Самовывоз — Минеральные Воды','Доставка под ключ']:['Самовывоз — Владикавказ','Доставка под ключ'];
 const n=v=>Number.isFinite(Number(v))?Number(v):0;
 const positive=v=>Math.max(0,n(v));
@@ -15,6 +18,7 @@ export function quoteV2Rate(q={}){
 export const quoteV2RubToUsd=(rub,cbrRubRate)=>{const rate=quoteV2Rate({cbrRubRate}).calculationRubRate;return rate>0?Math.round(positive(rub)/rate*100)/100:0;};
 export const quoteV2Transfer=(lot,delivery,percent=3.5)=>Math.round((positive(lot)+positive(delivery))*positive(percent))/100;
 export function quoteV2Amounts(q={}){
+  if(simpleUsQuote(q))return {lot:positive(q.lot),repair:positive(q.repair),turnkeyDeliveryUsd:0,cryptoFee:0,auction:0,inland:0,ocean:0,partsCost:0,customs:0,recyclingFee:0,legalization:0,service:0,georgiaDelivery:0};
   const origin=q.origin==='США'?'США':'Грузия';
   const delivery=q.transportMode==='Доставка под ключ'?positive(q.turnkeyDeliveryUsd):0;
   return {
@@ -31,6 +35,11 @@ export function quoteV2Amounts(q={}){
 export const quoteV2Total=q=>Object.values(quoteV2Amounts(q)).reduce((a,b)=>a+b,0);
 export const quoteV2TotalRub=q=>Math.round(quoteV2Total(q)*quoteV2Rate(q).calculationRubRate);
 export function quoteV2Rows(q={}){
+  if(simpleUsQuote(q))return [
+    {key:'lot',label:'Стоимость автомобиля',value:positive(q.lot)},
+    {key:'customsReference',label:'Таможня + утильсбор РФ (справочно, клиент оплачивает сам)',value:0,displayValue:rub(q.customsAndRecyclingRub)},
+    {key:'repair',label:'Ремонт (приблизительно)',value:positive(q.repair)}
+  ];
   const a=quoteV2Amounts(q);
   const rows=[{key:'lot',label:'Стоимость автомобиля',value:a.lot}];
   if(a.turnkeyDeliveryUsd>0)rows.push({key:'turnkeyDeliveryUsd',label:'Доставка под ключ',value:a.turnkeyDeliveryUsd});
@@ -44,6 +53,13 @@ export function quoteV2Rows(q={}){
 export function quoteV2Errors(q={}){
   if(!v2Quote(q)||q.status==='Черновик')return[];
   const errors=[];
+  if(simpleUsQuote(q)){
+    if(!(n(q.lot)>0))errors.push('Укажите стоимость автомобиля.');
+    if(!Number.isFinite(Number(q.repair))||n(q.repair)<0)errors.push('Ремонт не может быть отрицательным.');
+    if(n(q.customsAndRecyclingRub)<0)errors.push('Таможня и утильсбор не могут быть отрицательными.');
+    for(const [key,val] of Object.entries(quoteV2Amounts(q)))if(Math.abs(n(q[key])-val)>0.011)errors.push('Некорректная сумма статьи '+key);
+    return errors;
+  }
   if(!['США','Грузия'].includes(q.origin))errors.push('Выберите сценарий покупки.');
   if(!modesV2(q.origin).includes(q.transportMode))errors.push('Выберите способ получения.');
   if(q.transportMode==='Доставка под ключ'&&!(n(q.turnkeyDeliveryUsd)>0))errors.push('Укажите стоимость доставки под ключ.');
