@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {JSDOM} from 'jsdom';
 import {seedLeads,seedQuotes,seedOrders,seedTeam} from './fixtures/auto-sale-business.mjs';
-test('new US quote editor preserves customs inputs and derives official FX + 4% without extra taxes',async()=>{
+test('new US quote editor preserves customs inputs without exposing private markup in UI',async()=>{
   const dom=new JSDOM('<!doctype html><div id="app"></div>',{url:'https://awgcars.ru/'});
   Object.assign(globalThis,{window:dom.window,document:dom.window.document,localStorage:dom.window.localStorage,sessionStorage:dom.window.sessionStorage,FormData:dom.window.FormData,Event:dom.window.Event,CustomEvent:dom.window.CustomEvent});
   localStorage.setItem('auto-sale-leads-v2',JSON.stringify(seedLeads()));
@@ -33,7 +33,7 @@ test('new US quote editor preserves customs inputs and derives official FX + 4% 
   f.elements.exchangeRateDate.value='2026-10-22';
   f.elements.customsAndRecyclingRub.value='135000';
   f.elements.customsAndRecyclingRub.dispatchEvent(new dom.window.Event('input',{bubbles:true}));
-  assert.match(root.querySelector('#quoteCostPreview').textContent,/\+4%/);
+  assert.doesNotMatch(root.querySelector('#quoteCostPreview').textContent,/\+4%/);
   assert.match(root.querySelector('#quoteTotal').textContent,/10,000/);
   dom.window.close();
 });
