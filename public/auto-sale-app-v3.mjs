@@ -368,6 +368,10 @@ function refreshRuntimeFromServer(){
     &&request?.elements.managerMode?.value==='0';
   const pendingModal=clientRequest?{...state.modal}:null;
   const pendingValues=clientRequest?Object.fromEntries(new FormData(request).entries()):null;
+  const managerForm=state.role!=='client'&&state.modal?.type==='lead'?root.querySelector('#leadEditForm'):null;
+  const managerModal=managerForm&&hasAdminAccess?{...state.modal}:null;
+  const managerValues=managerForm?Object.fromEntries(new FormData(managerForm).entries()):null;
+  const managerFocus=managerForm?.contains(document.activeElement)?document.activeElement?.name:null;
   reloadFromCache();
   access=window.__AUTO_SALE_ACCESS__||access;
   hasAdminAccess=access.role==='admin';
@@ -375,8 +379,17 @@ function refreshRuntimeFromServer(){
   const nextRole=hasAdminAccess&&['manager','owner'].includes(saved)?saved:(hasAdminAccess?'manager':'client');
   if(!hasAdminAccess||state.role==='client')state.role=nextRole;
   if(!nav[state.role]?.some(([id])=>id===state.route))state.route=nav[state.role][0][0];
-  state.modal=pendingModal&&state.role==='client'?pendingModal:null;
+  state.modal=pendingModal&&state.role==='client'?pendingModal:
+    managerModal&&hasAdminAccess&&leads.some(x=>x.id===managerModal.id)?managerModal:null;
   render();
+  if(managerValues&&state.modal===managerModal){
+    const live=root.querySelector('#leadEditForm');
+    if(live)for(const [name,value] of Object.entries(managerValues)){
+      const field=live.elements[name];
+      if(field&&field.name===name&&!field.disabled&&!field.readOnly)field.value=value;
+    }
+    if(managerFocus&&live?.elements[managerFocus])live.elements[managerFocus].focus({preventScroll:true});
+  }
   if(pendingValues&&state.modal===pendingModal){
     const form=root.querySelector('#requestForm');
     if(form){
