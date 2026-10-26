@@ -57,6 +57,25 @@ function paymentStageTitle(order,payment){
   return arr(order?.paymentPlan).find(x=>clean(x.id)===clean(payment?.paymentStage))?.title||'Платёж';
 }
 function leadTitle(lead){return clean(lead?.model)||clean(lead?.name)||clean(lead?.id)||'заявка'}
+function similarRequestDetails(lead,{manager=false}={}){
+  const lines=[];
+  if(Number(lead?.budget)>0)lines.push('Бюджет до: '+money(lead.budget));
+  const years=[clean(lead?.yearFrom),clean(lead?.yearTo)];
+  if(years.some(Boolean))lines.push('Год выпуска: '+years.filter(Boolean).join('–'));
+  if(clean(lead?.mileageMax))lines.push('Пробег до: '+clean(lead.mileageMax)+' км');
+  const drive=clean(lead?.drive);if(drive&&drive!=='Не важно')lines.push('Привод: '+drive);
+  if(clean(lead?.deliveryCity))lines.push('Город: '+clean(lead.deliveryCity));
+  if(manager&&lead?.catalogVehicle){
+    const car=lead.catalogVehicle;
+    lines.push('Исходное объявление: '+clean(car.id||lead.carId));
+    if(clean(car.year))lines.push('Исходный год автомобиля: '+clean(car.year));
+    if(clean(car.engineCc))lines.push('Двигатель: '+clean(car.engineCc)+' см³');
+    if(clean(car.powerHp))lines.push('Мощность: '+clean(car.powerHp)+' л.с.');
+    if(clean(car.sourceUrl))lines.push('Объявление: '+clean(car.sourceUrl));
+    lines.push('Это заявка на поиск аналога; доступность исходного лота не предполагается.');
+  }
+  return lines.join('\n');
+}
 function orderTitle(order){return clean(order?.model)||clean(order?.id)||'автомобиль'}
 function statusClientTitle(status){
   return ({'В работе':'Менеджер принял заявку в работу','Расчёт':'Менеджер готовит расчёт','Ожидает клиента':'Расчёт готов','Сделка':'Расчёт согласован — оформляем заказ'}[clean(status)]||('Статус заявки: '+(clean(status)||'обновлён')));
@@ -192,6 +211,7 @@ export function createTelegramService({
     const eventKey=meta=>[Number(previous.revision||0)+1,meta.event,meta.leadId,meta.quoteId,meta.orderId,meta.paymentId].filter(x=>x!==undefined&&x!=='').join(':');
     const prevLeads=new Map(arr(previous.leads).map(x=>[clean(x.id),x]));
     const prevQuotes=new Map(arr(previous.quotes).map(x=>[clean(x.id),x]));
+    const publishedLeadIds=new Set(arr(next?.quotes).filter(q=>clean(q.status)==='Отправлен'&&clean(prevQuotes.get(clean(q.id))?.status)!=='Отправлен').map(q=>clean(q.leadId)));
     const prevOrders=new Map(arr(previous.orders).map(x=>[clean(x.id),x]));
 
     const appUrl=clean(process.env.AUTO_SALE_TELEGRAM_APP_URL||'');
@@ -224,15 +244,17 @@ export function createTelegramService({
       const before=prevLeads.get(clean(lead.id));
       if(!before){
         const source=lead.clientCreated?'Новая заявка клиента':'Новый лид';
-        await toManagers(lead,`🚗 AUTO МИР · ${source.toLowerCase()}\n${clean(lead.name)||'Клиент'}\n${leadTitle(lead)}\nБюджет: ${lead.budget?money(lead.budget):'не указан'}\nКонтакт: ${clean(lead.contact)||'—'}`,{event:'lead_created',leadId:lead.id});
+        await toManagers(lead,`🚗 AUTO МИР · ${source.toLowerCase()}\n${clean(lead.name)||'Клиент'}\n${leadTitle(lead)}\n\${similarRequestDetails(lead,{manager:true})}\nКонтакт: \${clean(lead.contact)||'—'}`,{event:'lead_created',leadId:lead.id});
         if(lead.clientCreated){
-          await toClient(lead,`🚗 AUTO МИР · заявка принята\n\n${leadTitle(lead)}\nБюджет: ${lead.budget?money(lead.budget):'не указан'}\nСтатус: ${clean(lead.status)||'Новый'}\n\nЗаявка передана менеджеру. Мы сообщим здесь, когда будет готов расчёт, а после оформления заказа — об оплатах и этапах доставки.`,{event:'lead_created_confirmation',leadId:lead.id});
+          await toClient(lead,`🚗 AUTO МИР · заявка принята\n\n${leadTitle(lead)}\n\${similarRequestDetails(lead)}\nСтатус: \${clean(lead.status)||'Новый'}\n\nЗаявка передана менеджеру. Мы сообщим здесь, когда будет готов расчёт, а после оформления заказа — об оплатах и этапах доставки.`,{event:'lead_created_confirmation',leadId:lead.id});
         }
       }else if(before&&clean(before.status)!==clean(lead.status)){
         const clientMsg=`🚗 AUTO МИР\n\n${statusClientTitle(lead.status)}\n${leadTitle(lead)}\n\n${clean(lead.status)==='В работе'?'Менеджер уже работает с вашей заявкой. Сообщим, когда расчёт будет готов.':clean(lead.status)==='Ожидает клиента'?'Откройте AUTO МИР: расчёт готов и ждёт вашего решения.':'Следующее важное изменение мы также пришлём сюда.'}`;
         const managerMsg=`🔔 AUTO МИР · статус заявки\nКлиент: ${clean(lead.name)||'—'}\nАвтомобиль: ${leadTitle(lead)}\n${clean(before.status)||'—'} → ${clean(lead.status)||'—'}`;
-        await toClient(lead,clientMsg,{event:'lead_status',leadId:lead.id});
-        await toManagers(lead,managerMsg,{event:'lead_status',leadId:lead.id});
+        if(!(clean(lead.status)==='Ожидает клиента'&&publishedLeadIds.has(clean(lead.id)))){
+          await toClient(lead,clientMsg,{event:'lead_status',leadId:lead.id});
+          await toManagers(lead,managerMsg,{event:'lead_status',leadId:lead.id});
+        }
       }
     }
 
@@ -250,9 +272,12 @@ export function createTelegramService({
         await toManagers(lead,message,{event:'quote_changes_requested',leadId:lead.id,quoteId:quote.id});
         continue;
       }
-      const total=num(quote.total)?`\nСтоимость: ${quote.origin==='Грузия'&&quote.tariffVersion===AWG_GEORGIA_TARIFF_VERSION?formatGeorgiaUsd(quote.total):money(quote.total)}`:'';
-      const clientMsg=`💰 AUTO МИР · расчёт\n\n${clean(quote.model)||leadTitle(lead)}\nСтатус: ${clean(quote.status)}${total}\n\n${clean(quote.status)==='Отправлен'?'Расчёт готов. Откройте AUTO МИР, чтобы увидеть итоговую стоимость и детали.':clean(quote.status)==='Согласован'?'Расчёт согласован. Менеджер переходит к оформлению заказа.':'Следующее важное изменение мы также пришлём сюда.'}`;
-      const managerMsg=`💰 AUTO МИР · расчёт\nКлиент: ${clean(lead.name)||'—'}\nАвтомобиль: ${clean(quote.model)||leadTitle(lead)}\nСтатус: ${clean(quote.status)}${total}`;
+      const simpleUs=quote.origin==='США'&&quote.tariffVersion==='2026-10-26-us-car-plus-repair';
+      const total=num(quote.total)?'\n'+(simpleUs?'Предварительная стоимость автомобиля: ':'Стоимость: ')+(quote.origin==='Грузия'&&quote.tariffVersion===AWG_GEORGIA_TARIFF_VERSION?formatGeorgiaUsd(quote.total):money(quote.total)):'';
+      const customs=simpleUs&&num(quote.customsAndRecyclingRub)>0?'\nТаможня + утильсбор РФ (справочно, оплачиваются клиентом): '+new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(num(quote.customsAndRecyclingRub))+' ₽':'';
+      const costGuide=simpleUs?'Дополнительные расходы и окончательная договорная цена согласуются с менеджером в личном чате.':'Уточните условия сделки с менеджером.';
+      const clientMsg=`💰 AUTO МИР · расчёт\n\n${clean(quote.model)||leadTitle(lead)}\nСтатус: \${clean(quote.status)}\${total}\${customs}\n\n\${clean(quote.status)==='Отправлен'?'Предварительный расчёт готов. Откройте AUTO МИР, чтобы увидеть основные позиции. '+costGuide:clean(quote.status)==='Согласован'?'Расчёт согласован. Менеджер переходит к оформлению заказа.':'Следующее важное изменение мы также пришлём сюда.'}`;
+      const managerMsg=`💰 AUTO МИР · расчёт\nКлиент: ${clean(lead.name)||'—'}\nАвтомобиль: ${clean(quote.model)||leadTitle(lead)}\nСтатус: \${clean(quote.status)}\${total}`;
       await toClient(lead,clientMsg,{event:'quote_status',leadId:lead.id,quoteId:quote.id},'Посмотреть расчёт');
       await toManagers(lead,managerMsg,{event:'quote_status',leadId:lead.id,quoteId:quote.id});
     }
@@ -310,7 +335,7 @@ export function createTelegramService({
 
     if(command==='/start'||command==='/catalog'||command==='/app'){
       const greeting=command==='/start'
-        ?`🚗 AUTO МИР\n\nЗдравствуйте${firstName?', '+firstName:''}!\n\nЗдесь можно выбрать автомобиль из США или Грузии, получить расчёт и отслеживать заказ — всё в одном приложении.\n\nНажмите «Открыть каталог», чтобы начать.`
+        ?`🚗 AUTO МИР\n\nЗдравствуйте${firstName?', '+firstName:''}!\n\nЗдесь можно подобрать похожий автомобиль из США или Грузии, получить предварительную стоимость и обсудить подробности с менеджером.\n\nНажмите «Открыть каталог», чтобы начать.`
         :`🚗 Каталог AUTO МИР\n\nОткройте приложение, чтобы посмотреть автомобили, отправить заявку или проверить свой заказ.`;
       const payload={chat_id:chatId,text:greeting};
       if(webAppUrl)payload.reply_markup={inline_keyboard:[[{text:'🚗 Открыть каталог',web_app:{url:webAppUrl}}]]};
@@ -320,7 +345,7 @@ export function createTelegramService({
     }
 
     if(command==='/help'){
-      const body='AUTO МИР помогает пройти весь путь покупки автомобиля:\n\n1. Выбрать авто из США или Грузии\n2. Получить прозрачный расчёт\n3. Оформить заявку\n4. Следить за этапами заказа и оплатами\n5. Получать уведомления прямо в Telegram';
+      const body='AUTO МИР помогает пройти весь путь покупки автомобиля:\n\n1. Выбрать исходную машину и заказать поиск похожей\n2. Получить предварительную стоимость\n3. Оформить заявку\n4. Следить за этапами заказа и оплатами\n5. Получать уведомления прямо в Telegram';
       const payload={chat_id:chatId,text:body};
       if(webAppUrl)payload.reply_markup={inline_keyboard:[[{text:'Открыть AUTO МИР',web_app:{url:webAppUrl}}]]};
       if(webhookReply)return{ok:true,handled:'/help',webhookMethod:'sendMessage',webhookPayload:payload};
