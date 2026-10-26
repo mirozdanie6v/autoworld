@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {summarizeAdsCampaigns} from '../server/ads-attribution-report.mjs';
+import {summarizeAdsCampaigns,summarizeAdsCampaignsFromRepository} from '../server/ads-attribution-report.mjs';
 
 const A='a'.repeat(64), B='b'.repeat(64);
 const evt=(eventId,campaignId,eventType,subjectKey=A)=>({eventId,campaignId,eventType,subjectKey});
@@ -61,4 +61,37 @@ test('all events require HMAC subject keys, known type and valid identifiers',()
   assert.throws(()=>summarizeAdsCampaigns({events:[evt('1','campaign','ad_click')]}),/invalid_ads_reporting_event/);
   assert.throws(()=>summarizeAdsCampaigns({events:[evt('1','campaign','bot_start','12345')]}),/invalid_ads_reporting_event/);
   assert.throws(()=>summarizeAdsCampaigns({events:[evt('1','bad campaign','bot_start')]}),/invalid_ads_report_campaign/);
+});
+
+test('paged read from repository produces complete real receipt counts',async()=>{
+  const events=[
+    evt('ads:lead-1','camp','lead_submit',A),
+    evt('ads:lead-2','camp','lead_submit',B),
+    evt('tg-start:1','camp','bot_start',A)
+  ];
+  const repository={
+    async listEvents({cursor='',limit}){
+      const remaining=events.filter(item=>item.eventId>cursor);
+      return {
+        events:remaining.slice(0,limit),
+        nextCursor:remaining.length>limit?remaining[limit-1].eventId:null
+      };
+    }
+  };
+  const rows=await summarizeAdsCampaignsFromRepository({
+    repository,pageSize:2,maxPages:3,
+    verifiedSpend:[{campaignId:'camp',currency:'RUB',amount:1200,verified:true}]
+  });
+  assert.equal(rows[0].leadSubmissions,2);
+  assert.equal(rows[0].uniqueBotUsers,1);
+  assert.equal(rows[0].costPerLead.amount,600);
+  await assert.rejects(summarizeAdsCampaignsFromRepository({repository,pageSize:2,maxPages:1}),/ads_report_page_limit_reached/);
+});
+test('malformed event order and missing continuation page fail closed',async()=>{
+  await assert.rejects(summarizeAdsCampaignsFromRepository({
+    repository:{listEvents:async()=>({events:[evt('z','camp','bot_start'),evt('a','camp','bot_start')],nextCursor:null})}
+  }),/invalid_ads_event_order/);
+  await assert.rejects(summarizeAdsCampaignsFromRepository({
+    repository:{listEvents:async()=>({events:[],nextCursor:'orphan'})}
+  }),/invalid_ads_event_cursor/);
 });
