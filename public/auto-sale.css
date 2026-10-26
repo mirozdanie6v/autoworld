@@ -165,3 +165,8 @@
 .auto-purchase-choice{display:block;width:100%;text-align:left;cursor:pointer;font:inherit;color:inherit;border:1px solid var(--auto-border,rgba(255,255,255,.15));transition:border-color .2s,transform .2s}
 .auto-purchase-choice:hover{transform:translateY(-2px);border-color:currentColor}
 .auto-purchase-choice:focus-visible{outline:3px solid currentColor;outline-offset:3px}
+
+/* Numeric inputs display as plain fields in Telegram and VK webviews. */
+input[type="number"] { appearance: textfield; -moz-appearance: textfield; }
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }

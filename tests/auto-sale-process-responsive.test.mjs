@@ -42,7 +42,7 @@ test('styles only affect process cards on 901-1550px and preserve all adjacent v
 });
 
 test('process CSS loads last after desktop and mobile CSS without disturbing existing app',()=>{
-  const order=['auto-sale.css?v=20260927-calc-crypto-v3',
+  const order=['auto-sale.css?v=20261026-no-spinners-v1',
     'auto-sale-responsive.css?v=20260926-calc-cta-v1',
     'auto-sale-desktop-fluid.css?v=20261015-fluid-v1',
     'auto-sale-process-responsive.css?v=20261015-process-v2'];
