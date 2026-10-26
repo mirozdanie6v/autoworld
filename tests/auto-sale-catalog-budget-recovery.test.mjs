@@ -89,7 +89,7 @@ test('existing client lead without carId renders selected car characteristics, r
     assert.equal(form.elements.year.value,'2024');
     assert.equal(form.elements.mileage.value,'45 200 км');
     assert.equal(form.elements.engine.value,'2.5 Hybrid');
-    assert.equal(form.elements.drive.value,'4WD');
+    assert.equal(form.elements.drive.value,'Полный');
     assert.equal(form.elements.budget.value,'25800');
     assert.equal(form.elements.catalogUsdRubRate.value,'100');
     assert.match(form.textContent,/Источник|Стоимость из карточки/);
