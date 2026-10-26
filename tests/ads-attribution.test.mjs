@@ -70,7 +70,7 @@ test('duplicate Telegram update does not overwrite last touch or inflate counts'
   await service.recordBotStart({telegramUserId:12345,startPayload:a.token,updateId:5});
   setNow('2026-10-27T08:00:00.000Z');
   const replay=await service.recordBotStart({telegramUserId:12345,startPayload:b.token,updateId:5});
-  assert.equal(replay.status,'duplicate');
+  assert.deepEqual(replay,{status:'duplicate'});
   assert.equal((await service.getAttribution({telegramUserId:12345})).lastTouch.campaignId,'A');
   assert.equal(repository.snapshotForTests().events.length,1);
 });
@@ -106,7 +106,7 @@ test('server-trusted events are idempotent and use latest verified campaign',asy
   await service.recordBotStart({telegramUserId:78,startPayload:a.token,updateId:1});
   const payload={telegramUserId:78,eventType:'vehicle_view',eventId:'car_123'};
   assert.equal((await service.recordTrustedEvent(payload)).status,'recorded');
-  assert.equal((await service.recordTrustedEvent(payload)).status,'duplicate');
+  assert.deepEqual(await service.recordTrustedEvent(payload),{status:'duplicate'});
   assert.equal(repository.snapshotForTests().events.length,2);
   assert.equal(repository.snapshotForTests().events[1].campaignId,'a');
   await assert.rejects(service.recordTrustedEvent({...payload,eventType:'unknown'}),/invalid_ads_event_type/);
