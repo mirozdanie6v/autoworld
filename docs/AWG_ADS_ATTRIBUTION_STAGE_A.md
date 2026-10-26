@@ -177,15 +177,19 @@ and retention against this real local server. An additional
 restarts the Docker container itself and checks that attribution data
 survives and erasure/retention still work.
 
-Verified evidence (2026-10-26):
-- Unit + SQL-contract test gate: **29/29 PASS** on
-  [GitHub Actions 40329827975](https://github.com/mirozdanie6v/autoworld/actions/runs/40329827975).
-- Live local YDB + synthetic privacy test:
-  [GitHub Actions 40329391349](https://github.com/mirozdanie6v/autoworld/actions/runs/40329391349) PASS.
-- Full disk-backed YDB container restart:
-  [GitHub Actions 40329798636](https://github.com/mirozdanie6v/autoworld/actions/runs/40329798636) PASS;
-  2 campaigns, 10 recorded bot starts, 1 synthetic lead,
-  successful cross-process reconciliation, and retention after restart.
+Verified evidence (2026-10-26, updated after the P0/P1 audit):
+- **36/36 PASS** for independent unit/SQL-contract, authorization, audit,
+  retention scheduler contract, replay suppression, and >1,000 event deletion:
+  [GitHub Actions 40347180425](https://github.com/mirozdanie6v/autoworld/actions/runs/40347180425).
+- Real local YDB ingestion, 20 simultaneous starts of one Telegram subject,
+  deletion of **1,011 receipts across 21 batches**, and repeat webhook
+  suppression: [GitHub Actions 40346364135](https://github.com/mirozdanie6v/autoworld/actions/runs/40346364135), success.
+- Real disk-backed YDB with container restart, 24 concurrent event writes
+  during erasure, **zero surviving receipts for the erased subject** and
+  deletion of 1,011 receipts across 21 batches:
+  [GitHub Actions 40347342480](https://github.com/mirozdanie6v/autoworld/actions/runs/40347342480), success.
+- Full server restart and continued keyset data availability confirmed on the
+  same disk-backed test YDB; this is not managed Yandex Cloud staging.
 
 This is **not** a managed Yandex Cloud database acceptance test; it does
 not establish production credentials, IAM or region-specific YDB settings.
@@ -228,6 +232,39 @@ remains contingent on Stage B integration gates and external approvals.
 - Require QA, documented production migration/rollback, separate
   user approval for merge and deployment, and Legal/Ads readiness gates
   in Linear VII-184 before publishing any advertising.
+
+## Stage A technical acceptance — audit after remediation (2026-10-26)
+
+**Decision: technical Stage A accepted, isolated scope only.**
+Previously discovered P0 and mandatory P1 issues have been addressed
+in the feature branch and the corresponding local YDB tests are successful:
+
+| Audit item | Verified result |
+| --- | --- |
+| Erasure cannot be undone by replay | A permanent HMAC tombstone is written transactionally before deleting subject history, replay ignored; concurrent write-vs-erase test returns 0 surviving records |
+| Removal beyond 1,000 events | 1,011 receipts removed by 21 bounded YDB batches, no cap on total records across resumable invocations |
+| Retention & subject lookup performance | Writes/erases maintain two transactional auxiliary key tables; local YDB tested, managed-cloud latency remains unmeasured |
+| Maintenance execution | Scheduler-neutral 03:00 UTC daily registration, fail-closed complete/incomplete runner, counts, duration, alerts and mandatory audit/authorization callbacks all unit-tested |
+| Same-user concurrency | 20 parallel bot-start updates and 24 concurrent write-vs-erase calls tested on real local YDB |
+| Isolation | No existing application files edited, no production YDB access, no main merge/deploy |
+
+The following **operational gates remain outside isolated Stage A and must
+be satisfied before using real personal data**: legally approve retention and
+suppression-tombstone basis/lifetime; bind host-verified IAM roles, durable
+audit log, metrics/alerts and daily scheduler; test cloud staging YDB;
+reconcile this branch with newer main; integrate real authenticated Telegram
+and signed Mini App, transactional lead writes and director-only report access.
+Re-consent/unblocking policy for suppressed users requires an explicit,
+legally reviewed design.
+
+Known non-blocking Stage A follow-ups for Stage B: same-user identity
+consolidation across key rotation windows, reseller spend provenance,
+point-in-time consistent reporting under continuous writes, pinned Docker
+YDB image digest, benchmark at expected managed-cloud campaign volume.
+
+The repository workflow deliberately **does not schedule real production
+maintenance** and cannot claim an operational SLA before a real host job,
+alert receiver and IAM identity have been configured.
 
 No additional external paid tool is required for these Stage A code tests.
 An isolated YDB test database, if newly provisioned, may have cloud usage
