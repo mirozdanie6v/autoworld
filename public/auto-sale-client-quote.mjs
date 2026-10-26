@@ -18,7 +18,8 @@ function panel(leadId,q){
   const changes=q.clientDecision==='changes_requested';
   const georgiaNew=q.origin==='Грузия'&&q.tariffVersion===AWG_GEORGIA_TARIFF_VERSION;
   const modern=v2Quote(q);
-   const displayMoney=georgiaNew||modern?formatGeorgiaUsd:money;
+  const simplified=simpleUsQuote(q);
+  const displayMoney=georgiaNew||modern?formatGeorgiaUsd:money;
   return `<section class="auto-client-quote" data-client-quote="${esc(q.id)}" data-lead="${esc(leadId)}">
     <div class="auto-client-quote-head"><div><span>РАСЧЁТ · ${esc(q.id)} · V${Number(q.version)||1}</span><h3>${esc(q.model||'Расчёт автомобиля')}</h3></div><b class="auto-status ${agreed?'good':''}">${esc(q.status)}</b></div>
     <div class="auto-client-quote-lines">${quoteCostRows(q).map(({label,value,displayValue})=>`<div><span>${esc(label)}</span><strong>${esc(displayValue||displayMoney(value))}</strong></div>`).join('')}</div>
