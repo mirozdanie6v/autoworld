@@ -30,7 +30,7 @@ async function page(){
 
 test('late production /state refresh preserves selected catalog car and customer text through submit',async()=>{
  const {dom,root,form}=await page();
- assert.match(form.textContent,/карточка №AWG-TRAIL-SELECTED/);
+ assert.match(form.textContent,/карточки №AWG-TRAIL-SELECTED/);
  form.elements.name.value='Buyer';
  form.elements.contact.value='@test_account';
  form.elements.note.value='Уточните документы';
