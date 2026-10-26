@@ -3,4 +3,3 @@ requested_at=2026-10-26
 source_sha=f8364d033947fa20e7cd3bc05c7815ba0a82cda5
 reason=physical-TG-Flyer_kg-Dmitriy-complete-event-sequence-draft-dedup-fix
 run_real_client_e2e=false
-telegram_lifecycle_audit=Flyer_kg-Dmitriy-20261026
