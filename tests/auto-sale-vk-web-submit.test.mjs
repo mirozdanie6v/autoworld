@@ -53,7 +53,9 @@ test('valid VK browser request reaches entity API and navigates to own orders',a
   form.elements.namedItem('contact').value='https://vk.com/id42';
   form.elements.namedItem('model').value='Toyota Camry — тест VK ID';
   form.elements.namedItem('origin').value='Грузия';
-  form.elements.namedItem('ageRange').value='3–5 лет';
+  form.elements.namedItem('budget').value='20000';
+  form.elements.namedItem('yearFrom').value='2020';
+  form.elements.namedItem('yearTo').value='2024';
   assert.equal(form.checkValidity(),true);
   const button=form.querySelector('button[type="submit"]');
   button.click();
@@ -77,7 +79,9 @@ test('rejected VK web request displays error and reenables submit for retry',asy
   form.elements.namedItem('contact').value='https://vk.com/id42';
   form.elements.namedItem('model').value='Toyota';
   form.elements.namedItem('origin').value='Грузия';
-  form.elements.namedItem('ageRange').value='3–5 лет';
+  form.elements.namedItem('budget').value='20000';
+  form.elements.namedItem('yearFrom').value='2020';
+  form.elements.namedItem('yearTo').value='2024';
   assert.equal(form.checkValidity(),true);
   const button=form.querySelector('button[type="submit"]');
   button.click();
