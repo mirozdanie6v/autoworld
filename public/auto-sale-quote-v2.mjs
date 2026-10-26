@@ -126,9 +126,9 @@ export function quoteV2Form(q={},leads=[],statuses=[],esc=String,verificationPho
     '<p class="full auto-rule-hint">'+(simpleUs?'Доставка и дополнительные расходы уточняются с менеджером и не входят в предварительный итог США.':'Доставка включается в сумму отдельно; проверяйте состав затрат во избежание двойного учёта.')+'</p>'+
     (q.sourcePriceRub>0?'<p class="full auto-note">Цена автомобиля из объявления: '+rub(q.sourcePriceRub)+'. После указания официального курса ЦБ РФ она автоматически пересчитывается в доллары по расчётному курсу, если менеджер ещё не ввёл цену вручную.</p>':'')+
     (q.sourceTurnkeyDeliveryRub>0?'<p class="full auto-note">По объявлению: разница между ценой автомобиля и ценой в России с ремонтом — '+rub(q.sourceTurnkeyDeliveryRub)+'. Сверьте состав и переведите в $ по курсу перед внесением доставки.</p>':'')+
-    (simpleUs?number('repair','Ремонт (приблизительно)','
+    (simpleUs?number('repair','Ремонт (приблизительно)','$','0.01'):usFields)+
     number('customsAndRecyclingRub',simpleUs?'Таможня + утильсбор РФ (справочно, оплачивает клиент)':'Таможня + утильсбор РФ (включены в доставку)','₽')+
-    '<p class="full auto-rule-hint">'+(simpleUs?'Таможню и утильсбор клиент оплачивает самостоятельно в рублях; они не входят в предварительную стоимость США.':'Таможня и утильсбор включены в стоимость под ключ и повторно не прибавляются.')+'</p>'+
+    '<p class="auto-rule-hint full">'+(simpleUs?'Таможню и утильсбор клиент оплачивает самостоятельно в рублях; они не входят в предварительную стоимость США.':'Таможня и утильсбор включены в стоимость под ключ и повторно не прибавляются.')+'</p>'+
     (simpleUs?'':number('internationalTransferPercent','Международный перевод','%','0.01'))+
     (simpleUs?'':'<p class="full auto-rule-hint">База перевода — стоимость автомобиля плюс доставка под ключ. Отдельные затраты не включаются в эту базу.</p>')+
     '<div class="full auto-form-divider">Курс ЦБ РФ и конвертация</div>'+
@@ -149,32 +149,6 @@ export function quoteV2Form(q={},leads=[],statuses=[],esc=String,verificationPho
     '<label>Итог проверки<select name="verificationResult">'+[['Не проверено','Не проверено'],['Одобрен к покупке','Одобрен к покупке'],['Не рекомендован','Не рекомендован']].map(v=>option(v[0],v[1],q.verification?.result||'Не проверено')).join('')+'</select></label>'+verificationPhotos:'')+
     '<label>Статус<select name="status">'+statusOptions+'</select></label>'+
     '<div class="auto-quote-total full"><span>'+(simpleUs?'Предварительная стоимость, USD':'Итого, USD')+'</span><b id="quoteTotal">'+moneyUsd(preview)+'</b><small id="quoteCostPreview">ЦБ РФ: '+safe(rate.cbrRubRate)+' ₽/$; для конвертации +4%; в рублях ≈ '+rub(quoteV2TotalRub(q))+'</small></div>'+
-    '<div class="auto-form-actions"><button type="button" class="auto-btn ghost" data-close>Отмена</button><button type="submit" class="auto-btn primary">Сохранить расчёт</button></div>'+
-    '</form></div></div>';
-}
-,'0.01'):usFields)+
-    number('customsAndRecyclingRub','Таможня + утильсбор РФ (включены в доставку)','₽')+
-    '<p class="full auto-rule-hint">Таможню и утильсбор проверяет менеджер. Это справочная сумма, она уже включена в стоимость под ключ и повторно к итогу не прибавляется.</p>'+
-    number('internationalTransferPercent','Международный перевод','%','0.01')+
-    '<p class="full auto-rule-hint">База перевода — стоимость автомобиля плюс доставка под ключ. Отдельные затраты не включаются в эту базу.</p>'+
-    '<div class="full auto-form-divider">Курс ЦБ РФ и конвертация</div>'+
-    number('cbrRubRate','Официальный курс ЦБ РФ за 1 USD','₽','0.0001')+
-    '<label>Дата курса ЦБ РФ<input name="exchangeRateDate" type="date" value="'+safe(q.exchangeRateDate||'')+'"></label>'+
-    '<input type="hidden" name="exchangeRateSource" value="cbr">'+
-    '<p class="full auto-rule-hint">Официальный курс ЦБ РФ отображается клиенту. Для фактического пересчёта USD → RUB применяется курс ЦБ РФ + 4%; клиентский итог в рублях включает эту разницу.</p>'+
-    '<label class="full">Общедоступный комментарий<textarea name="publicComment" rows="3">'+safe(q.publicComment||'')+'</textarea></label>'+
-    (origin==='США'?'<div class="full auto-form-divider">Досье проверки автомобиля США</div>'+
-    '<label>LOT / номер лота<input name="verificationLot" value="'+safe(q.verification?.lotNumber||'')+'"></label>'+
-    '<label>VIN<input name="verificationVin" value="'+safe(q.verification?.vin||'')+'"></label>'+
-    '<label>Год автомобиля<input name="verificationYear" type="number" min="1900" max="2030" value="'+safe(q.verification?.year||q.catalogYear||'')+'"></label>'+
-    '<label>Пробег, км<input name="verificationMileage" type="number" min="0" value="'+safe(q.verification?.mileage||0)+'"></label>'+
-    '<label class="full">Повреждения<textarea name="verificationDamage">'+safe(q.verification?.damage||'')+'</textarea></label>'+
-    '<label>Ссылка на отчёт<input name="verificationReportUrl" type="url" value="'+safe(q.verification?.reportUrl||'')+'"></label>'+
-    '<label>Дата проверки<input name="verificationCheckedAt" type="date" value="'+safe(q.verification?.checkedAt||'')+'"></label>'+
-    '<label class="full">История<textarea name="verificationHistory">'+safe(q.verification?.history||'')+'</textarea></label>'+
-    '<label>Итог проверки<select name="verificationResult">'+[['Не проверено','Не проверено'],['Одобрен к покупке','Одобрен к покупке'],['Не рекомендован','Не рекомендован']].map(v=>option(v[0],v[1],q.verification?.result||'Не проверено')).join('')+'</select></label>'+verificationPhotos:'')+
-    '<label>Статус<select name="status">'+statusOptions+'</select></label>'+
-    '<div class="auto-quote-total full"><span>Итого, USD</span><b id="quoteTotal">'+moneyUsd(preview)+'</b><small id="quoteCostPreview">ЦБ РФ: '+safe(rate.cbrRubRate)+' ₽/$; для конвертации +4%; в рублях ≈ '+rub(quoteV2TotalRub(q))+'</small></div>'+
     '<div class="auto-form-actions"><button type="button" class="auto-btn ghost" data-close>Отмена</button><button type="submit" class="auto-btn primary">Сохранить расчёт</button></div>'+
     '</form></div></div>';
 }
