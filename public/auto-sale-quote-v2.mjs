@@ -76,7 +76,7 @@ export function quoteV2Errors(q={}){
   if(n(q.customsAndRecyclingRub)<0)errors.push('Таможня + утильсбор не могут быть отрицательными.');
   const expected=quoteV2Amounts(q);
   for(const [key,value] of Object.entries(expected))if(Math.abs(n(q[key])-value)>0.011)errors.push('Некорректная сумма статьи '+key);
-  if(Math.abs(n(q.usdRubRate)-quoteV2Rate(q).calculationRubRate)>0.00011)errors.push('Расчётный курс должен быть ЦБ РФ + 4%.');
+  if(Math.abs(n(q.usdRubRate)-quoteV2Rate(q).calculationRubRate)>0.00011)errors.push('Расчётный курс не соответствует тарифу.');
   return errors;
 }
 export function quoteV2Form(q={},leads=[],statuses=[],esc=String,verificationPhotos=''){
