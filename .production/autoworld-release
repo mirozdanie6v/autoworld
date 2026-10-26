@@ -1,5 +1,5 @@
 AWG production release
 requested_at=2026-10-26
-source_sha=f8364d033947fa20e7cd3bc05c7815ba0a82cda5
-reason=physical-TG-Flyer_kg-Dmitriy-complete-event-sequence-draft-dedup-fix
+source_sha=a17e0470628a760ced667dffcd0a23352f6a9bb0
+reason=p0-manager-regression-p1-catalog-vinless-and-safe-ads-hook
 run_real_client_e2e=false
