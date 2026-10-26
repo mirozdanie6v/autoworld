@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createAdsMaintenanceJob} from '../server/ads-attribution-maintenance.mjs';
+import {createAdsMaintenanceJob,registerAdsDailyRetention} from '../server/ads-attribution-maintenance.mjs';
 
 const principal={id:'scheduler-stage-a-local'};
 test('scheduler handler emits completion metrics without leaking identities',async()=>{
@@ -39,4 +39,20 @@ test('YDB maintenance errors surface alerts, no hardcoded scheduler permission',
   await assert.rejects(run({principal}),/ads_operation_forbidden/);
   assert.equal(alerts[0].code,'awg_ads_retention_failed');
   assert.throws(()=>createAdsMaintenanceJob({privacyService:{runRetentionCycle:()=>{}}}),/observability_required/);
+});
+
+test('daily UTC retention schedule registers exactly one non-overlapping job',async()=>{
+  const recorded=[];
+  const scheduler={register(config,handler){recorded.push(config);return handler;}};
+  const handler=registerAdsDailyRetention({
+    scheduler,principal,
+    runMaintenance:async ({principal:p})=>({ok:p.id===principal.id})
+  });
+  assert.deepEqual(await handler(),{ok:true});
+  assert.deepEqual(recorded,[{
+    id:'awg-ads-retention-daily',cron:'0 3 * * *',timeZone:'UTC',maxConcurrent:1
+  }]);
+  assert.throws(()=>registerAdsDailyRetention({
+    scheduler,principal,runMaintenance:()=>{},cron:'* * * * *'
+  }),/invalid_ads_retention_scheduler/);
 });
