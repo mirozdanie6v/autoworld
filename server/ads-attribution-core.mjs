@@ -72,6 +72,7 @@ function snapshot(subject,cutoff,now){
 export function createAdsAttributionService({
   repository,
   subjectSecret,
+  previousSubjectSecrets=[],
   clock=()=>new Date(),
   attributionWindowDays=30
 }={}){
@@ -79,11 +80,26 @@ export function createAdsAttributionService({
     throw new Error('ads_repository_required');
   }
   if(typeof subjectSecret!=='string'||subjectSecret.length<32)throw new Error('ads_subject_secret_required');
+  if(!Array.isArray(previousSubjectSecrets)||previousSubjectSecrets.length>2
+    ||previousSubjectSecrets.some(secret=>typeof secret!=='string'||secret.length<32||secret===subjectSecret)
+    ||new Set(previousSubjectSecrets).size!==previousSubjectSecrets.length){
+    throw new Error('invalid_ads_previous_subject_secrets');
+  }
   if(!Number.isInteger(attributionWindowDays)||attributionWindowDays<1||attributionWindowDays>MAX_WINDOW_DAYS){
     throw new Error('invalid_ads_attribution_window');
   }
   const windowMs=attributionWindowDays*86400000;
   const subjectKey=userId=>createAdsSubjectKey(userId,subjectSecret);
+  const allSubjectKeys=userId=>[subjectSecret,...previousSubjectSecrets]
+    .map(secret=>createAdsSubjectKey(userId,secret));
+  async function activeSubject(telegramUserId,now){
+    for(const key of allSubjectKeys(telegramUserId)){
+      const subject=await repository.readSubject(key);
+      const attribution=snapshot(subject,now-windowMs,now);
+      if(attribution)return {key,attribution};
+    }
+    return null;
+  }
   async function issueCampaign({campaignId,adId='',creativeId=''}={}){
     const campaign={
       campaignId:id(campaignId,'campaign_id'),
@@ -116,9 +132,12 @@ export function createAdsAttributionService({
       creativeId:campaign.creativeId||'',
       timestamp:at(clock).toISOString()
     };
+    // During a bounded rotation overlap, continue with the existing subject
+    // key. This avoids splitting one user's first/last touch history.
+    const previous=await activeSubject(telegramUserId,at(clock).getTime());
     const result=await repository.recordTouch({
       eventId:`tg-start:${updateId}`,
-      subjectKey:subjectKey(telegramUserId),
+      subjectKey:previous?.key||subjectKey(telegramUserId),
       touch
     });
     return result.recorded
@@ -126,17 +145,13 @@ export function createAdsAttributionService({
       : {status:'duplicate'};
   }
   async function getAttribution({telegramUserId}={}){
-    const subject=await repository.readSubject(subjectKey(telegramUserId));
-    const now=at(clock).getTime();
-    return snapshot(subject,now-windowMs,now);
+    return (await activeSubject(telegramUserId,at(clock).getTime()))?.attribution||null;
   }
   async function recordTrustedEvent({telegramUserId,eventType,eventId}={}){
     if(!ALLOWED_EVENTS.has(eventType))throw new Error('invalid_ads_event_type');
-    const key=subjectKey(telegramUserId);
-    const subject=await repository.readSubject(key);
-    const now=at(clock).getTime();
-    const attribution=snapshot(subject,now-windowMs,now);
-    if(!attribution)return {status:'ignored',reason:'no_active_attribution'};
+    const matched=await activeSubject(telegramUserId,at(clock).getTime());
+    if(!matched)return {status:'ignored',reason:'no_active_attribution'};
+    const {key,attribution}=matched;
     const result=await repository.recordEvent({
       eventId:`ads:${validateEventId(eventId)}`,
       subjectKey:key,
@@ -205,6 +220,32 @@ export function createMemoryAdsAttributionRepository(){
       }
       events.set(event.eventId,structuredClone(event));
       return {recorded:true};
+    },
+    async eraseSubjects({subjectKeys,maxEventsPerSubject=1000}={}){
+      let deletedSubjects=0,deletedEvents=0;
+      for(const key of subjectKeys){
+        const affected=[...events.values()].filter(event=>event.subjectKey===key);
+        if(affected.length>maxEventsPerSubject)throw new Error('ads_erasure_event_limit_exceeded');
+        for(const event of affected){events.delete(event.eventId);deletedEvents++;}
+        if(subjects.delete(key))deletedSubjects++;
+      }
+      return {deletedSubjects,deletedEvents};
+    },
+    async purgeExpired({eventCutoff,subjectCutoff,batchSize=100,cursor=''}={}){
+      const oldEvents=[...events.values()].filter(e=>e.occurredAt<eventCutoff).slice(0,batchSize+1);
+      for(const event of oldEvents.slice(0,batchSize))events.delete(event.eventId);
+      const allSubjects=[...subjects.entries()].filter(([key])=>key>cursor)
+        .sort(([a],[b])=>a<b?-1:a>b?1:0).slice(0,batchSize+1);
+      let removed=0,compacted=0;
+      for(const [key,subject] of allSubjects.slice(0,batchSize)){
+        if(subject.lastTouch.timestamp<subjectCutoff){subjects.delete(key);removed++;}
+        else if(subject.firstTouch.timestamp<subjectCutoff){
+          subjects.set(key,{firstTouch:structuredClone(subject.lastTouch),lastTouch:subject.lastTouch});compacted++;
+        }
+      }
+      return {deletedEvents:Math.min(oldEvents.length,batchSize),deletedSubjects:removed,
+        compactedSubjects:compacted,hasMoreEvents:oldEvents.length>batchSize,
+        nextCursor:allSubjects.length>batchSize?allSubjects[batchSize-1][0]:null};
     },
     async listEvents({cursor='',limit=250}={}){
       const sorted=[...events.values()].filter(event=>event.eventId>cursor)
