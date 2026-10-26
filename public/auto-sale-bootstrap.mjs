@@ -354,7 +354,7 @@ await import('./auto-sale-app-v3.mjs?v=20261021-georgia-quote-v2');
 await import('./auto-sale-calc-scroll-performance.mjs?v=20261010-scroll-v1');
 await import('./auto-sale-vk-web.mjs?v=20261010-vk-prod-v1');
 if(['awgcars.ru','www.awgcars.ru','vk-test.awgcars.ru'].includes(window.location.hostname)&&!telegramLaunchDetected()&&!telegramInitData()&&!new URLSearchParams(window.location.search||'').has('vk_app_id'))await import('./auto-sale-vk-status-widget.mjs?v=20261010-web-only-v2');
-await import('./auto-sale-ui-business-guard.mjs?v=20260929-entity-cutover-1');
+await import('./auto-sale-ui-business-guard.mjs?v=20261026-georgia-stage-context-v1');
 await import('./auto-sale-quote-lead-serialization.mjs');
 await import('./auto-sale-quote-save-fix.mjs?v=20260929-entity-cutover-1');
 await import('./auto-sale-lead-status-fix.mjs');
