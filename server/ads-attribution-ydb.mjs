@@ -6,7 +6,10 @@ import {Uint64} from '@ydbjs/value/primitive';
 export const ADS_ATTRIBUTION_TABLES=[
   'awg_ads_campaigns',
   'awg_ads_subjects',
-  'awg_ads_events'
+  'awg_ads_events',
+  'awg_ads_events_by_subject',
+  'awg_ads_events_by_time',
+  'awg_ads_erasure_blocks'
 ];
 
 export async function ensureAdsAttributionSchema(sql,{target}={}){
@@ -43,6 +46,29 @@ export async function ensureAdsAttributionSchema(sql,{target}={}){
       creative_id Utf8 NOT NULL,
       occurred_at Utf8 NOT NULL,
       PRIMARY KEY (event_id)
+    )
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS awg_ads_events_by_subject (
+      subject_key Utf8 NOT NULL,
+      event_id Utf8 NOT NULL,
+      occurred_at Utf8 NOT NULL,
+      PRIMARY KEY (subject_key,event_id)
+    )
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS awg_ads_events_by_time (
+      occurred_at Utf8 NOT NULL,
+      event_id Utf8 NOT NULL,
+      subject_key Utf8 NOT NULL,
+      PRIMARY KEY (occurred_at,event_id)
+    )
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS awg_ads_erasure_blocks (
+      subject_key Utf8 NOT NULL,
+      blocked_at Utf8 NOT NULL,
+      PRIMARY KEY (subject_key)
     )
   `;
 }
@@ -95,6 +121,8 @@ export function createYdbAdsAttributionRepository(sql){
     },
     async recordTouch({eventId,subjectKey,touch}){
       return sql.begin({isolation:'serializableReadWrite',idempotent:true},async tx=>{
+        const [blocked]=await tx`SELECT subject_key FROM awg_ads_erasure_blocks WHERE subject_key=${subjectKey}`;
+        if(blocked.length)return {recorded:false,blocked:true};
         const [already]=await tx`SELECT event_id,subject_key FROM awg_ads_events WHERE event_id=${eventId}`;
         if(already.length){
           if(String(already[0].subject_key)!==subjectKey)throw new Error('ads_event_id_collision');
@@ -117,6 +145,10 @@ export function createYdbAdsAttributionRepository(sql){
             (${eventId},${subjectKey},${'bot_start'},${touch.campaignId},${touch.adId},
              ${touch.creativeId},${touch.timestamp})
         `;
+        await tx`UPSERT INTO awg_ads_events_by_subject (subject_key,event_id,occurred_at)
+          VALUES (${subjectKey},${eventId},${touch.timestamp})`;
+        await tx`UPSERT INTO awg_ads_events_by_time (occurred_at,event_id,subject_key)
+          VALUES (${touch.timestamp},${eventId},${subjectKey})`;
         return {recorded:true};
       });
     },
@@ -132,6 +164,8 @@ export function createYdbAdsAttributionRepository(sql){
     },
     async recordEvent(event){
       return sql.begin({isolation:'serializableReadWrite',idempotent:true},async tx=>{
+        const [blocked]=await tx`SELECT subject_key FROM awg_ads_erasure_blocks WHERE subject_key=${event.subjectKey}`;
+        if(blocked.length)return {recorded:false,blocked:true};
         const [existing]=await tx`SELECT subject_key,event_type FROM awg_ads_events WHERE event_id=${event.eventId}`;
         if(existing.length){
           if(String(existing[0].subject_key)!==event.subjectKey||String(existing[0].event_type)!==event.eventType){
@@ -146,46 +180,56 @@ export function createYdbAdsAttributionRepository(sql){
             (${event.eventId},${event.subjectKey},${event.eventType},
              ${event.campaignId},${event.adId},${event.creativeId},${event.occurredAt})
         `;
+        await tx`UPSERT INTO awg_ads_events_by_subject (subject_key,event_id,occurred_at)
+          VALUES (${event.subjectKey},${event.eventId},${event.occurredAt})`;
+        await tx`UPSERT INTO awg_ads_events_by_time (occurred_at,event_id,subject_key)
+          VALUES (${event.occurredAt},${event.eventId},${event.subjectKey})`;
         return {recorded:true};
       });
     },
-    async eraseSubjects({subjectKeys,maxEventsPerSubject=1000}={}){
-      if(!Array.isArray(subjectKeys)||subjectKeys.length<1||subjectKeys.length>3
+    async eraseSubjects({subjectKeys,batchSize=50,blockedAt=new Date().toISOString()}={}){
+      if(!Array.isArray(subjectKeys)||!subjectKeys.length||subjectKeys.length>3
         ||subjectKeys.some(k=>typeof k!=='string'||!/^[a-f0-9]{64}$/.test(k))
-        ||!Number.isInteger(maxEventsPerSubject)||maxEventsPerSubject<1||maxEventsPerSubject>5000){
-        throw new Error('invalid_ads_erasure_request');
-      }
+        ||!Number.isInteger(batchSize)||batchSize<1||batchSize>100)throw new Error('invalid_ads_erasure_request');
       return sql.begin({isolation:'serializableReadWrite',idempotent:true},async tx=>{
-        let deletedSubjects=0,deletedEvents=0;
+        let deletedSubjects=0,deletedEvents=0,hasMore=false;
         for(const subjectKey of subjectKeys){
-          const [eventRows]=await tx`
-            SELECT event_id FROM awg_ads_events
+          // Durable suppression is committed before any reply to the caller.
+          await tx`UPSERT INTO awg_ads_erasure_blocks (subject_key,blocked_at)
+            VALUES (${subjectKey},${blockedAt})`;
+          const [rows]=await tx`
+            SELECT subject_key,event_id,occurred_at FROM awg_ads_events_by_subject
             WHERE subject_key=${subjectKey}
-            LIMIT ${new Uint64(BigInt(maxEventsPerSubject+1))}
+            ORDER BY subject_key,event_id
+            LIMIT ${new Uint64(BigInt(batchSize+1))}
           `;
-          if(eventRows.length>maxEventsPerSubject)throw new Error('ads_erasure_event_limit_exceeded');
-          const [subjectRows]=await tx`SELECT subject_key FROM awg_ads_subjects WHERE subject_key=${subjectKey}`;
-          for(const item of eventRows){
-            await tx`DELETE FROM awg_ads_events WHERE event_id=${String(item.event_id)}`;
+          if(rows.length>batchSize)hasMore=true;
+          for(const row of rows.slice(0,batchSize)){
+            const eventId=String(row.event_id),occurredAt=String(row.occurred_at);
+            await tx`DELETE FROM awg_ads_events WHERE event_id=${eventId}`;
+            await tx`DELETE FROM awg_ads_events_by_subject WHERE subject_key=${subjectKey} AND event_id=${eventId}`;
+            await tx`DELETE FROM awg_ads_events_by_time WHERE occurred_at=${occurredAt} AND event_id=${eventId}`;
             deletedEvents++;
           }
-          await tx`DELETE FROM awg_ads_subjects WHERE subject_key=${subjectKey}`;
-          if(subjectRows.length)deletedSubjects++;
+          const [subjects]=await tx`SELECT subject_key FROM awg_ads_subjects WHERE subject_key=${subjectKey}`;
+          if(subjects.length){
+            await tx`DELETE FROM awg_ads_subjects WHERE subject_key=${subjectKey}`;
+            deletedSubjects++;
+          }
         }
-        return {deletedSubjects,deletedEvents};
+        return {deletedSubjects,deletedEvents,hasMore};
       });
     },
     async purgeExpired({eventCutoff,subjectCutoff,batchSize=100,cursor=''}={}){
       if(typeof eventCutoff!=='string'||!Number.isFinite(Date.parse(eventCutoff))
         ||typeof subjectCutoff!=='string'||!Number.isFinite(Date.parse(subjectCutoff))
         ||!Number.isInteger(batchSize)||batchSize<1||batchSize>500
-        ||typeof cursor!=='string'||cursor.length>120){
-        throw new Error('invalid_ads_purge_request');
-      }
+        ||typeof cursor!=='string'||cursor.length>120)throw new Error('invalid_ads_purge_request');
       return sql.begin({isolation:'serializableReadWrite',idempotent:true},async tx=>{
         const [eventRows]=await tx`
-          SELECT event_id FROM awg_ads_events
+          SELECT occurred_at,event_id,subject_key FROM awg_ads_events_by_time
           WHERE occurred_at < ${eventCutoff}
+          ORDER BY occurred_at,event_id
           LIMIT ${new Uint64(BigInt(batchSize+1))}
         `;
         const [subjectRows]=await tx`
@@ -196,14 +240,15 @@ export function createYdbAdsAttributionRepository(sql){
         `;
         const expiredEvents=eventRows.slice(0,batchSize);
         let deletedSubjects=0,compactedSubjects=0;
-        for(const item of expiredEvents){
-          await tx`DELETE FROM awg_ads_events WHERE event_id=${String(item.event_id)}`;
+        for(const row of expiredEvents){
+          const eventId=String(row.event_id),subjectKey=String(row.subject_key),occurredAt=String(row.occurred_at);
+          await tx`DELETE FROM awg_ads_events WHERE event_id=${eventId}`;
+          await tx`DELETE FROM awg_ads_events_by_subject WHERE subject_key=${subjectKey} AND event_id=${eventId}`;
+          await tx`DELETE FROM awg_ads_events_by_time WHERE occurred_at=${occurredAt} AND event_id=${eventId}`;
         }
-        for(const subject of subjectRows.slice(0,batchSize)){
-          const key=String(subject.subject_key);
-          const first=toTouch(subject.first_touch);
-          const last=toTouch(subject.last_touch);
-          if(String(subject.updated_at)<subjectCutoff){
+        for(const row of subjectRows.slice(0,batchSize)){
+          const key=String(row.subject_key),first=toTouch(row.first_touch),last=toTouch(row.last_touch);
+          if(String(row.updated_at)<subjectCutoff){
             await tx`DELETE FROM awg_ads_subjects WHERE subject_key=${key}`;
             deletedSubjects++;
           }else if(first&&last&&first.timestamp<subjectCutoff){
