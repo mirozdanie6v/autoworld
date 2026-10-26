@@ -1,5 +1,5 @@
 AWG production release
-requested_at=2026-10-23
-source_sha=20dcd8b0e8e49970b59177c6e45f637a805a5dc2
-reason=VII-182-VK-error-912-plain-link-fallback-tested
+requested_at=2026-10-26
+source_sha=a8cf9bb0db5dbe92d156da774224d8eef2d59c83
+reason=VII-185-VII-190-telegram-vk-manager-quote-simplification-green-ci-browser-smoke
 run_real_client_e2e=false
