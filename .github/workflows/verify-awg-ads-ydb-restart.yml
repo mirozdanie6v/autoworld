@@ -16,7 +16,7 @@ permissions:
 jobs:
   persistent-ydb-restart:
     runs-on: ubuntu-24.04
-    timeout-minutes: 17
+    timeout-minutes: 25
     env:
       AWG_ADS_LOCAL_YDB_TEST: 'yes'
     steps:
@@ -51,6 +51,8 @@ jobs:
         run: node scripts/test-awg-ads-local-ydb.mjs reconnect
       - name: Check erasure and retention after database restart
         run: node scripts/test-awg-ads-local-ydb.mjs privacy
+      - name: Exercise same-user contention and large (>1000) erasure on real YDB
+        run: node scripts/test-awg-ads-local-ydb.mjs load
       - name: Stop persistent local YDB and inspect disk use
         if: always()
         run: |
