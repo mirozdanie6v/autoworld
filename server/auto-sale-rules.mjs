@@ -113,7 +113,7 @@ export function validateOrder(order,previousStage=''){
   const stageTotals=new Map(PAYMENT_STAGE_IDS.map(id=>[id,0]));
   if(plan.length){
     if(text(order.origin)!=='США'||plan.length!==4||plan.some((x,i)=>text(x.id)!==PAYMENT_STAGE_IDS[i]||num(x.amount)<0))errors.push('invalid_payment_plan');
-    if(Math.round(plan.reduce((sum,x)=>sum+num(x.amount),0))!==Math.round(num(order.total)))errors.push('payment_plan_total_mismatch');
+    if(usdCents(plan.reduce((sum,x)=>sum+num(x.amount),0))!==usdCents(order.total))errors.push('payment_plan_total_mismatch');
   }
   for(const payment of payments){
     const amount=num(payment.amount);
