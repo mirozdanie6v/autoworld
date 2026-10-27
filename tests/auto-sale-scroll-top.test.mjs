@@ -74,6 +74,6 @@ test('Frosted glass styling stays above fixed bottom tabs, respects safe areas a
   assert.match(css,/focus-visible/);
   assert.match(html,/auto-sale-scroll-top\.css\?v=20261015-scrolltop-v1/);
   assert.match(html,/auto-sale-scroll-top\.mjs\?v=20261015-scrolltop-v1/);
-  assert.match(html,/auto-sale-bootstrap\.mjs\?v=20261027-legacy-turnkey-v1/,
+  assert.match(html,/auto-sale-bootstrap\.mjs\?v=20261027-source-price-lead-v2/,
     'do not disturb existing Mini App auth and notification scripts');
 });
