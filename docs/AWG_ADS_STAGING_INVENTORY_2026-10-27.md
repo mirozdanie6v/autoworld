@@ -50,7 +50,7 @@ Files:
 - .github/workflows/verify-awg-ads-managed-staging.yml
 - scripts/test-awg-ads-managed-staging.mjs
 
-The workflow verifies exact repo/ref/SA/OIDC claims and actual names/IDs/status of both approved databases before any schema/data operation. It prepares ads schema, requires an independent SELECT inspection, then tests real normalized CRM commits, two campaigns, idempotent receipts, durable leases, controlled reconciliation/retention, and bridge feature-off/on rollback. It deliberately does not claim physical Telegram/VK delivery or deployment rollback. It shares the maintenance concurrency group.
+The workflow verifies exact repo/ref/SA/OIDC claims and actual names/IDs/status of both approved databases before any schema/data operation. Ads schema was provisioned once; subsequent runs are inspect-only and require an independent SELECT inspection, then test real normalized CRM commits, two campaigns, idempotent receipts, durable leases, controlled reconciliation/retention, and bridge feature-off/on rollback. It deliberately does not claim physical Telegram/VK delivery or deployment rollback. It shares the maintenance concurrency group.
 
 Managed cloud attempts:
 - https://github.com/mirozdanie6v/autoworld/actions/runs/40521583051 — two failed attempts.
@@ -59,9 +59,9 @@ Managed cloud attempts:
 - https://github.com/mirozdanie6v/autoworld/actions/runs/40522783176 — after acceptance fixture ID correction; same schema-stage failure.
 Do not claim managed acceptance PASS. Do not repeatedly rerun compilation timeouts without new evidence or provider recovery.
 
-Current code at 2787c487012284f36d6accb175b8b945d47b3f22:
-- Stage B regression SUCCESS https://github.com/mirozdanie6v/autoworld/actions/runs/40522791523
-- AutoWorld regression SUCCESS https://github.com/mirozdanie6v/autoworld/actions/runs/40522791617
+Current workflow/code at 92d9fb6b0ce074c1701d287f526d50377f6f41f2:
+- Stage B regression SUCCESS https://github.com/mirozdanie6v/autoworld/actions/runs/40525340314
+- AutoWorld regression SUCCESS https://github.com/mirozdanie6v/autoworld/actions/runs/40525340324
 - Managed script syntax, workflow YAML, shell and OIDC JavaScript syntax checked.
 Code CI does not prove cloud runtime success.
 
@@ -71,6 +71,14 @@ Code CI does not prove cloud runtime success.
 - Both were executed only on ads staging etnseoqfsf7ojn52813t using the signed-in cloud owner session.
 - Therefore table access failure is reproduced independently of the GitHub runner and its staging SA. The exact service/metadata/shard root cause is still unknown; do not claim a global YDB outage.
 - No query is left running. Console screenshot and nine-table list were captured.
+
+## Bounded ads-only recovery attempt
+- Stopped and started only awg-ads-stage-b-staging / etnseoqfsf7ojn52813t. Verified Stopped -> Starting -> Running in Cloud Browser.
+- No database was deleted, no IAM scope/limits were widened, and all nine tables survived.
+- Immediately after Running, both Cloud Console and managed inspect run 40525334539 attempt 1 saw Discovery/ListEndpoints NOT_FOUND. This transient discovery failure cleared in the console on one retry.
+- Repeating the exact table SELECT after discovery recovered still failed with gRPC Deadline Exceeded. Stop/Start did not resolve table access.
+- Managed workflow was changed in commit 92d9fb6 to remove repeated ads DDL; it now inspects the already provisioned schema. Attempt 2 was the bounded read-only recheck after endpoint discovery recovered: job 122267015794 failed with YDBError 400090 TIMEOUT / Query compilation timed out on SELECT inspection. Both approved database inventory checks and OIDC HTTP 200 succeeded; all managed transactions/jobs were skipped. Run: https://github.com/mirozdanie6v/autoworld/actions/runs/40525334539 .
+- Final console read-back: ads database Running, throttling 10 RU/s, max size 1 GB, provisioned capacity 0, deletion protection Yes. No console query or acceptance job is left running.
 
 ## Not completed
 - Independent managed schema SELECT acceptance; managed CRM schema/fixture transactions.
@@ -89,7 +97,7 @@ A separate test Telegram bot and VK test app/community configuration, explicit t
 
 ## Safe continuation
 1. Diagnose/recover query execution on the two new staging YDBs; keep current IAM scope and resource ceilings.
-2. Re-run inspect/apply/inspect with bounded, idempotent staging operations only after query service is responsive.
+2. Re-run inspect-only managed acceptance after query service is responsive; all nine ads tables already exist. Do not repeat schema DDL to diagnose a SELECT timeout.
 3. Run managed acceptance and inspect persistent job audit; retain the exact run evidence.
 4. Configure separate test integrations/staging runtime, perform real Telegram/VK signed launch + notification paths.
 5. Exercise staging revision rollback, verify flags off and ordinary CRM/Telegram/VK paths.
