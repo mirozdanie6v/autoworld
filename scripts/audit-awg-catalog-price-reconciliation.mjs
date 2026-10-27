@@ -34,7 +34,7 @@ for(const [postId,car] of existing){
     // Keep the original token boundaries so irregular emoji formats can be
     // investigated without guessing a price or touching production cars.
     const priceIndicators={
-      keycaps:(raw.match(/[0-9]\\uFE0F?\\u20E3/gu)||[]).length,
+      keycaps:(raw.match(/[0-9]\uFE0F?\u20E3/gu)||[]).length,
       emojiZeros:(raw.match(/🔤/gu)||[]).length,
       emojiSeparator:(raw.match(/🤩/gu)||[]).length,
       rubLabels:(raw.match(/руб|₽|млн|тыс/giu)||[]).length,
