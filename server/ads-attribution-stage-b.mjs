@@ -45,7 +45,12 @@ export function createAdsStageBBridge({enabled=false,service,onFailure}={}){
       // Never turn a working client request into a failed request because the
       // separate advertising database is temporarily unavailable.
       await warn({code:'ads_snapshot_unavailable',eventType:'lead_create'});
-      return operations;
+      // Durable, server-owned marker survives CRM commit. Reconciliation will
+      // use only verified bot touches AS OF clientSubmittedAt, never today.
+      return operations.map(operation=>CREATE_LEAD(operation)
+        ? {...operation,input:{...operation.input,
+            adsAttributionStatus:'lookup_unavailable'}}
+        : operation);
     }
     if(!snapshot)return operations;
     // Never modify any original operation or mutate a manager/VK request.
@@ -111,17 +116,32 @@ export function createAdsStageBBridge({enabled=false,service,onFailure}={}){
     const telegramUserId=String(lead?.clientProviderUserId||lead?.telegramUserId||'');
     if(!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/.test(leadId)
       ||lead?.clientProvider!=='telegram'
-      ||!/^[1-9][0-9]{0,19}$/.test(telegramUserId)
-      ||lead?.adsAttribution?.source!=='Telegram Ads'
-      ||!lead.adsAttribution.lastTouch?.campaignId){
+      ||!/^[1-9][0-9]{0,19}$/.test(telegramUserId)){
       return {status:'ignored',reason:'not_verified_telegram_ads_lead'};
+    }
+    let campaignSnapshot=lead?.adsAttribution;
+    if(campaignSnapshot?.source!=='Telegram Ads'
+      ||!campaignSnapshot.lastTouch?.campaignId){
+      if(lead?.adsAttributionStatus!=='lookup_unavailable')
+        return {status:'ignored',reason:'not_attributed'};
+      // Only immutable, SERVER-written CRM timestamp is admissible.
+      const submitted=String(lead.clientSubmittedAt||'');
+      if(!Number.isFinite(Date.parse(submitted)))
+        return {status:'ignored',reason:'unrecoverable_missing_server_timestamp'};
+      if(typeof service.getAttributionAtTime!=='function')
+        throw new Error('ads_as_of_recovery_required');
+      const historical=await service.getAttributionAtTime({
+        telegramUserId,asOf:submitted
+      });
+      campaignSnapshot=safeSnapshot(historical);
+      if(!campaignSnapshot)return {status:'ignored',reason:'no_verified_historical_touch'};
     }
     const eventId='lead_'+createHash('sha256').update(leadId).digest('hex');
     if(typeof service.recordTrustedSnapshotEvent!=='function')
       throw new Error('ads_snapshot_event_recorder_required');
     const outcome=await service.recordTrustedSnapshotEvent({
       telegramUserId,eventType:'lead_submit',eventId,
-      attributionSnapshot:lead.adsAttribution
+      attributionSnapshot:campaignSnapshot
     });
     // firstManagerActionAt is set by the existing server-controlled
     // manager-claim policy. Client-reported "contacts" never count.
@@ -129,7 +149,7 @@ export function createAdsStageBBridge({enabled=false,service,onFailure}={}){
       const contactEventId='manager_action_'+createHash('sha256').update(leadId).digest('hex');
       await service.recordTrustedSnapshotEvent({
         telegramUserId,eventType:'first_manager_action',eventId:contactEventId,
-        attributionSnapshot:lead.adsAttribution
+        attributionSnapshot:campaignSnapshot
       });
     }
     return outcome;
