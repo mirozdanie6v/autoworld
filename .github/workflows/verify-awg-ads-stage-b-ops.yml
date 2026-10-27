@@ -39,6 +39,8 @@ jobs:
           node --check server/ads-stage-b-crm-privacy.mjs
           node --check server/ads-stage-b-job-ydb.mjs
           node --check server/ads-stage-b-managed-jobs.mjs
+          node --check server/ads-stage-b-resilient.mjs
+          node --check server/ads-stage-b-runtime.mjs
           node --check scripts/run-awg-ads-staging-managed-job.mjs
           node --check scripts/test-awg-ads-ops-local-ydb.mjs
           node --test tests/ads-attribution*.test.mjs tests/awg-ads-*.test.mjs tests/auto-sale-ads-telegram-hook.test.mjs
