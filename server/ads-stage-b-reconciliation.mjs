@@ -1,12 +1,13 @@
 // Replay missed conversions from the authoritative, persisted CRM.
 // Idempotent event IDs let the job restart from the beginning safely.
 export function createAdsLeadReconciliationJob({
-  listCommittedLeads,bridge,onAudit,onAlert,
+  listCommittedLeads,bridge,onAudit,onAlert,persistRecoveredSnapshot=null,
   pageSize=100,maxPages=50
 }={}){
   if(typeof listCommittedLeads!=='function'||!bridge?.enabled
     ||typeof bridge.reconcilePersistedLead!=='function'
-    ||typeof onAudit!=='function'||typeof onAlert!=='function')
+    ||typeof onAudit!=='function'||typeof onAlert!=='function'
+    ||(persistRecoveredSnapshot!==null&&typeof persistRecoveredSnapshot!=='function'))
     throw new Error('ads_reconciliation_dependencies_required');
   if(!Number.isInteger(pageSize)||pageSize<1||pageSize>250
     ||!Number.isInteger(maxPages)||maxPages<1||maxPages>1000)
@@ -14,7 +15,7 @@ export function createAdsLeadReconciliationJob({
   async function run({authorized=false,cursor=''}={}){
     if(authorized!==true)throw new Error('ads_reconciliation_authorization_required');
     if(typeof cursor!=='string'||cursor.length>120)throw new Error('invalid_ads_reconciliation_cursor');
-    let scanned=0,recorded=0,duplicates=0,ignored=0,errors=0;
+    let scanned=0,recorded=0,duplicates=0,ignored=0,errors=0,recovered=0;
     let current=cursor,nextCursor=null,complete=false;
     for(let page=0;page<maxPages;page++){
       const result=await listCommittedLeads({cursor:current,limit:pageSize});
@@ -28,6 +29,14 @@ export function createAdsLeadReconciliationJob({
         last=id;scanned++;
         try{
           const outcome=await bridge.reconcilePersistedLead(lead);
+          if(outcome.recoveredSnapshot){
+            // Durable CRM replay source must be repaired too. Otherwise the
+            // next manager action after attribution TTL could lose its origin.
+            if(!persistRecoveredSnapshot)throw new Error('ads_recovery_persistor_required');
+            const saved=await persistRecoveredSnapshot(lead,outcome.recoveredSnapshot);
+            if(saved?.ok!==true)throw new Error('ads_recovery_cas_failed');
+            recovered++;
+          }
           if(outcome.status==='recorded')recorded++;
           else if(outcome.status==='duplicate')duplicates++;
           else ignored++;
@@ -43,7 +52,7 @@ export function createAdsLeadReconciliationJob({
         throw new Error('invalid_ads_reconciliation_cursor_progress');
       nextCursor=last;current=last;
     }
-    const summary={scanned,recorded,duplicates,ignored,errors,complete,nextCursor};
+    const summary={scanned,recorded,duplicates,ignored,errors,recovered,complete,nextCursor};
     await onAudit({action:'ads_reconcile_committed_leads',...summary});
     if(!complete||errors)await onAlert({
       code:errors?'ads_reconciliation_incomplete_with_errors':'ads_reconciliation_more_pages',
