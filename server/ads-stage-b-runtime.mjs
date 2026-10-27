@@ -6,6 +6,7 @@ import {MetadataCredentialsProvider} from '@ydbjs/auth/metadata';
 import {createYdbAdsAttributionRepository} from './ads-attribution-ydb.mjs';
 import {createAdsAttributionService} from './ads-attribution-core.mjs';
 import {createAdsStageBBridge} from './ads-attribution-stage-b.mjs';
+import {summarizeAdsCampaignsFromRepository} from './ads-attribution-report.mjs';
 
 export function adsStageBConfiguration(env={}){
   const enabled=env.AWG_ADS_STAGE_B_ENABLED==='true';
@@ -40,6 +41,6 @@ export async function createAdsStageBServerBridge({
     const bridge=createAdsStageBBridge({enabled:true,service,onFailure});
     // Runtime retains its own connection. No implicit schema creation,
     // event fanout or mutation of AWG's primary production database.
-    return {...bridge,close:()=>driver.close()};
+    return {...bridge,report:()=>summarizeAdsCampaignsFromRepository({repository}),close:()=>driver.close()};
   }catch(error){await driver.close();throw error;}
 }
