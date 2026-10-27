@@ -15,6 +15,7 @@ COPY --from=build --chown=node:node /app/public/auto-sale-quote-audit.mjs ./publ
 COPY --from=build --chown=node:node /app/public/auto-sale-georgia-quote.mjs ./public/auto-sale-georgia-quote.mjs
 COPY --from=build --chown=node:node /app/public/auto-sale-quote-v2.mjs ./public/auto-sale-quote-v2.mjs
 COPY --from=build --chown=node:node /app/public/auto-sale-catalog-lead.mjs ./public/auto-sale-catalog-lead.mjs
+COPY --from=build --chown=node:node /app/public/auto-sale-payment-balance.mjs ./public/auto-sale-payment-balance.mjs
 COPY --chown=node:node server ./server
 COPY --chown=node:node shared ./shared
 COPY --chown=node:node scripts ./scripts
