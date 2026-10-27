@@ -42,15 +42,31 @@ export function catalogLeadSpecsText(lead={}){
   return 'Год: '+(str(lead.yearFrom)||'—')+'–'+(str(lead.yearTo)||'—')+' · Пробег до '+(str(lead.mileageMax)||'—')+' км'+
     ' · Двигатель: '+(str(lead.engine)||'Не важно')+' · Привод: '+(str(lead.drive)||'Не важно');
 }
-export function renderCatalogLeadVehicle(lead={}, {escape=String,money=v=>'$'+v,rubMoney=v=>v+' ₽'}={}){
+export function renderCatalogLeadVehicle(lead={}, {escape=String,money=v=>'$'+v,rubMoney=v=>v+' ₽',currentCatalogCar=null}={}){
   if(!isCatalogVehicleLead(lead))return '';
   const s=lead.catalogVehicle||{};
   const label=(name,value)=>'<div class="auto-catalog-lead-field"><span>'+escape(name)+'</span><b>'+escape(str(value)||'—')+'</b></div>';
   // This block is the original catalog snapshot. Editable customer/CRM values live in separate fields.
   const year=str(s.year||lead.year), mileage=str(s.mileage||lead.mileage);
   const engine=str(s.engine||lead.engine), drive=str(s.drive||lead.drive);
-  const valueRub=num(s.priceRub)||num(s.priceAfterDiscountRub)||num(lead.estimatedCostRub);
-  const cost=num(s.price)>0?'от '+money(s.price):valueRub?rubMoney(valueRub):num(s.estimatedBidUsd)>0?'ставка ≈ '+money(s.estimatedBidUsd):'уточняется';
+  // The submitted vehicle snapshot remains immutable. Only verified price
+  // metadata may be supplemented from the CURRENT catalog for the SAME exact
+  // vehicle and source post, when old snapshots predate a source-price repair.
+  const match=currentCatalogCar&&str(currentCatalogCar.id)===str(s.id||lead.carId)
+    &&str(currentCatalogCar.sourcePostId)===str(s.sourcePostId)
+    &&str(currentCatalogCar.source)==='AutoWorld_Georgia';
+  const verified=match?currentCatalogCar:s;
+  const primaryRub=num(verified.priceRub)||num(verified.priceAfterDiscountRub)||num(s.priceRub)||num(s.priceAfterDiscountRub);
+  const turnkeyRub=num(verified.russiaTurnkeyRub)||num(s.russiaTurnkeyRub);
+  const turnkeyMaxRub=num(verified.russiaTurnkeyMaxRub)||num(s.russiaTurnkeyMaxRub);
+  const turnkeyOnly=!num(s.price)&&!primaryRub&&turnkeyRub>0;
+  const valueRub=primaryRub||turnkeyRub||num(lead.estimatedCostRub);
+  const turnkeyKind=str(verified.russiaTurnkeyKind||s.russiaTurnkeyKind);
+  const cost=turnkeyOnly
+    ?(turnkeyKind==='route_comparison'?'от ':'' )+rubMoney(turnkeyRub)
+    :num(s.price)>0?'от '+money(s.price)
+      :valueRub?rubMoney(valueRub)
+      :num(s.estimatedBidUsd)>0?'ставка ≈ '+money(s.estimatedBidUsd):'уточняется';
   const originalBefore=num(s.priceBeforeDiscountRub);
   const mainImage=/^https?:\/\//i.test(str(s.image))?'<img class="auto-catalog-lead-image" src="'+escape(s.image)+'" alt="'+escape(str(s.brand)+' '+str(s.model))+'" loading="lazy">':'';
   const fields=[
@@ -59,13 +75,15 @@ export function renderCatalogLeadVehicle(lead={}, {escape=String,money=v=>'$'+v,
     ...(num(s.engineCc)>0?[label('Объём двигателя, см³',num(s.engineCc))]:[]),
     ...(num(s.powerHp)>0?[label('Мощность, л.с.',num(s.powerHp))]:[]),
     label('Сценарий покупки',str(s.origin||lead.origin)),
-    label('Стоимость из карточки',cost),
+    label(turnkeyOnly?'Расчёт в России с ремонтом (источник)':'Стоимость из карточки',cost),
     ...(num(s.price)>0&&valueRub?[label('Стоимость в рублях',rubMoney(valueRub))]:[]),
     ...(s.discountExplicit===true&&originalBefore&&originalBefore>valueRub?[label('До скидки',rubMoney(originalBefore))]:[]),
-    ...(num(s.russiaTurnkeyRub)>0?[label('Цена в России с ремонтом (источник)',num(s.russiaTurnkeyMaxRub)>num(s.russiaTurnkeyRub)
-      ?rubMoney(s.russiaTurnkeyRub)+' – '+rubMoney(s.russiaTurnkeyMaxRub):rubMoney(s.russiaTurnkeyRub))]:[]),
-    ...(num(s.usaTurnkeyRub)>0?[label('Оценка через США (источник)',rubMoney(s.usaTurnkeyRub))]:[]),
-    ...(num(s.georgiaTurnkeyRub)>0?[label('Оценка через Грузию (источник)',rubMoney(s.georgiaTurnkeyRub))]:[]),
+    ...(turnkeyRub>0&&!turnkeyOnly?[label('Цена в России с ремонтом (источник)',turnkeyMaxRub>turnkeyRub
+      ?rubMoney(turnkeyRub)+' – '+rubMoney(turnkeyMaxRub):rubMoney(turnkeyRub))]:[]),
+    ...(turnkeyOnly&&turnkeyMaxRub>turnkeyRub&&turnkeyKind!=='route_comparison'
+      ?[label('Верхняя граница расчёта (источник)',rubMoney(turnkeyMaxRub))]:[]),
+    ...(num(verified.usaTurnkeyRub)>0?[label('Оценка через США (источник)',rubMoney(verified.usaTurnkeyRub))]:[]),
+    ...(num(verified.georgiaTurnkeyRub)>0?[label('Оценка через Грузию (источник)',rubMoney(verified.georgiaTurnkeyRub))]:[]),
     ...(num(s.turnkeyDeliveryRub)>0?[label('Разница: доставка под ключ (источник)',rubMoney(s.turnkeyDeliveryRub))]:[]),
     ...(str(s.auction)?[label('Аукцион / площадка',s.auction)]:[]),
     ...(str(s.auctionDate)?[label('Дата аукциона',s.auctionDate)]:[]),

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {extractLegacyTurnkeySource} from '../scripts/catalog-legacy-turnkey.mjs';
 import {extractSourcePrices} from '../scripts/catalog-source-price.mjs';
-import {catalogPriceRub,catalogVehicleSnapshot} from '../public/auto-sale-catalog-lead.mjs';
+import {catalogPriceRub,catalogVehicleSnapshot,renderCatalogLeadVehicle} from '../public/auto-sale-catalog-lead.mjs';
 
 const archive=JSON.parse(readFileSync(new URL('../data/autoworld-georgia/cars.json',import.meta.url),'utf8'));
 const posts=new Map(archive.map(x=>[String(x.sourcePostId),x]));
@@ -58,4 +58,45 @@ test('catalog shows source turnkey reference as fallback but snapshots preserve 
   assert.equal(snap.russiaTurnkeyMaxRub,4588000);
   assert.equal(snap.usaTurnkeyRub,3577000);
   assert.equal(snap.georgiaTurnkeyRub,4588000);
+});
+
+test('manager lead shows verified turnkey price without inventing a purchase price',()=>{
+  const latest={id:'AWG-1363',source:'AutoWorld_Georgia',sourcePostId:'1363',
+    brand:'Range Rover',model:'Evoque',year:2023,price:0,priceRub:0,
+    russiaTurnkeyRub:3840000,russiaTurnkeyKind:'turnkey_single'};
+  const old=structuredClone(latest);
+  old.russiaTurnkeyRub=0;
+  const lead={carId:old.id,origin:'США',estimatedCostRub:0,catalogVehicle:catalogVehicleSnapshot(old)};
+  const html=renderCatalogLeadVehicle(lead,{escape:String,rubMoney:value=>value+' ₽',currentCatalogCar:latest});
+  assert.match(html,/Расчёт в России с ремонтом \(источник\)/);
+  assert.match(html,/3840000 ₽/);
+  assert.doesNotMatch(html,/уточняется/);
+  assert.doesNotMatch(html,/Стоимость из карточки/);
+  assert.equal((html.match(/Расчёт в России с ремонтом \(источник\)/g)||[]).length,1);
+  assert.equal(lead.catalogVehicle.russiaTurnkeyRub,0,'backfill does not rewrite historical snapshots');
+  assert.equal(lead.catalogVehicle.priceRub,0,'turnkey is never misrepresented as purchase price');
+});
+test('supplement a stale lead only from exact same public source car and post',()=>{
+  const original={id:'AWG-1363',source:'AutoWorld_Georgia',sourcePostId:'1363',priceRub:0,price:0};
+  const lead={carId:original.id,catalogVehicle:catalogVehicleSnapshot(original)};
+  const unrelated={...original,sourcePostId:'1303',russiaTurnkeyRub:9990000};
+  const html=renderCatalogLeadVehicle(lead,{currentCatalogCar:unrelated});
+  assert.doesNotMatch(html,/9990000/);
+  assert.match(html,/уточняется/);
+});
+test('compare route prices without duplicating turnkey headline or hiding valid base',()=>{
+  const legacy={id:'AWG-814',source:'AutoWorld_Georgia',sourcePostId:'814',
+    priceRub:0,russiaTurnkeyRub:3577000,russiaTurnkeyMaxRub:4588000,
+    russiaTurnkeyKind:'route_comparison',usaTurnkeyRub:3577000,georgiaTurnkeyRub:4588000};
+  const lead={carId:legacy.id,catalogVehicle:catalogVehicleSnapshot(legacy)};
+  const html=renderCatalogLeadVehicle(lead,{rubMoney:v=>v+' ₽'});
+  assert.match(html,/от 3577000 ₽/);
+  assert.match(html,/Оценка через США/);
+  assert.match(html,/Оценка через Грузию/);
+  assert.equal((html.match(/Расчёт в России с ремонтом \(источник\)/g)||[]).length,1);
+  const priced={...legacy,priceRub:1800000};
+  const html2=renderCatalogLeadVehicle({carId:priced.id,catalogVehicle:catalogVehicleSnapshot(priced)},{rubMoney:v=>v+' ₽'});
+  assert.match(html2,/Стоимость из карточки/);
+  assert.match(html2,/1800000 ₽/);
+  assert.match(html2,/Цена в России с ремонтом \(источник\)/);
 });
