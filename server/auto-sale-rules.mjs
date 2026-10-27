@@ -1,4 +1,5 @@
 import {v2Quote,simpleUsQuote,quoteV2Total,quoteV2Errors} from '../public/auto-sale-quote-v2.mjs';
+import {usdCents,orderPaymentBalance} from '../public/auto-sale-payment-balance.mjs';
 import {quoteAuditErrors} from '../public/auto-sale-quote-audit.mjs';
 import {AWG_GEORGIA_TARIFF_VERSION,georgiaQuoteErrors} from '../public/auto-sale-georgia-quote.mjs';
 export const LEAD_STATUSES=['Новый','В работе','Расчёт','Ожидает клиента','Сделка','Отказ'];
@@ -108,7 +109,7 @@ export function validateOrder(order,previousStage=''){
     if(!text(order.location))errors.push('location_required');
   }
   if(text(order.riskType)&&text(order.riskType)!=='Нет'&&!text(order.riskNote))errors.push('risk_note_required');
-  const payments=records(order.payments),plan=records(order.paymentPlan);let paid=0;
+  const payments=records(order.payments),plan=records(order.paymentPlan);let paidCents=0;
   const stageTotals=new Map(PAYMENT_STAGE_IDS.map(id=>[id,0]));
   if(plan.length){
     if(text(order.origin)!=='США'||plan.length!==4||plan.some((x,i)=>text(x.id)!==PAYMENT_STAGE_IDS[i]||num(x.amount)<0))errors.push('invalid_payment_plan');
@@ -121,7 +122,7 @@ export function validateOrder(order,previousStage=''){
     if(!text(payment.method))errors.push('payment_method_required');
     if(plan.length&&!PAYMENT_STAGE_IDS.includes(text(payment.paymentStage)))errors.push('payment_stage_required');
     if(plan.length&&PAYMENT_STAGE_IDS.includes(text(payment.paymentStage)))stageTotals.set(text(payment.paymentStage),(stageTotals.get(text(payment.paymentStage))||0)+Math.max(0,amount));
-    paid+=Math.max(0,amount);
+    paidCents+=Math.max(0,usdCents(amount));
   }
   if(plan.length){
     for(let i=0;i<plan.length;i++){
@@ -129,7 +130,8 @@ export function validateOrder(order,previousStage=''){
       if(i>0&&stagePaid>0){const previous=plan[i-1],previousPaid=stageTotals.get(previous.id)||0;if(previousPaid+0.001<num(previous.amount))errors.push('payment_stage_out_of_order');}
     }
   }
-  if(num(order.total)>0&&paid>num(order.total))errors.push('payment_total_exceeds_order');
-  if(stage==='Выдача'&&num(order.total)>0&&paid<num(order.total))errors.push('full_payment_required_for_handoff');
+  if(num(order.total)>0&&paidCents>usdCents(order.total))errors.push('payment_total_exceeds_order');
+  // Use the same authoritative payment ledger and cent precision as the Mini Apps.
+  if(stage==='Выдача'&&!orderPaymentBalance(order).fullyPaid)errors.push('full_payment_required_for_handoff');
   return[...new Set(errors)];
 }
