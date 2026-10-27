@@ -149,7 +149,7 @@ def parse_russia_turnkey_rub(text):
     """Handle Telegram line wraps after 'price in Russia (with repair)'."""
     lines = [line.strip() for line in str(text or "").splitlines() if line.strip()]
     for index, line in enumerate(lines):
-        if re.search(r"цена\s+в\s+россии\s*\(\s*с\s+ремонтом\s*\)", line, re.I):
+        if re.search(r"цена\s+в\s+россии\s*\(\s*с\s+ремонтом\s*\)|стоимост[ьи]\s+автомобиля\s+под\s+ключ\s+с\s+ремонтом", line, re.I):
             price = price_amount_rub(line)
             if price:
                 return price
@@ -167,14 +167,14 @@ def parse_rub(text, label):
     if label == "price":
         # Select only the primary listing price, never the lower 'price in Russia' row.
         for line in str(text or "").splitlines():
-            if re.search(r"цена\s+в\s+россии", line, re.I):
+            if re.search(r"цена\s+в\s+россии|стоимост[ьи]\s+автомобиля\s+под\s+ключ\s+с\s+ремонтом", line, re.I):
                 continue
             if re.search(r"(?:цена|стоимость\s+автомобиля)", line, re.I):
                 price = price_amount_rub(line)
                 if price:
                     return price
         for line in str(text or "").splitlines():
-            if re.search(r"цена\s+в\s+россии|таможн|утиль|ремонт|доставк", line, re.I):
+            if re.search(r"цена\s+в\s+россии|таможн|утиль|ремонт|доставк|под\s+ключ", line, re.I):
                 continue
             price = price_amount_rub(line)
             if price:
