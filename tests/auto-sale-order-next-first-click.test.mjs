@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {JSDOM} from 'jsdom';
+import {readFileSync} from 'node:fs';
 import {seedLeads,seedTeam} from './fixtures/auto-sale-business.mjs';
 
 const tick=()=>new Promise(resolve=>setTimeout(resolve,0));
@@ -103,3 +104,10 @@ for(const origin of ['США','Грузия']){
     dom.window.close();
   });
 }
+
+test('Telegram and VK entrypoints use the refreshed order-transition scripts',()=>{
+  const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
+  const bootstrap=readFileSync(new URL('../public/auto-sale-bootstrap.mjs',import.meta.url),'utf8');
+  assert.ok(html.includes('auto-sale-bootstrap.mjs?v=20261027-order-next-first-click-v1'));
+  assert.ok(bootstrap.includes('auto-sale-app-v3.mjs?v=20261027-order-next-first-click-v1'));
+});
