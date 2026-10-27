@@ -36,7 +36,7 @@ jobs:
           OIDC: ${{ steps.oidc.outputs.token }}
         run: |
           set -euo pipefail
-          RESPONSE=$(curl --retry 2 -fsS --connect-timeout 10 --max-time 30 \
+          RESPONSE=$(curl --retry 2 -sS --connect-timeout 10 --max-time 30 -w '\\n%{http_code}' \
             -H 'Content-Type: application/x-www-form-urlencoded' \
             --data-urlencode 'grant_type=urn:ietf:params:oauth:grant-type:token-exchange' \
             --data-urlencode 'requested_token_type=urn:ietf:params:oauth:token-type:access_token' \
@@ -44,7 +44,13 @@ jobs:
             --data-urlencode "subject_token=$OIDC" \
             --data-urlencode 'subject_token_type=urn:ietf:params:oauth:token-type:id_token' \
             https://auth.yandex.cloud/oauth/token)
-          IAM_TOKEN=$(printf '%s' "$RESPONSE" | jq -er .access_token)
+          CODE=$(printf '%s' "$RESPONSE" | tail -n1)
+          if [ "$CODE" != 200 ]; then
+            ERR=$(printf '%s' "$RESPONSE" | sed '$d' | jq -r '.error // .code // "unclassified"' 2>/dev/null | head -c 120)
+            echo "::error::Yandex IAM federation HTTP $CODE; classification=$ERR"
+            exit 1
+          fi
+          IAM_TOKEN=$(printf '%s' "$RESPONSE" | sed '$d' | jq -er .access_token)
           echo "::add-mask::$IAM_TOKEN"
           echo "IAM_TOKEN=$IAM_TOKEN" >> "$GITHUB_ENV"
       - name: Inventory databases, prove no writes or environment changes
