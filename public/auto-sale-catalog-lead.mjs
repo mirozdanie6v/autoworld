@@ -42,7 +42,7 @@ export function catalogLeadSpecsText(lead={}){
   return 'Год: '+(str(lead.yearFrom)||'—')+'–'+(str(lead.yearTo)||'—')+' · Пробег до '+(str(lead.mileageMax)||'—')+' км'+
     ' · Двигатель: '+(str(lead.engine)||'Не важно')+' · Привод: '+(str(lead.drive)||'Не важно');
 }
-export function renderCatalogLeadVehicle(lead={}, {escape=String,money=v=>'
+export function renderCatalogLeadVehicle(lead={}, {escape=String,money=v=>'$'+v,rubMoney=v=>v+' ₽',currentCatalogCar=null}={}){
   if(!isCatalogVehicleLead(lead))return '';
   const s=lead.catalogVehicle||{};
   const label=(name,value)=>'<div class="auto-catalog-lead-field"><span>'+escape(name)+'</span><b>'+escape(str(value)||'—')+'</b></div>';
