@@ -13,7 +13,7 @@ import {summarizeAdsCampaignsFromRepository} from '../server/ads-attribution-rep
 
 // SQL adapter contract test. This is NOT a substitute for a live YDB integration test.
 function fakeYdb(){
-  const campaigns=new Map(),subjects=new Map(),events=new Map(),blocks=new Map(),ddl=[];
+  const campaigns=new Map(),subjects=new Map(),events=new Map(),blocks=new Map(),touches=new Map(),ddl=[];
   const sql=async(strings,...args)=>{
     const statement=strings.join('?').replace(/\s+/g,' ').trim();
     const result=rows=>[rows];
@@ -27,6 +27,17 @@ function fakeYdb(){
     }
     if(statement.startsWith('UPSERT INTO awg_ads_events_by_subject')||
        statement.startsWith('UPSERT INTO awg_ads_events_by_time'))return result([]);
+    if(statement.startsWith('UPSERT INTO awg_ads_touches_by_subject_time')){
+      const [subject_key,occurred_at,event_id,campaign_id,ad_id,creative_id]=args;
+      touches.set(event_id,{subject_key,occurred_at,event_id,campaign_id,ad_id,creative_id});
+      return result([]);
+    }
+    if(statement.includes('FROM awg_ads_touches_by_subject_time')){
+      const [subject_key,asOf,limit]=args;
+      return result([...touches.values()].filter(x=>x.subject_key===subject_key&&x.occurred_at<=asOf)
+        .sort((a,b)=>b.occurred_at.localeCompare(a.occurred_at))
+        .slice(0,Number(toJs(limit))));
+    }
     if(statement.startsWith('SELECT token_hash FROM awg_ads_campaigns')){
       const row=campaigns.get(args[0]);
       return result(row?[{token_hash:row.token_hash}]:[]);
@@ -85,7 +96,7 @@ const secret='minimum-32-byte-test-secret-for-ads-attribution-123';
 test('YDB adapter contract: create /start, dedupe, two touches, suspend, retrieve events, report',async()=>{
   const db=fakeYdb();
   await ensureAdsAttributionSchema(db.sql,{target:'isolated-test-database'});
-  assert.equal(db.ddl.length,6);
+  assert.equal(db.ddl.length,7);
   const repository=createYdbAdsAttributionRepository(db.sql);
   let now='2026-10-26T09:00:00Z';
   const service=createAdsAttributionService({
