@@ -69,7 +69,7 @@ for(const path of [REPORT_PATH,DELTA_PATH])await mkdir(dirname(path),{recursive:
 const unpricedCases=current.filter(car=>car.source==='AutoWorld_Georgia'&&num(car.priceRub)===0).map(car=>{
   const postId=clean(car.sourcePostId),row=sourceByPost.get(postId),raw=String(row?.rawText||'');
   const result=extractSourcePrices(raw);
-  return {postId,active:car.active!==false,hasBid:Number(car.estimatedBidUsd||0)>0,
+  return {postId,origin:car.origin,active:car.active!==false,hasBid:Number(car.estimatedBidUsd||0)>0,sourceNumericRub:Number(row?.priceRub)||0,extractedTurnkeyRub:result.russiaTurnkeyRub,
     sourceArchived:Boolean(raw),archiveChars:raw.length,
     priceBeforeDiscountRub:num(car.priceBeforeDiscountRub),russiaTurnkeyRub:num(car.russiaTurnkeyRub),
     priceEvidence:result.priceEvidence,publicExcerpt:raw.slice(0,650).replace(/\b\d{7,}\b/g,'[number]')};
