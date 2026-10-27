@@ -1,4 +1,6 @@
-mode=audit
+mode=apply
 source=@AutoWorld_Georgia
 scope=existing-price-records
-reason=2026-10-27-confirmed-pr93
+reason=2026-10-27-audit-40513950450-116-confirmed-corrections
+approved_pr=93
+replace_source_all=false
