@@ -746,7 +746,7 @@ const server=http.createServer(async(req,res)=>{
       const payload=await parseJson(req,4096);
       if(!payload||typeof payload!=='object'||Array.isArray(payload)
         ||Object.keys(payload).some(key=>!['eventType','carId'].includes(key))
-        ||!['miniapp_open','vehicle_view'].includes(payload.eventType)
+        ||!['miniapp_open','vehicle_detail_click'].includes(payload.eventType)
         ||(payload.carId!==undefined&&typeof payload.carId!=='string')){
         json(res,{error:'invalid_ads_event'},400);return;
       }
