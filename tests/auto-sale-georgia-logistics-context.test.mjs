@@ -35,5 +35,5 @@ test('client journey explains road delivery from Georgia without US port or sea 
 
 test('fresh bootstrap version is referenced by index and guard',()=>{
   assert.match(bootstrap,/auto-sale-ui-business-guard\.mjs\?v=20261027-fully-paid-handoff-v1/);
-  assert.match(html,/auto-sale-bootstrap\.mjs\?v=20261027-fully-paid-handoff-v1/);
+  assert.match(html,/auto-sale-bootstrap\.mjs\?v=20261027-decision-save-v1/);
 });

@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {sanitizeClientOperations} from '../server/auto-sale-access.mjs';
+import {AWG_US_SIMPLE_SCHEMA,AWG_US_SIMPLE_TARIFF} from '../public/auto-sale-quote-v2.mjs';
 import {
   addAutoSaleNote,
   addAutoSalePayment,
@@ -234,4 +236,71 @@ test('entity batch allows child operation on aggregate created in the same batch
   assert.equal(result.status,200);
   assert.equal(result.data.rowVersions['lead:L-NEW'],11);
   assert.equal(stores.getState().notes['L-NEW'][0].text,'Лид создан.');
+});
+
+test('verified Telegram customer can approve $51,172.92 quote after a manager note updates lead version',async()=>{
+  const state=base();
+  state.leads[0].telegramUserId='501';
+  state.quotes=[{
+    id:'Q-PREVIEW',leadId:'L-1',model:'BMW 2025',origin:'США',
+    quoteSchema:AWG_US_SIMPLE_SCHEMA,tariffVersion:AWG_US_SIMPLE_TARIFF,
+    status:'Отправлен',version:1,lot:50172.92,repair:1000,total:51172.92,
+    auction:0,inland:0,ocean:0,partsCost:0,customs:0,recyclingFee:0,
+    legalization:0,service:0,georgiaDelivery:0,cryptoFee:0,turnkeyDeliveryUsd:0
+  }];
+  const store=makeStores(state);
+  const noteResult=await addAutoSaleNote({
+    ...store,leadId:'L-1',expectedRowVersion:10,
+    input:{id:'N-OTHER',text:'Менеджер проверил расчёт'}
+  });
+  assert.equal(noteResult.status,201);
+  assert.equal(await store.domainStore.entityRowVersion('lead','L-1'),11);
+  assert.equal(await store.domainStore.entityRowVersion('quote','Q-PREVIEW'),10);
+
+  const unsafe=sanitizeClientOperations(store.getState(),[
+    {resource:'quote',operation:'patch',id:'Q-PREVIEW',baseRowVersion:10,
+      input:{status:'Согласован',clientDecision:'agreed',clientDecisionAt:'2026-10-27T09:00:00Z'}},
+    {resource:'note',operation:'create',leadId:'L-1',baseRowVersion:10,
+      input:{id:'N-CLIENT',text:'Клиент подтвердил предварительную оценку'}}
+  ],{id:501});
+  assert.equal(unsafe.ok,true);
+  const rejected=await mutateAutoSaleEntityBatch({...store,operations:unsafe.operations});
+  assert.equal(rejected.status,409);
+  assert.equal(rejected.data.error,'entity_conflict');
+  assert.equal(store.getState().quotes[0].status,'Отправлен');
+
+  const accepted=sanitizeClientOperations(store.getState(),[
+    {resource:'quote',operation:'patch',id:'Q-PREVIEW',baseRowVersion:10,
+      input:{status:'Согласован',clientDecision:'agreed',clientDecisionAt:'2026-10-27T09:00:00Z'}}
+  ],{id:501});
+  assert.equal(accepted.ok,true);
+  const result=await mutateAutoSaleEntityBatch({...store,operations:accepted.operations});
+  assert.equal(result.status,200,JSON.stringify(result.data));
+  assert.equal(result.data.rowVersions['quote:Q-PREVIEW'],12);
+  assert.equal(store.getState().quotes[0].status,'Согласован');
+  assert.equal(store.getState().quotes[0].clientDecision,'agreed');
+  assert.equal(store.getState().quotes[0].total,51172.92);
+  assert.equal(store.getState().notes['L-1'].length,1,'manager note remains intact');
+});
+
+test('final USA auction quote still requires verified dossier before approval',async()=>{
+  const state=base();
+  state.leads[0].telegramUserId='501';
+  state.quotes=[{
+    id:'Q-FINAL',leadId:'L-1',model:'BMW 2025',origin:'США',
+    status:'Отправлен',version:1,lot:50172.92,repair:1000,service:1000,
+    total:52172.92,auction:0,inland:0,ocean:0,customs:0,
+    validUntil:'2026-12-01'
+  }];
+  const store=makeStores(state);
+  const client=sanitizeClientOperations(store.getState(),[
+    {resource:'quote',operation:'patch',id:'Q-FINAL',baseRowVersion:10,
+      input:{status:'Согласован',clientDecision:'agreed',clientDecisionAt:'2026-10-27T09:15:00Z'}}
+  ],{id:501});
+  assert.equal(client.ok,true);
+  const result=await mutateAutoSaleEntityBatch({...store,operations:client.operations});
+  assert.equal(result.status,400);
+  assert.equal(result.data.error,'invalid_quote');
+  assert.ok(result.data.details.includes('verification_lot_required'));
+  assert.equal(store.getState().quotes[0].status,'Отправлен');
 });

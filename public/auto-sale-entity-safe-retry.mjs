@@ -43,6 +43,12 @@ export function canSafelyRebaseEntityBatch(operations=[],before={},after={}){
     }
     // Explicit deletions require the operator to reconfirm after a conflict.
     if(op!=='patch'||!old||!live)return false;
+    if(resource==='quote'&&['agreed','changes_requested'].includes(String(input.clientDecision||''))){
+      // Client consent applies to the complete quote they saw, not merely
+      // the status. Never silently approve a different price, version or
+      // manager-edited vehicle after an optimistic-version conflict.
+      if(!same(old,live))return false;
+    }
     for(const [field,value] of Object.entries(input)){
       if(field==='id'||field==='updatedAt')continue;
       // If a concurrently edited field differs, abort instead of overwriting.

@@ -1,5 +1,5 @@
 import {leadTransitionAllowed,quoteTransitionAllowed,validateLead,validateOrder,validateQuote,validateVehicleVerification} from './auto-sale-rules.mjs';
-import {v2Quote} from '../public/auto-sale-quote-v2.mjs';
+import {v2Quote,simpleUsQuote} from '../public/auto-sale-quote-v2.mjs';
 
 const arr=v=>Array.isArray(v)?v.filter(x=>x&&typeof x==='object'):[];
 const text=v=>String(v??'').trim();
@@ -95,7 +95,7 @@ export async function syncYdbState(store,input,{includePrevious=false,prepareNot
       if(!quoteTransitionAllowed(text(before.status),text(quote.status))){
         return bad('invalid_quote_transition',{id:quote.id,from:before.status,to:quote.status});
       }
-      if(text(before.status)!=='Согласован'&&text(quote.status)==='Согласован'&&text(quote.origin)==='США'){
+      if(text(before.status)!=='Согласован'&&text(quote.status)==='Согласован'&&text(quote.origin)==='США'&&!simpleUsQuote(quote)){
         const verificationErrors=validateVehicleVerification(quote);
         if(verificationErrors.length)return bad('invalid_quote',{id:quote.id,details:verificationErrors});
       }

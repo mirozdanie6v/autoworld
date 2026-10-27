@@ -384,7 +384,7 @@ await import('./auto-sale-request-submit-feedback.mjs?v=20261010-request-visibil
 await import('./auto-sale-director-team.mjs?v=20260929-entity-cutover-1');
 await import('./auto-sale-telegram.mjs?v=20261011-vk-notifications-v1');
 await import('./auto-sale-telegram-id.mjs?v=20260927-safe-chat-link-v2');
-await import('./auto-sale-client-quote.mjs?v=20261021-georgia-quote-v2');
+await import('./auto-sale-client-quote.mjs?v=20261027-decision-save-v1');
 await import('./auto-sale-vk-notification-navigation.mjs?v=20261015-tg-deeplinks-v1');
 normalizeSettledPaymentField();
 const appRoot=document.querySelector('#app');
