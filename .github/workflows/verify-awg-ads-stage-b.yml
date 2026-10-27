@@ -52,6 +52,7 @@ jobs:
           node --check server/telegram-bot.mjs
           node --check server/yandex-server.mjs
           node --check tests/awg-ads-stage-b.test.mjs
+          node --check scripts/test-awg-ads-stage-b-local-ydb.mjs
       - name: Stage A and Stage B isolated tests
         run: |
           node --test tests/ads-attribution*.test.mjs tests/awg-ads-stage-b.test.mjs tests/auto-sale-ads-telegram-hook.test.mjs
@@ -63,7 +64,7 @@ jobs:
           git fetch --no-tags origin main
           git diff --name-only origin/main...HEAD | while IFS= read -r file; do
             case "$file" in
-              server/ads-*|server/telegram-bot.mjs|server/yandex-server.mjs|tests/ads-*|tests/awg-ads-*|scripts/test-awg-ads-local-ydb.mjs|docs/AWG_ADS_ATTRIBUTION_STAGE_A.md|docs/AWG_ADS_STAGE_B.md|.github/workflows/verify-awg-ads-*.yml) ;;
+              server/ads-*|server/telegram-bot.mjs|server/yandex-server.mjs|tests/ads-*|tests/awg-ads-*|scripts/test-awg-ads-local-ydb.mjs|scripts/test-awg-ads-stage-b-local-ydb.mjs|docs/AWG_ADS_ATTRIBUTION_STAGE_A.md|docs/AWG_ADS_STAGE_B.md|.github/workflows/verify-awg-ads-*.yml) ;;
               *) echo "::error::Unexpected production-sensitive diff: $file"; exit 1;;
             esac
           done
