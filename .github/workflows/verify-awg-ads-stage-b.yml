@@ -1,0 +1,68 @@
+name: Verify AWG Ads Stage B (isolated; no deployment)
+on:
+  push:
+    branches: [feature/awg-ads-stage-b-integration]
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server/ads-*'
+      - 'server/telegram-bot.mjs'
+      - 'server/yandex-server.mjs'
+      - 'tests/ads-*'
+      - 'tests/awg-ads-*'
+      - '.github/workflows/verify-awg-ads-stage-b.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-stage-b:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: awg_runtime_test
+          POSTGRES_USER: awg_test
+          POSTGRES_PASSWORD: ci-test-only-password
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U awg_test -d awg_runtime_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      AWG_TEST_DATABASE_URL: postgresql://awg_test:ci-test-only-password@localhost:5432/awg_runtime_test
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - name: Verify locked dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Verify Stage B runtime, bot, and tests syntax
+        run: |
+          node --check server/ads-attribution-stage-b.mjs
+          node --check server/ads-stage-b-runtime.mjs
+          node --check server/telegram-bot.mjs
+          node --check server/yandex-server.mjs
+          node --check tests/awg-ads-stage-b.test.mjs
+      - name: Stage A and Stage B isolated tests
+        run: |
+          node --test tests/ads-attribution*.test.mjs tests/awg-ads-stage-b.test.mjs tests/auto-sale-ads-telegram-hook.test.mjs
+      - name: Full app, Telegram relay and frontend regressions
+        run: npm run check
+      - name: Ensure no production configuration or deploy changed
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main --depth=120
+          git diff --name-only origin/main...HEAD | while IFS= read -r file; do
+            case "$file" in
+              server/ads-*|server/telegram-bot.mjs|server/yandex-server.mjs|tests/ads-*|tests/awg-ads-*|scripts/test-awg-ads-local-ydb.mjs|docs/AWG_ADS_ATTRIBUTION_STAGE_A.md|docs/AWG_ADS_STAGE_B.md|.github/workflows/verify-awg-ads-*.yml) ;;
+              *) echo "::error::Unexpected production-sensitive diff: $file"; exit 1;;
+            esac
+          done
+          echo "No deploy workflow, frontend entrypoint, main or production config modified."
