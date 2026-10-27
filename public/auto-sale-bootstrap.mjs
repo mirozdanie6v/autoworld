@@ -379,5 +379,12 @@ void initialStatePromise.then(async state=>{
       authHeaders,fetchImpl:window.fetch.bind(window),root:document
     });
   }
+  if(state?._adsDirectorEnabled&&telegramInitData()){
+    const module=await import('./auto-sale-ads-director.mjs');
+    module.mountAdsDirectorReport({
+      root:document.querySelector('#app'),documentObj:document,
+      authHeaders,fetchImpl:window.fetch.bind(window)
+    });
+  }
 }).catch(()=>{});
 scheduleNonCriticalScripts();
