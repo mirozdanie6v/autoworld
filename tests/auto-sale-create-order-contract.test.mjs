@@ -117,7 +117,7 @@ async function boot(origin,legacy=false){
 test('USA: manager can change 50% advance to 40%; dollar amount updates and saves',async()=>{
  const{dom,root,form}=await boot('США',true);
  assert.equal(form.elements.depositPercent.value,'50');
- assert.equal(form.elements.deposit.value,'0');
+ assert.equal(form.elements.deposit.value,'30000');
  const calls=[];
  window.__AUTO_SALE_ENTITY_BATCH__=async ops=>{calls.push(ops);return{ok:true}};
  form.elements.agreedOrderTotal.value='60000';
