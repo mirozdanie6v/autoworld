@@ -36,7 +36,8 @@ try{
   assert.equal((await locks.acquire({jobId,ownerId:'manager-lease-id-0003',
     now:'2026-10-27T00:02:00.000Z',leaseUntil})).acquired,true);
   await assert.rejects(locks.complete({jobId,ownerId:'manager-lease-id-0001',
-    status:'failure',finishedAt:'2026-10-27T00:03:00.000Z'}),/lease_lost/);
+    status:'failure',finishedAt:'2026-10-27T00:03:00.000Z'}),
+    error=>/ads_managed_job_lease_lost/.test(String(error?.cause?.message||error?.message)));
   assert.equal((await locks.complete({jobId,ownerId:'manager-lease-id-0003',
     status:'failure',finishedAt:'2026-10-27T00:03:00.000Z'})).completed,true);
   console.log('AWG_ADS_OPS_PERSISTENT_JOB_LEASE_PASS');
