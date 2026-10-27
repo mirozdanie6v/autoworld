@@ -9,6 +9,7 @@ import {readAutoSaleState} from './ydb-read-mode.mjs';
 import {syncYdbState} from './ydb-sync.mjs';
 import {createObjectStorage} from './object-storage.mjs';
 import {createTelegramService} from './telegram-bot.mjs';
+import {createAdsStageBServerBridge} from './ads-stage-b-runtime.mjs';
 import {createVkService} from './vk.mjs';
 import {notificationsEnabled,notificationsSuppressed,collectSaleNotifications,deliverSaleNotifications} from './auto-sale-notifications.mjs';
 import {createVkWebAuth} from './vk-web-auth.mjs';
@@ -104,7 +105,15 @@ async function getApiState(){
 const mediaProvider=String(process.env.AUTO_SALE_MEDIA_PROVIDER||'yandex');
 if(!['yandex','s3'].includes(mediaProvider))throw new Error('unsupported_media_provider');
 const media=mediaProvider==='s3'?(await import('./s3-storage.mjs')).createS3Storage({bucket:mediaBucket}):createObjectStorage({bucket:mediaBucket});
-const telegram=createTelegramService();
+// Feature OFF by default. Even when ON, separate staging YDB is required;
+// no production schema migration, Telegram webhook change or paid ad traffic.
+const adsStageB=await createAdsStageBServerBridge({
+  onFailure:async failure=>console.warn('AWG ADS Stage B receipt deferred',failure.code)
+});
+const telegram=createTelegramService({
+  adsStartRecorder:adsStageB.enabled?adsStageB.recordBotStart:null,
+  adsStartStrict:adsStageB.enabled
+});
 const vk=createVkService();
 const vkWeb=createVkWebAuth();
 async function getStore(){
@@ -538,6 +547,9 @@ const server=http.createServer(async(req,res)=>{
         if(!claimPolicy.ok){json(res,{error:claimPolicy.error,id:claimPolicy.id,assignedManager:claimPolicy.assignedManager||null},claimPolicy.status||409);return}
         operations=claimPolicy.operations;
       }
+      // Only trusted Telegram identity from requestAccess() can get an ads
+      // snapshot. All client-supplied campaign fields were stripped above.
+      operations=await adsStageB.enrichLeadOperations(operations,access);
       const skipNotifications=notificationsSuppressed(req.headers,{apiKey:hasApiKey(req)});
       const notifyChannels=notificationsEnabled(telegram,vk)&&!skipNotifications;
       const entityStores=await getEntityStores();
@@ -546,6 +558,11 @@ const server=http.createServer(async(req,res)=>{
         operations,
         prepareNotifications:notifyChannels?collectNotificationStateChanges:null
       });
+      if(result.status>=200&&result.status<300&&adsStageB.enabled){
+        // The confirmed CRM lead already stores attribution. If the separate
+        // event receipt fails, report pending without failing a saved lead.
+        await adsStageB.recordCommittedLeads(operations,access,{committed:true});
+      }
       if(result.status>=200&&result.status<300&&notifyChannels){
         const notificationItems=takeCommittedNotificationItems(result.data);
         result.data.notifications={...(result.data.notifications||{}),deliveries:[]};
