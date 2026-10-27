@@ -6,7 +6,9 @@ import {query} from '@ydbjs/query';
 import {AnonymousCredentialsProvider} from '@ydbjs/auth/anonymous';
 import {createYdbAdsAttributionRepository,ensureAdsAttributionSchema} from '../server/ads-attribution-ydb.mjs';
 import {ensureAdsOperationsSchema,createAdsJobLeaseStore} from '../server/ads-stage-b-scheduled-jobs.mjs';
-import {createAdsAttributionService} from '../server/ads-attribution-core.mjs';
+import {createAdsAttributionService,createAdsSubjectKey} from '../server/ads-attribution-core.mjs';
+import {createAdsPrivacyService} from '../server/ads-attribution-privacy.mjs';
+import {createAdsCrossStoreErasure} from '../server/ads-stage-b-cross-store-erasure.mjs';
 import {createAdsStageBBridge} from '../server/ads-attribution-stage-b.mjs';
 import {sanitizeClientOperations} from '../server/auto-sale-access.mjs';
 import {createYdbStateStore} from '../server/ydb-state.mjs';
@@ -249,6 +251,73 @@ try{
       }],prepareNotifications:null
     });
     assert.equal(stale.status,409);
+
+    // Full datastore-level erasure: the ads ledger is tombstoned first,
+    // then only the matching Telegram lead's campaign metadata is scrubbed
+    // using authoritative normalized CRM row versions. A VK client with the
+    // same numeric provider ID must remain untouched.
+    const vkCreated=await mutateAutoSaleEntityBatch({
+      legacyStore,domainStore,prepareNotifications:null,operations:[{
+        resource:'lead',operation:'create',id:'L-ADS-REAL-VK',input:{
+          id:'L-ADS-REAL-VK',clientProvider:'vk',clientProviderUserId:'111111',
+          name:'Synthetic VK control',model:'Skoda Octavia',source:'Mini App'
+        }
+      }]
+    });
+    assert.equal(vkCreated.status,200,JSON.stringify(vkCreated.data));
+    const erasurePrincipal={id:'ads-staging-test-privacy-controller'};
+    const privacyService=createAdsPrivacyService({
+      repository,subjectSecrets:['stage-b-real-local-ydb-ci-only-secret-0123456789'],
+      authorizeOperation:async({permission,principal})=>
+        permission==='ads:erase'&&principal.id===erasurePrincipal.id,
+      onAudit:async()=>{},
+      clock:()=>new Date('2026-10-27T06:45:00Z')
+    });
+    const erasureAlerts=[];
+    const crossStoreErasure=createAdsCrossStoreErasure({
+      privacyService,
+      readCommittedLeads:async()=>(await domainStore.loadState()).leads,
+      readLeadVersion:id=>domainStore.entityRowVersion('lead',id),
+      patchLead:async({id,expectedRowVersion,expectedProvider,expectedProviderUserId,input})=>{
+        const state=await domainStore.loadState();
+        const current=(state.leads||[]).find(x=>String(x.id)===id);
+        if(!current||current.clientProvider!==expectedProvider
+          ||String(current.clientProviderUserId)!==expectedProviderUserId)
+          return {ok:false,reason:'not_found'};
+        const result=await mutateAutoSaleEntityBatch({
+          legacyStore,domainStore,prepareNotifications:null,operations:[{
+            resource:'lead',operation:'patch',id,baseRowVersion:expectedRowVersion,input
+          }]
+        });
+        return {ok:result.status===200,
+          reason:result.status===409?'conflict':result.status===404?'not_found':'server_failure'};
+      },
+      authorizeOperation:async({permission,principal})=>
+        permission==='ads:erase'&&principal.id===erasurePrincipal.id,
+      onAudit:async()=>{},onAlert:async value=>erasureAlerts.push(value)
+    });
+    const erased=await crossStoreErasure.erase({
+      telegramUserId:'111111',principal:erasurePrincipal
+    });
+    assert.equal(erased.status,'complete');
+    assert.equal(erased.scrubbedLeads,1);
+    const afterErase=await domainStore.loadState();
+    const cleanedLead=afterErase.leads.find(x=>x.id==='L-ADS-REAL-NORMALIZED');
+    assert.equal(cleanedLead.adsAttribution,null);
+    assert.equal(cleanedLead.adsAttributionStatus,'erased');
+    assert.equal(cleanedLead.model,saved.model);
+    assert.equal(afterErase.leads.find(x=>x.id==='L-ADS-REAL-VK').model,'Skoda Octavia');
+    assert.equal(afterErase.leads.find(x=>x.id==='L-ADS-REAL-RECOVERY')
+      .adsAttribution.lastTouch.campaignId,'outage-campaign-A');
+    assert.equal((await repository.listBotTouchesAt({
+      subjectKey:createAdsSubjectKey('111111','stage-b-real-local-ydb-ci-only-secret-0123456789'),
+      asOf:'2026-10-27T09:00:00Z'
+    })).length,0);
+    assert.equal((await crossStoreErasure.erase({
+      telegramUserId:'111111',principal:erasurePrincipal
+    })).scrubbedLeads,0);
+    assert.deepEqual(erasureAlerts,[]);
+    console.log('AWG_STAGE_B_LOCAL_YDB_CROSS_STORE_ERASURE_VK_PASS');
     console.log('AWG_STAGE_B_LOCAL_YDB_RECOVERY_CAS_PASS');
     console.log('AWG_STAGE_B_LOCAL_YDB_REAL_CRM_COMMIT_PASS',JSON.stringify({
       committed:true,normalizedSource:true,immutableCampaign:true,clientForgeryStripped:true
