@@ -15,7 +15,7 @@ const fixture=[
 
 test('detail modal renders source-verified turnkey amount without inventing a base listing price',async()=>{
   const dom=new JSDOM('<!doctype html><html><body><div id="app"></div></body></html>',{url:'https://awgcars.ru'});
-  Object.assign(globalThis,{window:dom.window,document:dom.window.document,localStorage:dom.window.localStorage,sessionStorage:dom.window.sessionStorage});
+  Object.assign(globalThis,{window:dom.window,document:dom.window.document,localStorage:dom.window.localStorage,sessionStorage:dom.window.sessionStorage,MutationObserver:dom.window.MutationObserver});
   localStorage.setItem('auto-sale-catalog-v1',JSON.stringify(fixture));
   await import('../public/auto-sale-car-details.mjs?catalog-turnkey-detail-v1');
   const open=id=>{window.__AUTO_SALE_CAR_DETAILS__.open(id);return document.querySelector('.auto-detail-price-line');};
