@@ -1,5 +1,5 @@
 AWG production release
 requested_at=2026-10-27
-source_sha=add50924474f02316943680ae56245dc31e8d9ff
-reason=pr91-initialize-editable-50-percent-advance-immediately-and-preserve-historical-deposit
+source_sha=bf610a3a3ef815dc72827ed86b4f09810f255fa8
+reason=allow-canonical-catalog-price-reconcile-oidc-only-pr95
 run_real_client_e2e=false
