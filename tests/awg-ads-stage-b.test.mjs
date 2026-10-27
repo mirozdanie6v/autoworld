@@ -4,6 +4,7 @@ import {createAdsStageBBridge,verifiedAdsTelegramIdentity} from '../server/ads-a
 import {adsStageBConfiguration} from '../server/ads-stage-b-runtime.mjs';
 import {createAdsAttributionService,createMemoryAdsAttributionRepository} from '../server/ads-attribution-core.mjs';
 import {createTelegramService} from '../server/telegram-bot.mjs';
+import {sanitizeClientOperations} from '../server/auto-sale-access.mjs';
 
 const access={role:'client',authenticated:true,authType:'telegram',user:{id:'10050'}};
 function fixture(){
@@ -91,4 +92,40 @@ test('strict mode returns 503 on write failure to allow a Telegram webhook retry
     const ok=createTelegramService({token:'123:test'});
     assert.equal((await ok.handleWebhookUpdate(update,{webhookReply:true})).handled,'/start');
   }finally{console.warn=previous;}
+});
+
+test('actual AutoWorld sanitizer discards forged ads metadata; bridge re-attaches only trusted snapshot',async()=>{
+  const {bridge,service}=fixture();
+  const campaign=await service.issueCampaign({campaignId:'real-from-server'});
+  await bridge.recordBotStart({telegramUserId:'10050',startPayload:campaign.token,updateId:'801'});
+  const state={initialized:true,leads:[],quotes:[],catalog:[],notes:{}};
+  const untrusted=[{resource:'lead',operation:'create',id:'L-test-801',input:{
+    name:'Client',model:'BMW',source:'Fraudulent',adsAttribution:{
+      source:'Telegram Ads',lastTouch:{campaignId:'fraudulent'}},manager:'fake'
+  }}];
+  const sanitized=sanitizeClientOperations(state,untrusted,{id:'10050',first_name:'Verified'},{
+    provider:'telegram',id:'10050',key:'telegram:10050'
+  });
+  assert.equal(sanitized.ok,true);
+  assert.equal('adsAttribution' in sanitized.operations[0].input,false);
+  assert.equal(sanitized.operations[0].input.source,'Mini App');
+  const trusted=await bridge.enrichLeadOperations(sanitized.operations,access);
+  assert.equal(trusted[0].input.adsAttribution.lastTouch.campaignId,'real-from-server');
+  assert.equal(trusted[0].input.clientIdentityKey,'telegram:10050');
+});
+test('separate ads DB failure or broken metrics sink cannot block a new CRM lead',async()=>{
+  const events=[];
+  const bridge=createAdsStageBBridge({enabled:true,service:{
+    recordBotStart:async()=>({status:'recorded'}),
+    getAttribution:async()=>{throw Error('isolated ads staging is down')},
+    recordTrustedEvent:async()=>{throw Error('db temporarily down')}
+  },onFailure:async event=>{events.push(event);throw Error('monitor outage')}});
+  const ops=[{resource:'lead',operation:'create',id:'L-new',input:{source:'Mini App'}}];
+  assert.strictEqual(await bridge.enrichLeadOperations(ops,access),ops);
+  assert.deepEqual(events,[{code:'ads_snapshot_unavailable',eventType:'lead_create'}]);
+  const manuallyPersisted=[{...ops[0],input:{...ops[0].input,adsAttribution:{
+    source:'Telegram Ads',lastTouch:{campaignId:'previously saved'}
+  }}}];
+  assert.deepEqual(await bridge.recordCommittedLeads(manuallyPersisted,access,{committed:true}),
+    {attempted:1,recorded:0,pending:1});
 });
