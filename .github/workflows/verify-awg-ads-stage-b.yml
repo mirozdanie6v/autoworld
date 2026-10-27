@@ -37,6 +37,8 @@ jobs:
       AWG_TEST_DATABASE_URL: postgresql://awg_test:ci-test-only-password@localhost:5432/awg_runtime_test
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v5
         with:
           node-version: 22
@@ -58,7 +60,7 @@ jobs:
       - name: Ensure no production configuration or deploy changed
         run: |
           set -euo pipefail
-          git fetch --no-tags origin main --depth=120
+          git fetch --no-tags origin main
           git diff --name-only origin/main...HEAD | while IFS= read -r file; do
             case "$file" in
               server/ads-*|server/telegram-bot.mjs|server/yandex-server.mjs|tests/ads-*|tests/awg-ads-*|scripts/test-awg-ads-local-ydb.mjs|docs/AWG_ADS_ATTRIBUTION_STAGE_A.md|docs/AWG_ADS_STAGE_B.md|.github/workflows/verify-awg-ads-*.yml) ;;
