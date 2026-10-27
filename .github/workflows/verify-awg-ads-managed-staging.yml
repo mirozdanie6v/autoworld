@@ -77,11 +77,6 @@ jobs:
         run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Syntax check acceptance script
         run: node --check scripts/test-awg-ads-managed-staging.mjs
-      - name: Apply and inspect reviewed schema on exact ads staging target
-        env:
-          AWG_ADS_STAGE_B_SCHEMA_ACTION: apply
-          AWG_ADS_STAGE_B_SCHEMA_APPROVED: isolated-ads-only
-        run: node scripts/prepare-awg-ads-stage-b-staging.mjs
       - name: Independent read-only schema inspection
         env:
           AWG_ADS_STAGE_B_SCHEMA_ACTION: inspect
