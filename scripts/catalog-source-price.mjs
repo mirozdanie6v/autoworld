@@ -72,7 +72,9 @@ export function extractSourcePrices(raw=''){
   // Accept a plain figure only when explicitly tagged as the vehicle price.
   const discounted=Boolean(DISCOUNT.test(text));
   const priceRub=emoji||primary;
-  const turnkeyRub=turnkey||legacy?.minRub||0;
+  // An old '1.92–2.23 млн' range is displayed FROM 1.92m; the
+  // generic rubAmount parser otherwise grabs 2.23m at the end of the range.
+  const turnkeyRub=legacy?.minRub||turnkey||0;
   const discountPriceRub=discounted&&emoji&&primary&&primary>emoji?emoji:0;
   const priceBeforeDiscountRub=discountPriceRub?primary:0;
   return {
