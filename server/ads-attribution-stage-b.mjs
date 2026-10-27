@@ -119,10 +119,20 @@ export function createAdsStageBBridge({enabled=false,service,onFailure}={}){
     const eventId='lead_'+createHash('sha256').update(leadId).digest('hex');
     if(typeof service.recordTrustedSnapshotEvent!=='function')
       throw new Error('ads_snapshot_event_recorder_required');
-    return service.recordTrustedSnapshotEvent({
+    const outcome=await service.recordTrustedSnapshotEvent({
       telegramUserId,eventType:'lead_submit',eventId,
       attributionSnapshot:lead.adsAttribution
     });
+    // firstManagerActionAt is set by the existing server-controlled
+    // manager-claim policy. Client-reported "contacts" never count.
+    if(lead.firstManagerActionAt&&Number.isFinite(Date.parse(lead.firstManagerActionAt))){
+      const contactEventId='contact_'+createHash('sha256').update(leadId).digest('hex');
+      await service.recordTrustedSnapshotEvent({
+        telegramUserId,eventType:'manager_contact',eventId:contactEventId,
+        attributionSnapshot:lead.adsAttribution
+      });
+    }
+    return outcome;
   }
   return {enabled,recordBotStart,enrichLeadOperations,recordCommittedLeads,reconcilePersistedLead,recordMiniAppEvent};
 }
