@@ -79,6 +79,15 @@ if(candidate.some(item=>!(item.priceRub>0)||!existing.has(clean(item.sourcePostI
 if(candidate.some(item=>item.source!=='AutoWorld_Georgia'))throw Error('cross_source_edit_forbidden');
 if(new Set(candidate.map(x=>x.id)).size!==candidate.length)throw Error('duplicate_catalog_record_target');
 for(const path of [REPORT_PATH,DELTA_PATH])await mkdir(dirname(path),{recursive:true});
+const unpricedCases=current.filter(car=>car.source==='AutoWorld_Georgia'&&num(car.priceRub)===0).map(car=>{
+  const postId=clean(car.sourcePostId),row=sourceByPost.get(postId),raw=String(row?.rawText||'');
+  const result=extractSourcePrices(raw);
+  return {postId,origin:car.origin,active:car.active!==false,hasBid:Number(car.estimatedBidUsd||0)>0,sourceNumericRub:Number(row?.priceRub)||0,extractedTurnkeyRub:result.russiaTurnkeyRub,
+    sourceArchived:Boolean(raw),archiveChars:raw.length,
+    priceBeforeDiscountRub:num(car.priceBeforeDiscountRub),russiaTurnkeyRub:num(car.russiaTurnkeyRub),
+    priceEvidence:result.priceEvidence,publicExcerpt:raw.slice(0,650).replace(/\b\d{7,}\b/g,'[number]')};
+});
+const unpricedArchiveSummary={archived:unpricedCases.filter(c=>c.sourceArchived).length,unarchived:unpricedCases.filter(c=>!c.sourceArchived).length};
 const audit={generatedAt:new Date().toISOString(),sourcePosts:source.length,
   liveSourceCars:existing.size,
   liveUnpriced:current.filter(x=>x.source==='AutoWorld_Georgia'&&num(x.priceRub)===0&&num(x.estimatedBidUsd)===0).length,
@@ -89,8 +98,11 @@ const audit={generatedAt:new Date().toISOString(),sourcePosts:source.length,
   existingPricesCorrectable:report.filter(x=>x.livePriceRub>0&&x.livePriceRub!==x.sourcePriceRub).length,
   secondaryPriceCorrections:report.filter(x=>x.livePriceRub===x.sourcePriceRub&&x.fields.some(f=>f!=='catalogPriceEvidence')).length,
   corrections:report,unresolved};
+audit.unpricedDiagnostics=unpricedCases;
+audit.unpricedArchiveSummary=unpricedArchiveSummary;
 await writeFile(REPORT_PATH,JSON.stringify(audit,null,2)+'\n');
 await writeFile(DELTA_PATH,JSON.stringify(candidate,null,2)+'\n');
+console.log('AWG_UNPRICED_CASES',JSON.stringify({total:unpricedCases.length,archive:unpricedArchiveSummary,cases:unpricedCases}));
 console.log('AWG_PRICE_AUDIT',JSON.stringify({
   sourcePosts:audit.sourcePosts,liveSourceCars:audit.liveSourceCars,
   liveUnpriced:audit.liveUnpriced,sourceStickerRecovered:audit.sourceStickerRecovered,
