@@ -155,11 +155,16 @@ def parse_channel_emoji_price(text):
     # Decode ONLY recognized keycaps + 🤩 decimal + 🔤 zeros, never guess
     # from other emoji/custom-emoji content.
     lines = [x.strip().strip("* ").strip() for x in str(text or "").splitlines() if x.strip()]
-    for i, line in enumerate(lines[:150]):
+    # Secondary Russia turnkey sticker follows technical details; it is not
+    # the primary vehicle offer price and must never overwrite it.
+    first_detail = next((i for i, line in enumerate(lines) if re.match(
+        r"(комплектация|Пробег|Двигатель|Коробка|Привод|Безопасность|Салон|История автомобиля)", line, re.I
+    )), len(lines))
+    for i, line in enumerate(lines[:min(first_detail, 150)]):
         if not KEYCAP_DIGIT_RE.fullmatch(line):
             continue
         tokens = []
-        for next_line in lines[i:i + 10]:
+        for next_line in lines[i:min(first_detail, i + 10)]:
             if next_line in {"🔹", "🔸", "🔺", "📜", "🛡", "🔎"} or re.match(
                 r"(комплектация|Пробег|Двигатель)", next_line, re.I
             ):
