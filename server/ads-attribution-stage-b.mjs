@@ -63,9 +63,13 @@ export function createAdsStageBBridge({enabled=false,service,onFailure}={}){
     for(const operation of attributed){
       const eventId='lead_'+createHash('sha256').update(operation.id).digest('hex');
       try{
-        const result=await service.recordTrustedEvent({
-          telegramUserId,eventType:'lead_submit',eventId
-        });
+        const record=typeof service.recordTrustedSnapshotEvent==='function'
+          ? service.recordTrustedSnapshotEvent({
+              telegramUserId,eventType:'lead_submit',eventId,
+              attributionSnapshot:operation.input.adsAttribution
+            })
+          : service.recordTrustedEvent({telegramUserId,eventType:'lead_submit',eventId});
+        const result=await record;
         if(result.status==='recorded'||result.status==='duplicate')recorded++;
         else {pending++;await warn({code:'ads_lead_receipt_pending',eventType:'lead_submit'});}
       }catch(error){
@@ -77,5 +81,26 @@ export function createAdsStageBBridge({enabled=false,service,onFailure}={}){
     }
     return {attempted:attributed.length,recorded,pending};
   }
-  return {enabled,recordBotStart,enrichLeadOperations,recordCommittedLeads};
+  // A persisted lead (not a browser request) is a durable replay source:
+  // reprocess after crashes and never attribute it to a newer campaign.
+  async function reconcilePersistedLead(lead){
+    if(!enabled)return {status:'disabled'};
+    const leadId=String(lead?.id||'');
+    const telegramUserId=String(lead?.clientProviderUserId||lead?.telegramUserId||'');
+    if(!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/.test(leadId)
+      ||lead?.clientProvider!=='telegram'
+      ||!/^[1-9][0-9]{0,19}$/.test(telegramUserId)
+      ||lead?.adsAttribution?.source!=='Telegram Ads'
+      ||!lead.adsAttribution.lastTouch?.campaignId){
+      return {status:'ignored',reason:'not_verified_telegram_ads_lead'};
+    }
+    const eventId='lead_'+createHash('sha256').update(leadId).digest('hex');
+    if(typeof service.recordTrustedSnapshotEvent!=='function')
+      throw new Error('ads_snapshot_event_recorder_required');
+    return service.recordTrustedSnapshotEvent({
+      telegramUserId,eventType:'lead_submit',eventId,
+      attributionSnapshot:lead.adsAttribution
+    });
+  }
+  return {enabled,recordBotStart,enrichLeadOperations,recordCommittedLeads,reconcilePersistedLead};
 }
