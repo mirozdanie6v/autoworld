@@ -36,7 +36,7 @@ jobs:
           OIDC: ${{ steps.oidc.outputs.token }}
         run: |
           set -euo pipefail
-          RESPONSE=$(curl --retry 2 -sS --connect-timeout 10 --max-time 30 -w '\\n%{http_code}' \
+          RESPONSE=$(curl --retry 2 -sS --connect-timeout 10 --max-time 30 -w '\n%{http_code}' \
             -H 'Content-Type: application/x-www-form-urlencoded' \
             --data-urlencode 'grant_type=urn:ietf:params:oauth:grant-type:token-exchange' \
             --data-urlencode 'requested_token_type=urn:ietf:params:oauth:token-type:access_token' \
