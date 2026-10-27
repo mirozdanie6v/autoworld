@@ -31,7 +31,7 @@ const driver=new Driver(ads,{credentialsProvider:creds});
 const secret=randomBytes(32).toString('hex');
 const suffix=randomUUID().replaceAll('-','');
 const campaignA='QA-A-'+suffix,campaignB='QA-B-'+suffix;
-const user='999001'+String(Date.now());
+const user='999'+String(Date.now()).slice(-10);
 const identity={provider:'telegram',id:user,key:'telegram:'+user};
 const access={role:'client',authenticated:true,authType:'telegram',user:{id:user}};
 const report={managedDatabases:true,physicalTelegramVk:false};
