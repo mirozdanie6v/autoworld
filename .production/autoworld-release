@@ -1,5 +1,5 @@
 AWG production release
-requested_at=2026-10-26
-source_sha=a17e0470628a760ced667dffcd0a23352f6a9bb0
-reason=p0-manager-regression-p1-catalog-vinless-and-safe-ads-hook
+requested_at=2026-10-27
+source_sha=e50fe3908e539d8e692b26777d80674bc25b6092
+reason=fix-order-check-and-advance-first-click-us-georgia-pr81
 run_real_client_e2e=false
