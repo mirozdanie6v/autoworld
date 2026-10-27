@@ -593,9 +593,15 @@ const server=http.createServer(async(req,res)=>{
         prepareNotifications:notifyChannels?collectNotificationStateChanges:null
       });
       if(result.status>=200&&result.status<300&&adsStageB.enabled){
-        // The confirmed CRM lead already stores attribution. If the separate
-        // event receipt fails, report pending without failing a saved lead.
-        await adsStageB.recordCommittedLeads(operations,access,{committed:true});
+        // The CRM commit is authoritative: receipt writes run AFTER the HTTP
+        // response, so a slow secondary ADS database cannot strand the
+        // client's successful submission. Durable CRM snapshots are replayed
+        // by the separately gated reconciliation job after process failure.
+        const committedOps=operations;
+        setImmediate(()=>{
+          void adsStageB.recordCommittedLeads(committedOps,access,{committed:true})
+            .catch(()=>console.warn('AWG ADS deferred lead receipt failed'));
+        });
       }
       if(result.status>=200&&result.status<300&&notifyChannels){
         const notificationItems=takeCommittedNotificationItems(result.data);
