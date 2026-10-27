@@ -5,6 +5,7 @@ import {Driver} from '@ydbjs/core';
 import {query} from '@ydbjs/query';
 import {AnonymousCredentialsProvider} from '@ydbjs/auth/anonymous';
 import {createYdbAdsAttributionRepository,ensureAdsAttributionSchema} from '../server/ads-attribution-ydb.mjs';
+import {ensureAdsOperationsSchema,createAdsJobLeaseStore} from '../server/ads-stage-b-scheduled-jobs.mjs';
 import {createAdsAttributionService} from '../server/ads-attribution-core.mjs';
 import {createAdsStageBBridge} from '../server/ads-attribution-stage-b.mjs';
 import {sanitizeClientOperations} from '../server/auto-sale-access.mjs';
@@ -26,6 +27,19 @@ await driver.ready();
 try{
   const sql=query(driver);
   await ensureAdsAttributionSchema(sql,{target:'isolated-test-database'});
+  // Lock and durable audit exercise use the REAL local YDB transaction layer.
+  await ensureAdsOperationsSchema(sql,{target:'isolated-test-database'});
+  const maintenance=createAdsJobLeaseStore(sql);
+  const firstLease={kind:'reconciliation',owner:'test-run-A',
+    at:'2026-10-27T08:00:00Z',leaseUntil:'2026-10-27T08:20:00Z'};
+  assert.equal(await maintenance.acquire(firstLease),true);
+  assert.equal(await maintenance.acquire({...firstLease,owner:'test-run-B'}),false);
+  assert.equal(await maintenance.release({kind:'reconciliation',owner:'test-run-B'}),false);
+  assert.equal(await maintenance.release({kind:'reconciliation',owner:'test-run-A'}),true);
+  assert.equal(await maintenance.acquire({...firstLease,owner:'test-run-B'}),true);
+  await maintenance.audit({kind:'reconciliation',status:'ok',at:'2026-10-27T08:01:00Z'});
+  assert.equal(await maintenance.release({kind:'reconciliation',owner:'test-run-B'}),true);
+  console.log('AWG_STAGE_B_YDB_DURABLE_LEASE_AUDIT_PASS');
   const repository=createYdbAdsAttributionRepository(sql);
   const service=createAdsAttributionService({repository,
     subjectSecret:'stage-b-real-local-ydb-ci-only-secret-0123456789',
