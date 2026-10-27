@@ -1,0 +1,36 @@
+name: Audit AWG Ads GitHub OIDC subject (claims only, no cloud writes)
+on:
+  push:
+    branches: [feature/awg-ads-stage-b-ops-acceptance]
+    paths: [.github/workflows/audit-awg-ads-ops-oidc.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  inspect-claims:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - name: Decode only public GitHub federation claims (never print JWT)
+        id: claims
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const jwt=await core.getIDToken('https://github.com/mirozdanie6v');
+            core.setSecret(jwt);
+            const claims=JSON.parse(Buffer.from(jwt.split('.')[1],'base64url').toString('utf8'));
+            core.info('GitHub OIDC issuer: '+String(claims.iss));
+            core.info('GitHub OIDC audience: '+String(claims.aud));
+            core.info('GitHub OIDC subject: '+String(claims.sub));
+            core.info('GitHub OIDC repository: '+String(claims.repository));
+            core.info('GitHub OIDC environment: '+String(claims.environment||'(none)'));
+            if(claims.iss!=='https://token.actions.githubusercontent.com'
+               ||claims.aud!=='https://github.com/mirozdanie6v'
+               ||claims.repository!=='mirozdanie6v/autoworld')
+              core.setFailed('Unexpected GitHub OIDC issuer, audience or repository');
+            core.setOutput('subject',String(claims.sub));
+      - name: Produce read-only federation diagnosis
+        run: |
+          echo 'The current branch OIDC subject must have an exact federated credential on a dedicated Yandex staging service account.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'No IAM token, cloud resource inventory, provisioning or schema mutation performed.' >> "$GITHUB_STEP_SUMMARY"
