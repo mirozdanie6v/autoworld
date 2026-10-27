@@ -14,8 +14,9 @@ jobs:
   inventory:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    environment: awg-ads-staging
     env:
-      YC_DEPLOY_SA_ID: ${{ vars.AWG_YC_DEPLOY_SA_ID || 'aje775bcl6hgp40eu8of' }}
+      YC_DEPLOY_SA_ID: ${{ vars.AWG_ADS_STAGING_SA_ID }}
       YC_FOLDER_ID: ${{ vars.YC_FOLDER_ID || 'b1ggsmuiq7tb2d27f89q' }}
     steps:
       - name: Validate read-only cloud folder identity
@@ -23,6 +24,8 @@ jobs:
           set -euo pipefail
           test "$YC_FOLDER_ID" = b1ggsmuiq7tb2d27f89q
           test -n "$YC_DEPLOY_SA_ID"
+          test -n "$YC_DEPLOY_SA_ID" || { echo "::error::AWG_ADS_STAGING_SA_ID is required; no production fallback"; exit 1; }
+          test "$YC_DEPLOY_SA_ID" != aje775bcl6hgp40eu8of || { echo "::error::Legacy deploy identity is forbidden for ads staging"; exit 1; }
       - name: Obtain short-lived GitHub OIDC token
         id: oidc
         uses: actions/github-script@v7
@@ -30,6 +33,12 @@ jobs:
           script: |
             const token=await core.getIDToken('https://github.com/mirozdanie6v');
             core.setSecret(token);
+            const claims=JSON.parse(Buffer.from(token.split('.')[1],'base64url').toString('utf8'));
+            const expected='repo:mirozdanie6v/autoworld:environment:awg-ads-staging';
+            if(claims.sub!==expected || claims.iss!=='https://token.actions.githubusercontent.com' || claims.aud!=='https://github.com/mirozdanie6v') {
+              throw new Error('Unexpected staging OIDC issuer, subject or audience');
+            }
+            core.info('Verified OIDC issuer='+claims.iss+' subject='+claims.sub+' audience='+claims.aud);
             core.setOutput('token',token);
       - name: Exchange OIDC token for Yandex IAM
         env:
@@ -68,7 +77,7 @@ jobs:
           VK=$(printf '%s' "$DB_LIST" | jq -r '[.databases[]? | select(.id=="etnhujtu1t6f89tdtohs")]|length')
           {
             echo "### AWG Ads staging YDB read-only inventory"
-            echo "- Folder verified: `$YC_FOLDER_ID`"
+            echo "- Folder verified: $YC_FOLDER_ID"
             echo "- Production database present: $PROD (read-only)"
             echo "- Existing VK test database present: $VK (read-only)"
             echo "- Dedicated ads staging match count: $TARGET"
