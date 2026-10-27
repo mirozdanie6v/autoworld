@@ -1,0 +1,30 @@
+name: Probe AWG Ads isolated staging HTTP (READ ONLY)
+on:
+  push:
+    branches: [feature/awg-ads-stage-b-ops-acceptance]
+    paths: [.github/workflows/probe-awg-ads-staging-http.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  safe-http-preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      AWG_ADS_STAGING_URL: ${{ vars.AWG_ADS_STAGING_URL }}
+      AWG_ADS_STAGING_APPROVED_HOST: ${{ vars.AWG_ADS_STAGING_APPROVED_HOST }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Verify explicitly allowlisted staging endpoint, anonymous isolation, director gate
+        run: |
+          set -euo pipefail
+          if [ -z "$AWG_ADS_STAGING_URL" ] || [ -z "$AWG_ADS_STAGING_APPROVED_HOST" ]; then
+            echo "::error::Dedicated ads staging endpoint missing: AWG_ADS_STAGING_URL and AWG_ADS_STAGING_APPROVED_HOST"
+            echo 'BLOCKED: no verified Ads Stage B staging host. No traffic sent.' >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          node scripts/probe-awg-ads-staging-readonly.mjs
+          echo 'PASS: read-only isolated Stage B HTTP preflight. No mutation, bot message or production access.' >> "$GITHUB_STEP_SUMMARY"
