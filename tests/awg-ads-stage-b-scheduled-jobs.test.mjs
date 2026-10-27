@@ -74,3 +74,27 @@ test('separate scheduler DDL cannot be run without explicit isolated target',asy
   assert.match(statements[1],/awg_ads_job_audit/);
   assert.doesNotMatch(statements.join(' '),/auto_sale_leads|auto_sale_orders/);
 });
+
+test('missing runner result and observability outages cannot be accepted as complete',async()=>{
+  for(const variant of ['empty-retention','empty-reconciliation','metric-outage']){
+    const audits=[],alerts=[],released=[];
+    const run=createAdsScheduledJobRunner({
+      store:{
+        acquire:async()=>true,
+        release:async args=>{released.push(args);return true;},
+        audit:async x=>{audits.push(x);}
+      },
+      authorizeOperation:async()=>true,
+      runReconciliation:async()=>variant==='empty-reconciliation'?undefined:{complete:true,errors:0},
+      runRetention:async()=>variant==='empty-retention'?null:{status:'complete'},
+      emitMetric:async x=>{if(variant==='metric-outage')throw Error('metric sink offline');},
+      emitAlert:async x=>{alerts.push(x);}
+    });
+    const kind=variant==='empty-reconciliation'?'reconciliation':'retention';
+    await assert.rejects(run({kind,principal}));
+    assert.equal(released.length,1);
+    assert.equal(audits.length,1);
+    assert.equal(audits[0].status,variant==='metric-outage'?'failed':'incomplete');
+    assert.equal(alerts[0].severity,'high');
+  }
+});
