@@ -7,26 +7,34 @@ const DELIMITER='🤩';
 const STOP=/^(?:🔹|🔸|🔺|📜|🛡|🔎|🐎|💨|комплектация|Пробег|Двигатель)/iu;
 
 export function decodeChannelEmojiPrice(raw=''){
-  const lines=String(raw||'').split(/\r?\n/u).map(x=>x.trim()).filter(Boolean);
-  for(let i=0;i<Math.min(lines.length,70);i++){
-    if(!/^(?:✨|💰|💸)$/u.test(lines[i]))continue;
+  // Telegram posts sometimes insert "❗️", a secondary old price, or padding
+  // 🔤 BEFORE the real keycap sticker. Search intact contiguous sticker runs
+  // rather than requiring the first token after ✨ to be a digit.
+  // Only unambiguous keycap/🤩/🔤 sequences are accepted as source evidence.
+  const lines=String(raw||'').split(/\r?\n/u).map(x=>x.replace(/^[* ]+|[* ]+$/g,'').trim()).filter(Boolean);
+  // Never adopt a later sticker that belongs to the Russia turnkey price,
+  // a separate financial amount that follows mileage/technical details.
+  const details=/^(?:комплектация|Пробег|Двигатель|Коробка|Привод|Безопасность|Салон|История автомобиля)/iu;
+  const firstDetail=lines.findIndex(line=>details.test(line));
+  const headerEnd=firstDetail>=0?firstDetail:lines.length;
+  for(let i=0;i<Math.min(headerEnd,150);i++){
+    if(!KEYCAP.test(lines[i]))continue;
     const tokens=[];
-    for(let j=i+1;j<Math.min(lines.length,i+13);j++){
-      const line=lines[j].replace(/^[* ]+|[* ]+$/g,'').trim();
-      if(!line)continue;
+    for(let j=i;j<Math.min(headerEnd,i+10);j++){
+      const line=lines[j];
       if(STOP.test(line))break;
       if(line===DELIMITER){tokens.push('.');continue;}
       if(line===ZERO){tokens.push('0');continue;}
-      const k=line.match(KEYCAP);
-      if(k){tokens.push(k[1]);continue;}
+      const digit=line.match(KEYCAP);
+      if(digit){tokens.push(digit[1]);continue;}
       break;
     }
-    const pos=tokens.indexOf('.');
-    if(pos<1||pos>2||tokens.indexOf('.',pos+1)>=0)continue;
-    const whole=tokens.slice(0,pos).join(''),fraction=tokens.slice(pos+1).join('');
+    const dot=tokens.indexOf('.');
+    if(dot<1||dot>2||tokens.indexOf('.',dot+1)>=0)continue;
+    const whole=tokens.slice(0,dot).join(''),fraction=tokens.slice(dot+1).join('');
     if(!/^\d{1,2}$/.test(whole)||!/^\d{2,5}$/.test(fraction))continue;
-    const amount=Math.round(Number(whole+'.'+fraction)*1_000_000);
-    if(amount>=100_000&&amount<=200_000_000)return amount;
+    const value=Math.round(Number(whole+'.'+fraction)*1_000_000);
+    if(value>=100_000&&value<=200_000_000)return value;
   }
   return 0;
 }
