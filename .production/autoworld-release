@@ -1,5 +1,5 @@
 AWG production release
 requested_at=2026-10-27
-source_sha=de5f63f1b085357de19fdaee2585f997e5fbeb1d
-reason=payment-amount-step-and-optimistic-conflict-safe-rebase-pr84
+source_sha=ddc1ebb2e750e61db02eebd285929082b3387d6c
+reason=fix-cent-accurate-fully-paid-handoff-USA-Georgia-PR85
 run_real_client_e2e=false
