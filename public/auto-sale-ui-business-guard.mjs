@@ -1,9 +1,10 @@
 import {nextOrderStage,normalizeOrderStage} from './auto-sale-core.mjs';
+import {orderPaymentBalance,usdMoney} from './auto-sale-payment-balance.mjs';
 const K={leads:'auto-sale-leads-v2',quotes:'auto-sale-quotes-v2',orders:'auto-sale-orders-v2',notes:'auto-sale-notes-v2'};
 const read=(key,fallback=[])=>{try{return JSON.parse(localStorage.getItem(key)||'null')??fallback}catch{return fallback}};
 const write=(key,value)=>{if(window.__AUTO_SALE_CACHE_WRITE__)window.__AUTO_SALE_CACHE_WRITE__(key,value);else localStorage.setItem(key,JSON.stringify(value))};
 const leads=()=>read(K.leads,[]),quotes=()=>read(K.quotes,[]),orders=()=>read(K.orders,[]),notes=()=>read(K.notes,{});
-const money=v=>'$'+new Intl.NumberFormat('en-US',{maximumFractionDigits:0}).format(Number(v)||0);
+const money=usdMoney;
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const latestQuote=id=>quotes().filter(q=>q.leadId===id).sort((a,b)=>(Number(b.version)||0)-(Number(a.version)||0))[0];
 const orderFor=id=>orders().find(o=>o.leadId===id);
@@ -75,8 +76,8 @@ function orderBlockers(order,form){
   }
   if(d.riskType&&d.riskType!=='Нет'&&!String(d.riskNote||'').trim())r.push('опишите риск');
   if(target==='Выдача'){
-    const projected=Number(order.paid||0)+Math.max(0,Number(d.paymentAmount)||0);
-    if(projected<Number(order.total||0))r.push('получите оставшуюся оплату '+money(Number(order.total)-projected));
+    const balance=orderPaymentBalance(order,d.paymentAmount);
+    if(!balance.fullyPaid)r.push('получите оставшуюся оплату '+money(balance.remaining));
   }
   return r;
 }
@@ -86,6 +87,6 @@ function harden(){hardenQuoteForm();enhanceClient();enhanceLead();enhanceQuote()
 
 const observer=new MutationObserver(harden);observer.observe(document.documentElement,{childList:true,subtree:true});harden();
 document.addEventListener('click',e=>{const b=e.target.closest?.('[data-client-edit]');if(b&&!b.disabled){e.preventDefault();e.stopPropagation();openClientEdit(b.dataset.clientEdit);return}if(e.target.closest?.('[data-client-edit-close]')||e.target.matches?.('[data-client-edit-bg]')){document.querySelector('[data-client-edit-bg]')?.remove()}},true);
-document.addEventListener('submit',async event=>{const form=event.target;if(!(form instanceof HTMLFormElement))return;if(form.getAttribute?.('id')==='clientEditForm'){event.preventDefault();event.stopImmediatePropagation();await saveClientEdit(form);return}if(form.getAttribute?.('id')==='leadEditForm'){const deposit=form.querySelector('[name="deposit"]');if(deposit){const q=latestQuote(form.querySelector('[name="id"]')?.value||''),amount=Number(deposit.value)||0,total=Number(q?.total)||0;if(total>0&&amount>total){event.preventDefault();event.stopImmediatePropagation();errorBox(form,`Депозит ${money(amount)} превышает согласованную стоимость ${money(total)}.`)}}return}if(form.getAttribute?.('id')==='orderForm'){const id=form.elements.id?.value,o=orders().find(x=>x.id===id),d=Object.fromEntries(new FormData(form).entries());if(o&&d.stage==='Выдача'){const projected=Number(o.paid||0)+Math.max(0,Number(d.paymentAmount)||0);if(projected<Number(o.total||0)){event.preventDefault();event.stopImmediatePropagation();errorBox(form,`Перед выдачей нужен полный расчёт. Осталось получить ${money(Number(o.total)-projected)}.`)}}}},true);
+document.addEventListener('submit',async event=>{const form=event.target;if(!(form instanceof HTMLFormElement))return;if(form.getAttribute?.('id')==='clientEditForm'){event.preventDefault();event.stopImmediatePropagation();await saveClientEdit(form);return}if(form.getAttribute?.('id')==='leadEditForm'){const deposit=form.querySelector('[name="deposit"]');if(deposit){const q=latestQuote(form.querySelector('[name="id"]')?.value||''),amount=Number(deposit.value)||0,total=Number(q?.total)||0;if(total>0&&amount>total){event.preventDefault();event.stopImmediatePropagation();errorBox(form,`Депозит ${money(amount)} превышает согласованную стоимость ${money(total)}.`)}}return}if(form.getAttribute?.('id')==='orderForm'){const id=form.elements.id?.value,o=orders().find(x=>x.id===id),d=Object.fromEntries(new FormData(form).entries());if(o&&d.stage==='Выдача'){const balance=orderPaymentBalance(o,d.paymentAmount);if(!balance.fullyPaid){event.preventDefault();event.stopImmediatePropagation();errorBox(form,`Перед выдачей нужен полный расчёт. Осталось получить ${money(balance.remaining)}.`)}}}},true);
 document.addEventListener('input',e=>{if(e.target.closest?.('#orderForm'))enhanceOrder()});document.addEventListener('change',e=>{if(e.target.closest?.('#orderForm'))enhanceOrder()});
 if(!document.getElementById('autoSaleGuardStyles')){const s=document.createElement('style');s.id='autoSaleGuardStyles';s.textContent='.auto-guide,.auto-edit-info,.auto-edit-save,.auto-order-help{display:grid;gap:4px;padding:12px 14px;margin:10px 0;border:1px solid rgba(255,255,255,.11);border-radius:14px;background:rgba(255,255,255,.045)}.auto-guide b,.auto-edit-info b,.auto-edit-save b,.auto-order-help b{font-size:13px}.auto-guide span,.auto-edit-info span,.auto-edit-info small,.auto-edit-save span,.auto-order-help span,.auto-why{font-size:12px;line-height:1.45;opacity:.76}.auto-why{display:block;margin-top:6px;color:#d9bd72}.auto-btn:disabled{opacity:.42;cursor:not-allowed;filter:saturate(.55)}';document.head.append(s)}

@@ -1,4 +1,5 @@
 import {v2Quote,simpleUsQuote,quoteV2Errors} from './auto-sale-quote-v2.mjs';
+import {usdCents,usdMoney} from './auto-sale-payment-balance.mjs';
 import {quoteAuditErrors} from './auto-sale-quote-audit.mjs';
 import {AWG_GEORGIA_TARIFF_VERSION,georgiaQuoteErrors} from './auto-sale-georgia-quote.mjs';
 import {awgPendingItems,AWG_TARIFF_VERSION,awgPackageUsd} from './auto-sale-tariffs.mjs';
@@ -55,7 +56,7 @@ export function canCreateOrder({quote,deposit,agreedOrderTotal}={}){if(!quote)re
 export function orderRequiredFields(stage){const normalized=stage==='Порт США'?'Подготовка к отправке':stage==='В море'?'В пути':stage;const map={'Подготовка к отправке':['vin','eta','location'],'В пути':['vin','eta','location'],'Таможня':['vin','eta','location'],'Доставка':['vin','eta','location'],'Выдача':['vin','eta','location']};return map[normalized]||[];}
 export function validateOrderUpdate(data={},currentStage='Выкуп',allowedStages=[]){const e=[];if(allowedStages.length&&!allowedStages.includes(data.stage))e.push('Нельзя перескакивать через этапы логистики.');for(const key of orderRequiredFields(data.stage))if(!text(data[key]))e.push(`Для этапа «${data.stage}» заполните «${ORDER_FIELD_LABELS[key]||key}».`);if(data.riskType&&data.riskType!=='Нет'&&!text(data.riskNote))e.push('Опишите риск или блокер.');if(n(data.paymentAmount)<0)e.push('Платёж не может быть отрицательным.');if(n(data.paymentAmount)>0&&!text(data.paymentDate))e.push('Укажите дату платежа.');if(currentStage==='Выдача'&&data.stage!=='Выдача')e.push('Выданный автомобиль нельзя вернуть на предыдущий этап обычным редактированием.');return e;}
 export function normalizePayments(order={}){if(Array.isArray(order.payments))return order.payments;const paid=n(order.paid);return paid>0?[{id:'PAY-LEGACY',amount:paid,date:'2026-09-12',method:'Банк',note:'Перенесено из прежнего поля оплаты'}]:[];}
-export function paymentsTotal(payments=[]){return payments.reduce((s,p)=>s+n(p.amount),0);}
+export function paymentsTotal(payments=[]){return (Array.isArray(payments)?payments:[]).reduce((c,p)=>c+usdCents(p.amount),0)/100;}
 export function nextPaymentId(payments=[]){const max=payments.reduce((m,p)=>{const hit=String(p.id||'').match(/(\d+)$/);return hit?Math.max(m,Number(hit[1])):m;},0);return `PAY-${max+1}`;}
 
 export function auctionDepositRange(total=0){const t=Math.max(0,n(total));return{min:Math.ceil(t*.25),max:Math.floor(t*.30)};}
@@ -79,9 +80,9 @@ export function buildUsPaymentPlan(quote={},deposit=0,{needsReview=false}={}){
   const amounts=[stage1,auctionBalance,logistics,customs];
   return PAYMENT_STAGE_DEFS.map((def,i)=>({...def,amount:amounts[i],needsReview:Boolean(needsReview)}));
 }
-export function paymentPlanTotal(plan=[]){return plan.reduce((sum,x)=>sum+n(x.amount),0);}
-export function paymentStagePaid(payments=[],stageId=''){return payments.filter(x=>text(x.paymentStage)===stageId).reduce((sum,x)=>sum+n(x.amount),0);}
-export function paymentStageState(stage={},payments=[]){const amount=Math.max(0,n(stage.amount)),paid=Math.min(amount,paymentStagePaid(payments,stage.id)),remaining=Math.max(0,amount-paid);return{...stage,amount,paid,remaining,status:remaining<=0?'Оплачено':paid>0?'Частично':'Ожидает'};}
+export function paymentPlanTotal(plan=[]){return plan.reduce((sum,x)=>sum+usdCents(x.amount),0)/100;}
+export function paymentStagePaid(payments=[],stageId=''){return payments.filter(x=>text(x.paymentStage)===stageId).reduce((sum,x)=>sum+usdCents(x.amount),0)/100;}
+export function paymentStageState(stage={},payments=[]){const amountCents=Math.max(0,usdCents(stage.amount)),paidCents=Math.min(amountCents,usdCents(paymentStagePaid(payments,stage.id))),remainingCents=Math.max(0,amountCents-paidCents);return{...stage,amount:amountCents/100,paid:paidCents/100,remaining:remainingCents/100,status:remainingCents===0?'Оплачено':paidCents>0?'Частично':'Ожидает'};}
 export function nextPaymentStage(plan=[],payments=[]){return plan.map(x=>paymentStageState(x,payments)).find(x=>x.remaining>0)||null;}
 export function migratePaymentsToPlan(payments=[],plan=[]){
   const valid=new Set(plan.map(x=>x.id));if(!plan.length)return payments.map(x=>({...x}));
@@ -105,6 +106,6 @@ export function validatePaymentStageEntry({plan=[],payments=[],stageId='',amount
   const value=n(amount);if(value<=0||!plan.length)return[];
   const stage=plan.find(x=>x.id===stageId);if(!stage)return['Выберите этап оплаты.'];
   const next=nextPaymentStage(plan,payments);if(next&&next.id!==stageId)return['Сначала завершите «'+next.title+'».'];
-  const state=paymentStageState(stage,payments);if(value>state.remaining)return['Платёж больше остатка этапа оплаты ('+state.remaining+' $).'];
+  const state=paymentStageState(stage,payments);if(usdCents(value)>usdCents(state.remaining))return['Платёж больше остатка этапа оплаты ('+usdMoney(state.remaining)+').'];
   return[];
 }
