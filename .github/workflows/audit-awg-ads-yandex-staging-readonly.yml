@@ -1,0 +1,71 @@
+name: AWG Ads B - Yandex staging inventory (read only)
+on:
+  push:
+    branches: [feature/awg-ads-stage-b-integration]
+    paths: [.github/workflows/audit-awg-ads-yandex-staging-readonly.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: awg-ads-b-staging-inventory
+  cancel-in-progress: false
+jobs:
+  inventory:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      YC_DEPLOY_SA_ID: ${{ vars.AWG_YC_DEPLOY_SA_ID || 'aje775bcl6hgp40eu8of' }}
+      YC_FOLDER_ID: ${{ vars.YC_FOLDER_ID || 'b1ggsmuiq7tb2d27f89q' }}
+    steps:
+      - name: Validate read-only cloud folder identity
+        run: |
+          set -euo pipefail
+          test "$YC_FOLDER_ID" = b1ggsmuiq7tb2d27f89q
+          test -n "$YC_DEPLOY_SA_ID"
+      - name: Obtain short-lived GitHub OIDC token
+        id: oidc
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const token=await core.getIDToken('https://github.com/mirozdanie6v');
+            core.setSecret(token);
+            core.setOutput('token',token);
+      - name: Exchange OIDC token for Yandex IAM
+        env:
+          OIDC: ${{ steps.oidc.outputs.token }}
+        run: |
+          set -euo pipefail
+          RESPONSE=$(curl --retry 2 -fsS --connect-timeout 10 --max-time 30 \
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            --data-urlencode 'grant_type=urn:ietf:params:oauth:grant-type:token-exchange' \
+            --data-urlencode 'requested_token_type=urn:ietf:params:oauth:token-type:access_token' \
+            --data-urlencode "audience=$YC_DEPLOY_SA_ID" \
+            --data-urlencode "subject_token=$OIDC" \
+            --data-urlencode 'subject_token_type=urn:ietf:params:oauth:token-type:id_token' \
+            https://auth.yandex.cloud/oauth/token)
+          IAM_TOKEN=$(printf '%s' "$RESPONSE" | jq -er .access_token)
+          echo "::add-mask::$IAM_TOKEN"
+          echo "IAM_TOKEN=$IAM_TOKEN" >> "$GITHUB_ENV"
+      - name: Inventory databases, prove no writes or environment changes
+        run: |
+          set -euo pipefail
+          DB_LIST=$(curl --retry 2 -fsS --connect-timeout 10 --max-time 30 \
+            -H "Authorization: Bearer $IAM_TOKEN" \
+            "https://ydb.api.cloud.yandex.net/ydb/v1/databases?folderId=$YC_FOLDER_ID&pageSize=100")
+          printf '%s' "$DB_LIST" | jq -e '(.databases // []) | type=="array"' >/dev/null
+          test -z "$(printf '%s' "$DB_LIST" | jq -r '.nextPageToken // empty')" || {
+            echo "::error::Inventory paginated, refuse incomplete audit";exit 1; }
+          printf '%s' "$DB_LIST" | jq -r '.databases[]? | [.id,.name,.status,(.serverlessDatabase.throttlingRcuLimit // "unset"),(.serverlessDatabase.storageSizeLimit // "unset")] | @tsv'
+          TARGET=$(printf '%s' "$DB_LIST" | jq -r '[.databases[]? | select(.name=="awg-ads-stage-b-staging")]|length')
+          PROD=$(printf '%s' "$DB_LIST" | jq -r '[.databases[]? | select(.id=="etn00ojk5iv1u7dgpdar")]|length')
+          VK=$(printf '%s' "$DB_LIST" | jq -r '[.databases[]? | select(.id=="etnhujtu1t6f89tdtohs")]|length')
+          {
+            echo "### AWG Ads staging YDB read-only inventory"
+            echo "- Folder verified: `$YC_FOLDER_ID`"
+            echo "- Production database present: $PROD (read-only)"
+            echo "- Existing VK test database present: $VK (read-only)"
+            echo "- Dedicated ads staging match count: $TARGET"
+            echo "- No API write/create/delete/migration performed."
+          } >> "$GITHUB_STEP_SUMMARY"
+          test "$TARGET" -le 1
