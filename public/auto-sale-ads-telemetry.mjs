@@ -8,7 +8,7 @@ export function startAdsTelemetry({authHeaders,fetchImpl,root}={}){
   let stopped=false;
   const post=async(eventType,carId)=>{
     if(stopped)return;
-    const body=eventType==='vehicle_view'?{eventType,carId}:{eventType};
+    const body=eventType==='vehicle_detail_click'?{eventType,carId}:{eventType};
     try{
       await fetchImpl('/api/auto-sale/ads/event',{
         method:'POST',
@@ -24,7 +24,7 @@ export function startAdsTelemetry({authHeaders,fetchImpl,root}={}){
     const target=event.target?.closest?.('[data-detail]');
     const carId=target?.dataset?.detail;
     if(typeof carId==='string'&&/^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/.test(carId)){
-      void post('vehicle_view',carId);
+      void post('vehicle_detail_click',carId);
     }
   };
   root.addEventListener('click',click,true);
