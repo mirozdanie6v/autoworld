@@ -966,10 +966,19 @@ async function submitOrder(form){
   if(amount>remaining)errors.push('Платёж больше остатка по заказу.');
   if(amount>0&&order.paymentPlan?.length)errors.push(...validatePaymentStageEntry({plan:order.paymentPlan,payments:order.payments,stageId:data.paymentStage,amount}));
   if(errors.length){showErrors(form,[...new Set(errors)]);return}
-  const patch={stage:data.stage,manager:data.manager,lot:data.lot.trim(),vin:data.vin.trim(),eta:data.eta,location:data.location.trim(),riskType:data.riskType,riskNote:data.riskType==='Нет'?'':data.riskNote.trim(),risk:data.riskType==='Нет'?'Нет':(data.riskNote.trim()||data.riskType),updatedAt:new Date().toISOString()};
-  const operations=[{resource:'order',operation:'patch',id:order.id,input:patch}];
+  const requested={stage:data.stage,manager:data.manager,lot:data.lot.trim(),vin:data.vin.trim(),eta:data.eta,location:data.location.trim(),riskType:data.riskType,riskNote:data.riskType==='Нет'?'':data.riskNote.trim(),risk:data.riskType==='Нет'?'Нет':(data.riskNote.trim()||data.riskType)};
+  // A payment is an append to an existing order, not a rewrite of an
+  // unchanged order and its associated lead. Redundant aggregate patches
+  // provoke spurious optimistic-version conflicts after unrelated updates.
+  const patch=Object.fromEntries(Object.entries(requested).filter(([key,value])=>String(order[key]??'')!==String(value??'')));
+  if(Object.keys(patch).length)patch.updatedAt=new Date().toISOString();
+  const operations=[];
+  if(Object.keys(patch).length)operations.push({resource:'order',operation:'patch',id:order.id,input:patch});
   let payment=null;if(amount>0){payment={id:nextPaymentId(order.payments),amount,date:data.paymentDate,method:data.paymentMethod,paymentStage:order.paymentPlan?.length?data.paymentStage:'',note:data.paymentNote||''};operations.push({resource:'payment',operation:'create',orderId:order.id,input:payment})}
-  const lead=leads.find(x=>x.id===order.leadId),nextLead=lead?{...lead,manager:patch.manager,status:'Сделка'}:null;if(nextLead)operations.push({resource:'lead',operation:'patch',id:nextLead.id,input:nextLead});
+  const lead=leads.find(x=>x.id===order.leadId);
+  const leadPatch=lead?Object.fromEntries(Object.entries({manager:requested.manager,status:'Сделка'}).filter(([key,value])=>String(lead[key]??'')!==String(value??''))):{};
+  if(lead&&Object.keys(leadPatch).length)operations.push({resource:'lead',operation:'patch',id:lead.id,input:leadPatch});
+  if(!operations.length){state.modal={type:'order',id:order.id};render();return}
   pendingOrderSaves.add(order.id);
   try{
     const saved=window.__AUTO_SALE_ENTITY_BATCH__?await commitEntities(operations,form):{ok:true,localOnly:true};if(!saved)return;
@@ -984,7 +993,7 @@ async function submitOrder(form){
       liveOrder.paid=paymentsTotal(liveOrder.payments);
     }
     const liveLead=leads.find(item=>item.id===order.leadId);
-    if(liveLead&&nextLead)Object.assign(liveLead,nextLead);
+    if(liveLead&&Object.keys(leadPatch).length)Object.assign(liveLead,leadPatch);
     saveAll();state.modal={type:'order',id:order.id};render();
   }finally{pendingOrderSaves.delete(order.id)}
 }
