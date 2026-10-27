@@ -11,6 +11,7 @@ import {createObjectStorage} from './object-storage.mjs';
 import {createTelegramService} from './telegram-bot.mjs';
 import {createAdsStageBServerBridge} from './ads-stage-b-runtime.mjs';
 import {verifiedAdsTelegramIdentity} from './ads-attribution-stage-b.mjs';
+import {isAdsDirector} from './ads-stage-b-director.mjs';
 import {createVkService} from './vk.mjs';
 import {notificationsEnabled,notificationsSuppressed,collectSaleNotifications,deliverSaleNotifications} from './auto-sale-notifications.mjs';
 import {createVkWebAuth} from './vk-web-auth.mjs';
@@ -688,6 +689,22 @@ const server=http.createServer(async(req,res)=>{
       json(res,{error:'entity_method_not_allowed'},405);return;
     }
 
+    if(url.pathname==='/api/auto-sale/ads/director-report'&&req.method==='GET'){
+      if(!adsStageB.enabled){json(res,{error:'not_found'},404);return;}
+      const {access}=await requestAccess(req);
+      if(!isAdsDirector(access,process.env.AWG_ADS_DIRECTOR_TELEGRAM_IDS)){
+        json(res,{error:'ads_director_required'},403);return;
+      }
+      try{
+        const rows=await adsStageB.report();
+        json(res,{source:'verified_server_receipts',rows,
+          paidClickDataAvailable:false,verifiedSpendAvailable:false},200);
+      }catch{
+        json(res,{error:'ads_report_unavailable'},503);
+      }
+      return;
+    }
+
     if(url.pathname==='/api/auto-sale/ads/event'&&req.method==='POST'){
       if(!adsStageB.enabled){json(res,{error:'not_found'},404);return;}
       const {state,access}=await requestAccess(req);
@@ -717,7 +734,7 @@ const server=http.createServer(async(req,res)=>{
       const read=await getApiState();
       const {access}=await requestAccess(req,read.state);
       const visible=stateForAccess(read.state,access);
-      json(res,{...visible,_rowVersions:rowVersionsForAccess(read.rowVersions||{},read.state,access),_access:accessSummary(access),_adsTrackingEnabled:Boolean(adsStageB.enabled&&verifiedAdsTelegramIdentity(access))});
+      json(res,{...visible,_rowVersions:rowVersionsForAccess(read.rowVersions||{},read.state,access),_access:accessSummary(access),_adsTrackingEnabled:Boolean(adsStageB.enabled&&verifiedAdsTelegramIdentity(access)),_adsDirectorEnabled:Boolean(adsStageB.enabled&&isAdsDirector(access,process.env.AWG_ADS_DIRECTOR_TELEGRAM_IDS))});
       return;
     }
     if(url.pathname==='/api/auto-sale/state'&&req.method==='PUT'){
