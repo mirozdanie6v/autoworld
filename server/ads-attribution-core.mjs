@@ -163,12 +163,42 @@ export function createAdsAttributionService({
     return result.blocked?{status:'ignored',reason:'erased_subject'}
       :result.recorded?{status:'recorded',attribution}:{status:'duplicate'};
   }
+  // Server-originated immutable CRM snapshot, never a client-supplied payload.
+  // Replays after a new /start MUST remain on the original campaign.
+  async function recordTrustedSnapshotEvent({
+    telegramUserId,eventType,eventId,attributionSnapshot
+  }={}){
+    if(!ALLOWED_EVENTS.has(eventType))throw new Error('invalid_ads_event_type');
+    const key=subjectKey(telegramUserId);
+    const target=attributionSnapshot?.lastTouch;
+    if(!target||typeof target!=='object')throw new Error('invalid_ads_snapshot');
+    const campaignId=id(target.campaignId,'campaign_id');
+    const adId=id(target.adId||'','ad_id',{optional:true});
+    const creativeId=id(target.creativeId||'','creative_id',{optional:true});
+    const timestamp=Date.parse(target.timestamp);
+    const now=at(clock).getTime();
+    if(!Number.isFinite(timestamp)||timestamp>now+MAX_FUTURE_SKEW_MS
+      ||timestamp<now-365*86400000)throw new Error('invalid_ads_snapshot_timestamp');
+    // During HMAC rotation, prefer any existing subject key. The immutable
+    // CRM snapshot controls campaign, not today's lastTouch.
+    let receiptKey=key;
+    for(const candidate of allSubjectKeys(telegramUserId)){
+      if(await repository.readSubject(candidate)){receiptKey=candidate;break;}
+    }
+    const result=await repository.recordEvent({
+      eventId:`ads:${validateEventId(eventId)}`,
+      subjectKey:receiptKey,eventType,occurredAt:at(clock).toISOString(),
+      campaignId,adId,creativeId
+    });
+    return result.blocked?{status:'ignored',reason:'erased_subject'}
+      :result.recorded?{status:'recorded'}:{status:'duplicate'};
+  }
   async function listVerifiedEvents({cursor='',limit=250}={}){
     if(typeof cursor!=='string'||cursor.length>120)throw new Error('invalid_ads_event_cursor');
     if(!Number.isInteger(limit)||limit<1||limit>1000)throw new Error('invalid_ads_event_limit');
     return repository.listEvents({cursor,limit});
   }
-  return {issueCampaign,setCampaignTokenActive,recordBotStart,getAttribution,recordTrustedEvent,listVerifiedEvents};
+  return {issueCampaign,setCampaignTokenActive,recordBotStart,getAttribution,recordTrustedEvent,recordTrustedSnapshotEvent,listVerifiedEvents};
 }
 
 // Test-only/in-memory adapter. Do not use for a persistent runtime.
