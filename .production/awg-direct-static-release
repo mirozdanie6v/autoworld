@@ -1,10 +1,10 @@
 release=direct-object-storage
-source=2139ac730747636fb82db898865f153342091601
-reason=georgia-logistics-stage-context-and-lot-guard-PR-77
+source=c6633586aae11516487310ad5fb159418af3bbc9
+reason=legacy-russia-turnkey-prices-18-historical-catalog-cards-pr99
 preserve_backend=true
 preserve_ydb=true
 preserve_telegram=true
 vk_auth=enabled
 vk_messaging=enabled
-verified_run=40331546173
+verified_run=40540165861
 browser_rollback_gate=true
