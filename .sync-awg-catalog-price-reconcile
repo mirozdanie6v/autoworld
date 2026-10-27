@@ -1,7 +1,7 @@
 mode=apply
 source=@AutoWorld_Georgia
 scope=existing-price-records
-reason=2026-10-27-fix-commit-change-detection-for-oidc-workflow
-approved_pr=93
-audit_only_run=40513950450
+reason=2026-10-27-regression-verified-nonadjacent-price-stickers-pr98
+approved_pr=98
+audit_only_run=40539404575
 replace_source_all=false
