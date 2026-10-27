@@ -34,6 +34,18 @@ test('accepts only canonical autoworld catalog workflow token',async()=>{
   assert.equal(result.ok,true);
 });
 
+test('accepts the dedicated production price-reconciliation workflow only on main',async()=>{
+  resetGitHubOidcJwksCache();
+  const result=await verifyGitHubCatalogOidcToken(token({
+    workflow_ref:'mirozdanie6v/autoworld/.github/workflows/reconcile-awg-catalog-prices.yml@refs/heads/main'
+  }),{fetchImpl,nowSeconds:1_800_000_000});
+  assert.equal(result.ok,true);
+  const unauthorized=await verifyGitHubCatalogOidcToken(token({
+    workflow_ref:'mirozdanie6v/autoworld/.github/workflows/reconcile-awg-catalog-prices.yml@refs/heads/dev'
+  }),{fetchImpl,nowSeconds:1_800_000_000});
+  assert.deepEqual(unauthorized,{ok:false,error:'workflow_ref'});
+});
+
 test('rejects token from another repository',async()=>{
   resetGitHubOidcJwksCache();
   const result=await verifyGitHubCatalogOidcToken(token({repository:'mirozdanie6v/uniq-smart-rent'}),{fetchImpl,nowSeconds:1_800_000_000});

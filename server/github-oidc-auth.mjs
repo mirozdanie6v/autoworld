@@ -5,7 +5,10 @@ const JWKS_URL='https://token.actions.githubusercontent.com/.well-known/jwks';
 const DEFAULT_AUDIENCE='autoworld-catalog-import';
 const DEFAULT_REPOSITORY='mirozdanie6v/autoworld';
 const DEFAULT_REF='refs/heads/main';
-const DEFAULT_WORKFLOW_REF='mirozdanie6v/autoworld/.github/workflows/sync-awg-catalog.yml@refs/heads/main';
+const DEFAULT_WORKFLOW_REFS=Object.freeze([
+  'mirozdanie6v/autoworld/.github/workflows/sync-awg-catalog.yml@refs/heads/main',
+  'mirozdanie6v/autoworld/.github/workflows/reconcile-awg-catalog-prices.yml@refs/heads/main'
+]);
 
 let cachedJwks=null;
 let cachedAt=0;
@@ -37,7 +40,7 @@ export async function verifyGitHubCatalogOidcToken(token,{
   audience=DEFAULT_AUDIENCE,
   repository=DEFAULT_REPOSITORY,
   ref=DEFAULT_REF,
-  workflowRef=DEFAULT_WORKFLOW_REF
+  workflowRef=DEFAULT_WORKFLOW_REFS
 }={}){
   try{
     const parts=String(token||'').split('.');
@@ -50,7 +53,8 @@ export async function verifyGitHubCatalogOidcToken(token,{
     if(!audienceIncludes(claims?.aud,audience))return{ok:false,error:'audience'};
     if(String(claims?.repository||'')!==repository)return{ok:false,error:'repository'};
     if(String(claims?.ref||'')!==ref)return{ok:false,error:'ref'};
-    if(String(claims?.workflow_ref||'')!==workflowRef)return{ok:false,error:'workflow_ref'};
+    const allowedWorkflowRefs=Array.isArray(workflowRef)?workflowRef:[workflowRef];
+    if(!allowedWorkflowRefs.includes(String(claims?.workflow_ref||'')))return{ok:false,error:'workflow_ref'};
     const exp=Number(claims?.exp)||0;
     const nbf=Number(claims?.nbf)||0;
     const iat=Number(claims?.iat)||0;
