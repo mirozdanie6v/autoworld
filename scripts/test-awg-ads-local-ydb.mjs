@@ -77,6 +77,10 @@ try {
     assert.equal(removed.status,'complete');
     assert.equal(removed.deletedSubjects,1);
     assert.equal(removed.deletedEvents,3);
+    assert.equal((await repository.listBotTouchesAt({
+      subjectKey:createAdsSubjectKey(111,subjectSecret),
+      asOf:'2027-03-01T12:00:00Z'
+    })).length,0,'erasure must also remove historic indexed campaign touches');
     assert.equal(await service.getAttribution({telegramUserId:111}),null);
     const replay=(await fs.readFile(tokenFile,'utf8'));
     assert.equal((await service.recordBotStart({
@@ -97,6 +101,10 @@ try {
     }
     const report=await summarizeAdsCampaignsFromRepository({repository});
     assert.equal(report.length,0);
+    assert.equal((await repository.listBotTouchesAt({
+      subjectKey:createAdsSubjectKey(3000,subjectSecret),
+      asOf:'2027-03-01T12:00:00Z'
+    })).length,0,'retention must not leave advertising history in auxiliary index');
     assert.equal((await repository.readSubject('f'.repeat(64))),null);
     assert.ok(deletedEvents>=8);
     console.log('AWG_ADS_REAL_LOCAL_YDB_PRIVACY_PASS',JSON.stringify({deletedEvents,deletedSubjects,compactedSubjects}));
