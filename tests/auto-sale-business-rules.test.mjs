@@ -79,7 +79,7 @@ test('order creation accepts editable 50%-default advance against agreed price, 
   assert.equal(canCreateOrder({quote:usa,deposit:5000}).ok,true,'old already-received deposits are preserved');
   assert.equal(canCreateOrder({quote:usa,deposit:10000,depositPercent:50}).ok,false,'a mismatched percentage must not create a false payment');
   assert.equal(canCreateOrder({quote:usa,deposit:40000,depositPercent:100}).ok,false,'advance cannot exceed the contract total');
-  assert.equal(canCreateOrder({quote:{...usa,status:'Согласован',quoteSchema:'awg-quote-us-simple-2026-10-26'},deposit:30000,depositPercent:50,agreedOrderTotal:60000}).ok,true);
+  assert.equal(canCreateOrder({quote:{...usa,status:'Согласован',quoteSchema:'awg-quote-us-simple-2026-10-26',tariffVersion:'2026-10-26-us-car-plus-repair'},deposit:30000,depositPercent:50,agreedOrderTotal:60000}).ok,true);
   assert.equal(canCreateOrder({quote:{status:'Согласован',origin:'Грузия',total:25000},deposit:1000}).ok,true);
 });
 
