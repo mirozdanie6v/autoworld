@@ -260,7 +260,8 @@ try{
       legacyStore,domainStore,prepareNotifications:null,operations:[{
         resource:'lead',operation:'create',id:'L-ADS-REAL-VK',input:{
           id:'L-ADS-REAL-VK',clientProvider:'vk',clientProviderUserId:'111111',
-          name:'Synthetic VK control',model:'Skoda Octavia',source:'Mini App'
+          name:'Synthetic VK control',contact:'@synthetic-vk',
+          nextAction:'Связаться с тестовым клиентом',model:'Skoda Octavia',source:'Mini App'
         }
       }]
     });
