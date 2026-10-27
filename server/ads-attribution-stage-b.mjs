@@ -27,6 +27,7 @@ export function createAdsStageBBridge({enabled=false,service,onFailure}={}){
     throw new Error('ads_stage_b_service_required');
   if(enabled&&typeof onFailure!=='function')throw new Error('ads_stage_b_failure_sink_required');
 
+  const warn=async data=>{try{await onFailure(data)}catch{/* audit sink cannot break a saved lead */}};
   async function recordBotStart(payload){
     if(!enabled)return {status:'disabled'};
     // Called only after the Telegram webhook secret is verified by the host.
@@ -37,7 +38,15 @@ export function createAdsStageBBridge({enabled=false,service,onFailure}={}){
     if(!enabled)return operations;
     const telegramUserId=verifiedAdsTelegramIdentity(access);
     if(!telegramUserId||!operations.some(CREATE_LEAD))return operations;
-    const snapshot=safeSnapshot(await service.getAttribution({telegramUserId}));
+    let snapshot=null;
+    try{
+      snapshot=safeSnapshot(await service.getAttribution({telegramUserId}));
+    }catch(error){
+      // Never turn a working client request into a failed request because the
+      // separate advertising database is temporarily unavailable.
+      await warn({code:'ads_snapshot_unavailable',eventType:'lead_create'});
+      return operations;
+    }
     if(!snapshot)return operations;
     // Never modify any original operation or mutate a manager/VK request.
     return operations.map(operation=>CREATE_LEAD(operation)
@@ -58,12 +67,12 @@ export function createAdsStageBBridge({enabled=false,service,onFailure}={}){
           telegramUserId,eventType:'lead_submit',eventId
         });
         if(result.status==='recorded'||result.status==='duplicate')recorded++;
-        else {pending++;await onFailure({code:'ads_lead_receipt_pending',eventType:'lead_submit'});}
+        else {pending++;await warn({code:'ads_lead_receipt_pending',eventType:'lead_submit'});}
       }catch(error){
         pending++;
         // The authoritative CRM lead already contains the immutable attribution
         // snapshot; follow-on reconciliation must use that persisted source.
-        await onFailure({code:'ads_lead_receipt_failed',eventType:'lead_submit'});
+        await warn({code:'ads_lead_receipt_failed',eventType:'lead_submit'});
       }
     }
     return {attempted:attributed.length,recorded,pending};
