@@ -10,6 +10,7 @@ on:
       - 'server/yandex-server.mjs'
       - 'public/auto-sale-bootstrap.mjs'
       - 'public/auto-sale-ads-telemetry.mjs'
+      - 'public/auto-sale-ads-director.mjs'
       - 'tests/ads-*'
       - 'tests/awg-ads-*'
       - '.github/workflows/verify-awg-ads-stage-b.yml'
@@ -53,6 +54,8 @@ jobs:
           node --check server/ads-stage-b-runtime.mjs
           node --check server/ads-stage-b-reconciliation.mjs
           node --check public/auto-sale-ads-telemetry.mjs
+          node --check public/auto-sale-ads-director.mjs
+          node --check server/ads-stage-b-director.mjs
           node --check server/telegram-bot.mjs
           node --check server/yandex-server.mjs
           node --check tests/awg-ads-stage-b.test.mjs
@@ -69,7 +72,7 @@ jobs:
           git fetch --no-tags origin main
           git diff --name-only origin/main...HEAD | while IFS= read -r file; do
             case "$file" in
-              server/ads-*|server/telegram-bot.mjs|server/yandex-server.mjs|public/auto-sale-bootstrap.mjs|public/auto-sale-ads-telemetry.mjs|tests/ads-*|tests/awg-ads-*|scripts/test-awg-ads-local-ydb.mjs|scripts/test-awg-ads-stage-b-local-ydb.mjs|docs/AWG_ADS_ATTRIBUTION_STAGE_A.md|docs/AWG_ADS_STAGE_B.md|.github/workflows/verify-awg-ads-*.yml) ;;
+              server/ads-*|server/telegram-bot.mjs|server/yandex-server.mjs|public/auto-sale-bootstrap.mjs|public/auto-sale-ads-telemetry.mjs|public/auto-sale-ads-director.mjs|tests/ads-*|tests/awg-ads-*|scripts/test-awg-ads-local-ydb.mjs|scripts/test-awg-ads-stage-b-local-ydb.mjs|docs/AWG_ADS_ATTRIBUTION_STAGE_A.md|docs/AWG_ADS_STAGE_B.md|.github/workflows/verify-awg-ads-*.yml) ;;
               *) echo "::error::Unexpected production-sensitive diff: $file"; exit 1;;
             esac
           done
