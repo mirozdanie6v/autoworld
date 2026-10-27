@@ -107,7 +107,7 @@ try{
     const written=await mutateAutoSaleEntityBatch({
       legacyStore,domainStore,prepareNotifications:null,
       operations:[{resource:'lead',operation:'create',id:leadId,input:{
-        id:leadId,model:'Test Honda',budget:21300,status:'Новый',
+        id:leadId,name:'Synthetic Ads QA',contact:'@test_ads_qa',model:'Test Honda',budget:21300,status:'Новый',nextAction:'2026-10-31',
         clientProvider:'telegram',clientProviderUserId:person,
         adsAttribution:{source:'Telegram Ads',...originalAttribution}
       }}]
