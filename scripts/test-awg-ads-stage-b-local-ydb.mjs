@@ -105,6 +105,41 @@ try{
   });
   assert.strictEqual(vkOps,sanitized.operations);
   assert.deepEqual(errors,[]);
+
+  // The separate ads DB may be unreachable during a real CRM commit.
+  // Recover only from the indexed immutable bot history *before* submission.
+  let recoveryNow='2026-10-27T05:00:00Z';
+  const recoveringService=createAdsAttributionService({
+    repository,subjectSecret:'stage-b-real-local-ydb-ci-only-secret-0123456789',
+    clock:()=>new Date(recoveryNow)
+  });
+  const outageA=(await recoveringService.issueCampaign({campaignId:'outage-campaign-A'})).token;
+  const outageB=(await recoveringService.issueCampaign({campaignId:'later-campaign-B'})).token;
+  await recoveringService.recordBotStart({telegramUserId:222222,startPayload:outageA,updateId:9990201});
+  recoveryNow='2026-10-27T05:10:00Z';
+  const interrupted=createAdsStageBBridge({enabled:true,service:{
+    ...recoveringService,getAttribution:async()=>{throw Error('simulated ads read outage')}
+  },onFailure:async()=>{}});
+  const outageAccess={role:'client',authenticated:true,authType:'telegram',user:{id:'222222'}};
+  const lost=await interrupted.enrichLeadOperations([{
+    resource:'lead',operation:'create',id:'L-stageB-ads-outage',input:{
+      clientProvider:'telegram',clientProviderUserId:'222222',
+      clientSubmittedAt:recoveryNow
+    }
+  }],outageAccess);
+  assert.equal(lost[0].input.adsAttributionStatus,'lookup_unavailable');
+  const savedOutageLead={...lost[0].input,id:'L-stageB-ads-outage'};
+  recoveryNow='2026-10-27T05:20:00Z';
+  await recoveringService.recordBotStart({telegramUserId:222222,startPayload:outageB,updateId:9990202});
+  const historical=await recoveringService.getAttributionAtTime({
+    telegramUserId:'222222',asOf:savedOutageLead.clientSubmittedAt
+  });
+  assert.equal(historical.lastTouch.campaignId,'outage-campaign-A');
+  assert.equal((await interrupted.reconcilePersistedLead(savedOutageLead)).status,'recorded');
+  const recoveredReceipts=(await repository.listEvents({limit:100})).events;
+  assert.equal(recoveredReceipts.find(e=>e.eventType==='lead_submit'
+    &&e.eventId.startsWith('ads:lead_')&&e.campaignId==='outage-campaign-A')?.campaignId,'outage-campaign-A');
+  console.log('AWG_STAGE_B_LOCAL_YDB_AS_OF_RECOVERY_PASS');
   console.log('AWG_STAGE_B_LOCAL_YDB_BRIDGE_PASS',JSON.stringify({
     campaign:'StageB-Real-YDB',verifiedLeadReceipts:leads.length,
     duplicateLeadSubmitDeduped:true,vkExcluded:true,
