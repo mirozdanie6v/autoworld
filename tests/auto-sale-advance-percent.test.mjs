@@ -66,6 +66,7 @@ test('YDB approves a real 50% contract-price order; rejects a mismatched contrac
   assert.equal(ok.status,200,JSON.stringify(ok.data));
   const other=mockStore(initial);
   const mismatched=structuredClone(updated);mismatched.orders[0].total=51172.92;
+  mismatched.orders[0].paymentPlan=buildUsPaymentPlan({...preliminary,total:51172.92},30000);
   const denied=await syncYdbState(other,mismatched);
   assert.equal(denied.status,400);
   assert.equal(denied.data.error,'agreed_order_total_mismatch');
