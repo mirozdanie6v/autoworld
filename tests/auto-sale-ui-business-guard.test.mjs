@@ -69,10 +69,21 @@ test('create quote from pending work status saves lead first and opens quote',as
   const lead=JSON.parse(localStorage.getItem('auto-sale-leads-v2')).find(x=>x.id==='L-106');assert.equal(lead.status,'В работе');const quoteForm=root.querySelector('#quoteForm');assert.ok(quoteForm);assert.equal(quoteForm.elements.leadId.value,'L-106');dom.window.close();
 });
 
-test('deposit above agreed quote is stopped before base submit handler',async()=>{
+test('auction advance is calculated from percentage; invalid percentages do not save a false deposit',async()=>{
   const {dom,root}=await setup('deposit-cap',{custom:true});root.querySelector('[data-role="manager"]').click();root.querySelector('[data-go="leads"]').click();root.querySelector('[data-lead="L-999"]').click();await tick();
-  const form=root.querySelector('#leadEditForm'),deposit=form.querySelector('[name="deposit"]');assert.ok(deposit);deposit.value='40000';form.dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true}));
-  const lead=JSON.parse(localStorage.getItem('auto-sale-leads-v2')).find(x=>x.id==='L-999');assert.equal(Number(lead.deposit)||0,0);assert.match(form.textContent,/превышает согласованную стоимость/);dom.window.close();
+  const form=root.querySelector('#leadEditForm'),deposit=form.querySelector('[name="deposit"]'),pct=form.querySelector('[name="depositPercent"]');
+  assert.ok(deposit&&pct);
+  assert.equal(deposit.readOnly,true);
+  assert.equal(pct.value,'50');
+  pct.value='100';pct.dispatchEvent(new dom.window.Event('input',{bubbles:true}));
+  assert.equal(deposit.value,'37800','full advance cannot exceed the agreed final quote');
+  pct.value='120';pct.dispatchEvent(new dom.window.Event('input',{bubbles:true}));
+  form.dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true}));
+  await tick();
+  const lead=JSON.parse(localStorage.getItem('auto-sale-leads-v2')).find(x=>x.id==='L-999');
+  assert.equal(Number(lead.deposit)||0,0);
+  assert.match(form.textContent,/Процент аванса должен быть больше 0/);
+  dom.window.close();
 });
 
 test('client can edit only a new request and sees what happens after save',async()=>{
