@@ -127,6 +127,29 @@ if(adsStageB.enabled&&process.env.AWG_ADS_STAGE_B_RECONCILE_ENABLED==='true'){
       readAuthoritativeState:async()=> (await getApiState()).state
     }),
     bridge:adsStageB,
+    persistRecoveredSnapshot:async(prior,snapshot)=>{
+      // Internal staging-only conditional mutation, never exposed as a route.
+      // Protect immutable campaign provenance against lost updates.
+      const stores=await getEntityStores();
+      const state=await stores.domainStore.loadState();
+      const current=(state.leads||[]).find(lead=>String(lead.id)===String(prior.id));
+      if(!current||current.clientProvider!=='telegram'
+        ||current.clientProviderUserId!==prior.clientProviderUserId
+        ||current.clientSubmittedAt!==prior.clientSubmittedAt)return {ok:false};
+      if(current.adsAttribution?.source==='Telegram Ads'){
+        return {ok:JSON.stringify(current.adsAttribution)===JSON.stringify(snapshot)};
+      }
+      if(current.adsAttributionStatus!=='lookup_unavailable')return {ok:false};
+      const version=await stores.domainStore.entityRowVersion('lead',String(prior.id));
+      if(version===null)return {ok:false};
+      const patch=await mutateAutoSaleEntityBatch({
+        ...stores,operations:[{resource:'lead',operation:'patch',
+          id:String(prior.id),baseRowVersion:version,
+          input:{adsAttribution:snapshot,adsAttributionStatus:'recovered'}}],
+        prepareNotifications:null
+      });
+      return {ok:patch.status===200};
+    },
     onAudit:async stats=>console.info('AWG ADS staging reconciler',JSON.stringify({
       scanned:stats.scanned,recorded:stats.recorded,duplicates:stats.duplicates,
       errors:stats.errors,complete:stats.complete
