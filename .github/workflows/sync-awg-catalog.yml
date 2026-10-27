@@ -8,6 +8,7 @@ on:
     branches: [main]
     paths:
       - .sync-awg-catalog
+      - .sync-awg-catalog-price-reconcile
 
 permissions:
   contents: read
@@ -38,7 +39,25 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Select controlled catalog operation
+        id: mode
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,os
+          with open(os.environ['GITHUB_EVENT_PATH'],encoding='utf8') as fp:
+              event=json.load(fp)
+          head=event.get('head_commit') or {}
+          changed=set(head.get('modified') or []) | set(head.get('added') or [])
+          price=(os.environ.get('GITHUB_EVENT_NAME')=='push'
+                 and '.sync-awg-catalog-price-reconcile' in changed)
+          with open(os.environ['GITHUB_OUTPUT'],'a',encoding='utf8') as fp:
+              fp.write('price='+('true' if price else 'false')+'\n')
+          print('AWG_CATALOG_WORKFLOW_MODE', 'price-reconcile' if price else 'scheduled-import')
+          PY
+
       - name: Install scraper dependencies
+        if: steps.mode.outputs.price != 'true'
         run: python -m pip install --disable-pip-version-check requests beautifulsoup4
 
       - name: Request canonical catalog OIDC token
@@ -69,6 +88,7 @@ jobs:
           test "$(jq 'length' /tmp/awg-import/cars.json)" -ge 100
 
       - name: Scrape recent AutoWorld Georgia posts
+        if: steps.mode.outputs.price != 'true'
         env:
           OUT_DIR: /tmp/awg-import
           MAX_PAGES: '20'
@@ -79,6 +99,7 @@ jobs:
         run: python scripts/scrape-autoworld-georgia.py
 
       - name: Normalize recent posts
+        if: steps.mode.outputs.price != 'true'
         env:
           SOURCE_PATH: /tmp/awg-import/cars.json
           OUTPUT_PATH: /tmp/awg-catalog-import.json
@@ -87,6 +108,7 @@ jobs:
         run: node scripts/import-autoworld-catalog.mjs
 
       - name: Upsert recent catalog entities
+        if: steps.mode.outputs.price != 'true'
         env:
           AUTO_SALE_CATALOG_IMPORT_URL: https://awgcars.ru/api/auto-sale/admin/catalog-import
           SOURCE_PATH: /tmp/awg-catalog-import.json
@@ -94,6 +116,7 @@ jobs:
         run: node scripts/sync-autoworld-catalog.mjs
 
       - name: Verify public RU catalog
+        if: steps.mode.outputs.price != 'true'
         run: |
           set -euo pipefail
           curl --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 10 --max-time 30 -fsS \
@@ -123,7 +146,67 @@ jobs:
             echo "- Source: @AutoWorld_Georgia"
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Audit archived sticker prices against canonical production
+        if: steps.mode.outputs.price == 'true'
+        env:
+          SOURCE_PATH: data/autoworld-georgia/cars.json
+          LIVE_PATH: /tmp/awg-import/cars.json
+          REPORT_PATH: /tmp/awg-price-repair/report.json
+          DELTA_PATH: /tmp/awg-price-repair/corrections.json
+        run: |
+          set -euo pipefail
+          node scripts/audit-awg-catalog-price-reconciliation.mjs
+          jq -r '"CATALOG_PRICE_RECONCILE candidates=\(.candidates) repair_missing=\(.missingPricesCorrectable) correct_price=\(.existingPricesCorrectable) secondary=\(.secondaryPriceCorrections) unresolved=\(.unresolvedCount)"' /tmp/awg-price-repair/report.json
+      - name: Reimport vetted existing-car pricing via canonical trusted workflow
+        if: steps.mode.outputs.price == 'true'
+        env:
+          SOURCE_PATH: /tmp/awg-price-repair/corrections.json
+          REPLACE_SOURCE_ALL: 'false'
+        run: |
+          set -euo pipefail
+          MODE=$(sed -n 's/^mode=//p' .sync-awg-catalog-price-reconcile | tail -n1)
+          test "$MODE" = 'apply'
+          COUNT=$(jq 'length' "$SOURCE_PATH")
+          if [ "$COUNT" -eq 0 ]; then echo 'CATALOG_PRICE_REIMPORT_NO_CHANGE'; exit 0; fi
+          test "$COUNT" -le 180
+          node scripts/sync-autoworld-catalog.mjs
+      - name: Confirm targeted prices, catalog integrity and manual deactivations
+        if: steps.mode.outputs.price == 'true'
+        run: |
+          set -euo pipefail
+          curl --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 10 --max-time 40 -fsS \
+            "$AWG_URL/api/auto-sale/state" \
+            | jq '[.catalog[]? | select(.source == "AutoWorld_Georgia")]' \
+            > /tmp/awg-price-repair/after.json
+          node --input-type=module <<'JS'
+          import {readFileSync} from 'node:fs';
+          const prior=JSON.parse(readFileSync('/tmp/awg-import/cars.json','utf8'));
+          const after=JSON.parse(readFileSync('/tmp/awg-price-repair/after.json','utf8'));
+          const requested=JSON.parse(readFileSync('/tmp/awg-price-repair/corrections.json','utf8'));
+          const prev=new Map(prior.map(x=>[x.id,x]));
+          const now=new Map(after.map(x=>[x.id,x]));
+          if(after.length<prior.length)throw Error('catalog_shrank');
+          for(const car of requested){
+            const old=prev.get(car.id),next=now.get(car.id);
+            if(!old||!next)throw Error('car_missing_'+car.id);
+            if(Number(next.priceRub)!==Number(car.priceRub))throw Error('price_mismatch_'+car.id);
+            if(old.active===false&&next.active!==false)throw Error('hidden_car_reactivated_'+car.id);
+            if(next.sourcePostId!==old.sourcePostId)throw Error('source_identity_changed_'+car.id);
+          }
+          console.log('CATALOG_PRICE_REIMPORT_VERIFIED',JSON.stringify({updated:requested.length,count:after.length}));
+          JS
+      - name: Attach price-only reconciliation audit
+        if: always() && steps.mode.outputs.price == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: awg-catalog-source-price-reconcile
+          path: |
+            /tmp/awg-price-repair/report.json
+            /tmp/awg-price-repair/corrections.json
+          if-no-files-found: ignore
+
       - name: Upload import audit
+        if: always() && steps.mode.outputs.price != 'true'
         if: always()
         uses: actions/upload-artifact@v4
         with:
