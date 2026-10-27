@@ -49,8 +49,16 @@ export function renderCatalogLeadVehicle(lead={}, {escape=String,money=v=>'$'+v,
   // This block is the original catalog snapshot. Editable customer/CRM values live in separate fields.
   const year=str(s.year||lead.year), mileage=str(s.mileage||lead.mileage);
   const engine=str(s.engine||lead.engine), drive=str(s.drive||lead.drive);
-  const valueRub=num(s.priceRub)||num(s.priceAfterDiscountRub)||num(lead.estimatedCostRub);
-  const cost=num(s.price)>0?'от '+money(s.price):valueRub?rubMoney(valueRub):num(s.estimatedBidUsd)>0?'ставка ≈ '+money(s.estimatedBidUsd):'уточняется';
+  const baseRub=num(s.priceRub)||num(s.priceAfterDiscountRub);
+  const turnkeyRub=num(s.russiaTurnkeyRub);
+  const turnkeyOnly=!(num(s.price)>0)&&!baseRub&&turnkeyRub>0;
+  // Keep the same source price as the public catalog, including historic
+  // posts where only the Russia-with-repair calculation can be verified.
+  // A stale lead budget must never displace a newer authoritative source.
+  const valueRub=baseRub||turnkeyRub||num(lead.estimatedCostRub);
+  const cost=num(s.price)>0?'от '+money(s.price)
+    :valueRub?(turnkeyOnly&&num(s.russiaTurnkeyMaxRub)>turnkeyRub?'от ':'')+rubMoney(valueRub)
+    :num(s.estimatedBidUsd)>0?'ставка ≈ '+money(s.estimatedBidUsd):'уточняется';
   const originalBefore=num(s.priceBeforeDiscountRub);
   const mainImage=/^https?:\/\//i.test(str(s.image))?'<img class="auto-catalog-lead-image" src="'+escape(s.image)+'" alt="'+escape(str(s.brand)+' '+str(s.model))+'" loading="lazy">':'';
   const fields=[
@@ -59,10 +67,10 @@ export function renderCatalogLeadVehicle(lead={}, {escape=String,money=v=>'$'+v,
     ...(num(s.engineCc)>0?[label('Объём двигателя, см³',num(s.engineCc))]:[]),
     ...(num(s.powerHp)>0?[label('Мощность, л.с.',num(s.powerHp))]:[]),
     label('Сценарий покупки',str(s.origin||lead.origin)),
-    label('Стоимость из карточки',cost),
+    label(turnkeyOnly?'Расчёт в России с ремонтом (источник)':'Стоимость из карточки',cost),
     ...(num(s.price)>0&&valueRub?[label('Стоимость в рублях',rubMoney(valueRub))]:[]),
     ...(s.discountExplicit===true&&originalBefore&&originalBefore>valueRub?[label('До скидки',rubMoney(originalBefore))]:[]),
-    ...(num(s.russiaTurnkeyRub)>0?[label('Цена в России с ремонтом (источник)',num(s.russiaTurnkeyMaxRub)>num(s.russiaTurnkeyRub)
+    ...(!turnkeyOnly&&num(s.russiaTurnkeyRub)>0?[label('Цена в России с ремонтом (источник)',num(s.russiaTurnkeyMaxRub)>num(s.russiaTurnkeyRub)
       ?rubMoney(s.russiaTurnkeyRub)+' – '+rubMoney(s.russiaTurnkeyMaxRub):rubMoney(s.russiaTurnkeyRub))]:[]),
     ...(num(s.usaTurnkeyRub)>0?[label('Оценка через США (источник)',rubMoney(s.usaTurnkeyRub))]:[]),
     ...(num(s.georgiaTurnkeyRub)>0?[label('Оценка через Грузию (источник)',rubMoney(s.georgiaTurnkeyRub))]:[]),
