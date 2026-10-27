@@ -39,7 +39,7 @@ export function createAdsCrmPrivacyErasure({
       const affected=state.leads.filter(lead=>
         lead?.clientProvider==='telegram'
         &&String(lead.clientProviderUserId||'')===subject
-        &&(lead.adsAttribution!=null||lead.adsAttributionStatus!=='erased'));
+        &&(lead.adsAttribution!=null||['lookup_unavailable','recovered'].includes(lead.adsAttributionStatus)));
       if(!affected.length){
         await onAudit({operation:'ads_cross_store_erasure',outcome:'complete',
           scrubbed,pass:pass+1,adsDeletedEvents:receipt.deletedEvents});
