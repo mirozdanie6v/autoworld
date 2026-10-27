@@ -5,7 +5,7 @@ import {quoteCostRows,quoteRowsTotal,ageCategoryForDate,ageCategoryForMonth,ageC
 import {quoteVehicleFields,quoteCostAuditFields,quoteCustomsFields} from './auto-sale-quote-form.mjs';
 import {AWG_GEORGIA_TARIFF_VERSION,georgiaQuoteForm,georgiaQuoteAmounts,georgiaDraftForEditing,formatGeorgiaUsd} from './auto-sale-georgia-quote.mjs';
 import {normalizePowerUnit,toMetricHorsepower,quotePowerInput,convertPowerInput} from './auto-sale-power-units.mjs';
-import {catalogVehicleSnapshot,isCatalogVehicleLead,catalogLeadSpecsText,renderCatalogLeadVehicle,catalogCarForLead,catalogBudgetUsd,catalogPriceRub} from './auto-sale-catalog-lead.mjs?v=20261027-legacy-turnkey-v1';
+import {catalogVehicleSnapshot,isCatalogVehicleLead,catalogLeadSpecsText,renderCatalogLeadVehicle,catalogCarForLead,catalogBudgetUsd,catalogPriceRub} from './auto-sale-catalog-lead.mjs?v=20261027-source-price-lead-v2';
 import {catalogRubPerUsd} from './auto-sale-catalog-fx.mjs';
 import {catalogCustomsFacts,catalogCustomsForLead} from './auto-sale-catalog-customs.mjs';
 import {installNumericZeroFocus} from './auto-sale-numeric-zero-focus.mjs';
