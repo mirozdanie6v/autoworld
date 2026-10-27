@@ -47,8 +47,16 @@ jobs:
           import json,os
           with open(os.environ['GITHUB_EVENT_PATH'],encoding='utf8') as fp:
               event=json.load(fp)
+          import subprocess
           head=event.get('head_commit') or {}
           changed=set(head.get('modified') or []) | set(head.get('added') or [])
+          # GitHub's push webhook may omit per-commit file lists for Contents API
+          # commits. The checked-out commit's tree is the authoritative fallback.
+          commit_files=subprocess.check_output(
+              ['git','show','--pretty=format:','--name-only','HEAD'],
+              text=True
+          ).splitlines()
+          changed.update(file.strip() for file in commit_files if file.strip())
           price=(os.environ.get('GITHUB_EVENT_NAME')=='push'
                  and '.sync-awg-catalog-price-reconcile' in changed)
           with open(os.environ['GITHUB_OUTPUT'],'a',encoding='utf8') as fp:
