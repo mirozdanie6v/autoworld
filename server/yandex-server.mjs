@@ -10,6 +10,7 @@ import {syncYdbState} from './ydb-sync.mjs';
 import {createObjectStorage} from './object-storage.mjs';
 import {createTelegramService} from './telegram-bot.mjs';
 import {createAdsStageBServerBridge} from './ads-stage-b-runtime.mjs';
+import {verifiedAdsTelegramIdentity} from './ads-attribution-stage-b.mjs';
 import {createVkService} from './vk.mjs';
 import {notificationsEnabled,notificationsSuppressed,collectSaleNotifications,deliverSaleNotifications} from './auto-sale-notifications.mjs';
 import {createVkWebAuth} from './vk-web-auth.mjs';
@@ -687,11 +688,36 @@ const server=http.createServer(async(req,res)=>{
       json(res,{error:'entity_method_not_allowed'},405);return;
     }
 
+    if(url.pathname==='/api/auto-sale/ads/event'&&req.method==='POST'){
+      if(!adsStageB.enabled){json(res,{error:'not_found'},404);return;}
+      const {state,access}=await requestAccess(req);
+      if(!verifiedAdsTelegramIdentity(access)){
+        json(res,{error:'telegram_client_auth_required'},403);return;
+      }
+      const payload=await parseJson(req,4096);
+      if(!payload||typeof payload!=='object'||Array.isArray(payload)
+        ||Object.keys(payload).some(key=>!['eventType','carId'].includes(key))
+        ||!['miniapp_open','vehicle_view'].includes(payload.eventType)
+        ||(payload.carId!==undefined&&typeof payload.carId!=='string')){
+        json(res,{error:'invalid_ads_event'},400);return;
+      }
+      try{
+        const result=await adsStageB.recordMiniAppEvent({
+          access,eventType:payload.eventType,carId:payload.carId||'',
+          catalog:state.catalog||[]
+        });
+        json(res,{status:result.status,reason:result.reason||undefined},200);
+      }catch{
+        json(res,{error:'ads_event_storage_unavailable'},503);
+      }
+      return;
+    }
+
     if(url.pathname==='/api/auto-sale/state'&&req.method==='GET'){
       const read=await getApiState();
       const {access}=await requestAccess(req,read.state);
       const visible=stateForAccess(read.state,access);
-      json(res,{...visible,_rowVersions:rowVersionsForAccess(read.rowVersions||{},read.state,access),_access:accessSummary(access)});
+      json(res,{...visible,_rowVersions:rowVersionsForAccess(read.rowVersions||{},read.state,access),_access:accessSummary(access),_adsTrackingEnabled:Boolean(adsStageB.enabled&&verifiedAdsTelegramIdentity(access))});
       return;
     }
     if(url.pathname==='/api/auto-sale/state'&&req.method==='PUT'){
