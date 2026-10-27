@@ -67,3 +67,53 @@ test('Python scraper matches JS decoder for archived source prices',()=>{
   }).trim().split('\n').map(line=>JSON.parse(line));
   for(const row of result)assert.deepEqual([row.price,row.turnkey],expected[row.id],'Python '+row.id);
 });
+
+
+const history=JSON.parse(readFileSync(new URL('../data/autoworld-georgia/cars.json',import.meta.url),'utf8'));
+const historicalPost=new Map(history.map(x=>[String(x.sourcePostId),x]));
+const stickerPriceAfterLabel={
+  '1157':1850000,'1236':2450000,'1246':2170000,'1353':4330000,
+  '1834':4650000,'2285':1380000,'2385':1840000,'2406':2420000,
+  '3161':2060000,'3405':2350000,'3980':1480000,'3990':1720000,'4000':1910000
+};
+test('historical sticker prices after ❗️ / old headline / padding are recoverable',()=>{
+  for(const [postId,amount] of Object.entries(stickerPriceAfterLabel)){
+    const car=historicalPost.get(postId);
+    assert.ok(car,'archive missing '+postId);
+    assert.equal(decodeChannelEmojiPrice(car.rawText),amount,postId);
+    assert.equal(extractSourcePrices(car.rawText).priceRub,amount,postId);
+  }
+});
+test('new price decoder stays conservative: no prices from marketing numbers or other emoji',()=>{
+  const cases=[
+    '🤩\n🤩\nдо\n1⃣\n6⃣\n🤩\n🌟\nKia K4 2023\nЦена доставки 500 тыс. руб.',
+    '🌟\nBMW 530i 2024\n✨\n🔤\n🔤\n🔤\n🔤\n🔤\n🔤\nДвигатель 2.0',
+    '🌟\nBMW 530i 2024\n✨\n4️⃣\n❤️\n6️⃣\n2️⃣\n👤\n👤\n👤',
+    '🌟\nAudi Q5 2024\n✨\n2️⃣\n🤩\n6️⃣\n2️⃣\n🔹\nПробег: 50000',
+    '🌟\nAudi Q5 2024\n✨\n1️⃣\n🤩\n4️⃣\n🔤\n2️⃣\n❤️\n8️⃣'
+  ];
+  for(const raw of cases)assert.equal(decodeChannelEmojiPrice(raw),0,raw);
+});
+test('Python and JS recover pricing of recent missing-price posts and never use headline as current price',()=>{
+  const python=[
+    'import re, json, sys',
+    'source=sys.stdin.read()',
+    'start=source.index("def price_amount_rub(value):")',
+    'end=source.index(chr(10)+"def parse_title(text):",start)',
+    'ns={"re":re}',
+    'exec(source[start:end],ns)',
+    'for post_id,raw in json.loads(sys.argv[1]):',
+    '  before,main,after=ns["parse_price_pair"](raw)',
+    '  print(json.dumps({"postId":post_id,"price":main,"before":before}))'
+  ].join('\n');
+  const keys=['3980','3990','4000'];
+  const input=keys.map(id=>[id,historicalPost.get(id).rawText]);
+  const output=execFileSync('python3',['-c',python,JSON.stringify(input)],{
+    cwd:new URL('..',import.meta.url),input:readFileSync(new URL('../scripts/scrape-autoworld-georgia.py',import.meta.url),'utf8'),
+    encoding:'utf8'
+  }).trim().split('\n').map(x=>JSON.parse(x));
+  for(const row of output){
+    assert.equal(row.price,stickerPriceAfterLabel[row.postId]);
+    assert.equal(row.before,null,'old price headline is not a fake markdown discount');
+  }
+});
