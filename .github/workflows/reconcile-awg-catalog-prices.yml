@@ -52,8 +52,19 @@ jobs:
           node scripts/audit-awg-catalog-price-reconciliation.mjs
           jq -r '"PRICE_RECONCILE candidates=\(.candidates) unresolved=\(.unresolvedCount) currently_unpriced=\(.liveUnpriced)"' \
             /tmp/awg-price-audit/report.json
-      - name: Obtain scoped catalog importer token (release marker only)
+      - name: Read explicit release marker mode
         if: github.event_name == 'push'
+        id: gate
+        run: |
+          set -euo pipefail
+          MODE=$(sed -n 's/^mode=//p' .sync-awg-catalog-price-reconcile | tail -n 1)
+          if [ "$MODE" != 'audit' ] && [ "$MODE" != 'apply' ]; then
+            echo "Unsupported catalog release mode: $MODE"
+            exit 1
+          fi
+          echo "apply=$([ "$MODE" = 'apply' ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - name: Obtain scoped catalog importer token (explicit apply marker only)
+        if: github.event_name == 'push' && steps.gate.outputs.apply == 'true'
         id: oidc
         uses: actions/github-script@v7
         with:
@@ -62,7 +73,7 @@ jobs:
             core.setSecret(token)
             core.setOutput('token', token)
       - name: Reimport ONLY identified price discrepancies
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && steps.gate.outputs.apply == 'true'
         env:
           AUTO_SALE_CATALOG_IMPORT_BEARER: ${{ steps.oidc.outputs.token }}
           SOURCE_PATH: /tmp/awg-price-audit/corrections.json
@@ -77,7 +88,7 @@ jobs:
             node scripts/sync-autoworld-catalog.mjs
           fi
       - name: Verify targeted price corrections in live catalog
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && steps.gate.outputs.apply == 'true'
         run: |
           set -euo pipefail
           curl --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 10 --max-time 40 -fsS \
