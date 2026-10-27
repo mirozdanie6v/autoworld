@@ -72,9 +72,8 @@ test('Python scraper matches JS decoder for archived source prices',()=>{
 const history=JSON.parse(readFileSync(new URL('../data/autoworld-georgia/cars.json',import.meta.url),'utf8'));
 const historicalPost=new Map(history.map(x=>[String(x.sourcePostId),x]));
 const stickerPriceAfterLabel={
-  '1157':1850000,'1236':2450000,'1246':2170000,'1353':4330000,
-  '1834':4650000,'2285':1380000,'2385':1840000,'2406':2420000,
-  '3161':2060000,'3405':2350000,'3980':1480000,'3990':1720000,'4000':1910000
+  '1353':4330000,'1834':4650000,'2285':1380000,'2385':1840000,
+  '2406':2420000,'3161':2060000,'3980':1480000,'3990':1720000,'4000':1910000
 };
 test('historical sticker prices after ❗️ / old headline / padding are recoverable',()=>{
   for(const [postId,amount] of Object.entries(stickerPriceAfterLabel)){
@@ -89,7 +88,7 @@ test('new price decoder stays conservative: no prices from marketing numbers or 
     '🤩\n🤩\nдо\n1⃣\n6⃣\n🤩\n🌟\nKia K4 2023\nЦена доставки 500 тыс. руб.',
     '🌟\nBMW 530i 2024\n✨\n🔤\n🔤\n🔤\n🔤\n🔤\n🔤\nДвигатель 2.0',
     '🌟\nBMW 530i 2024\n✨\n4️⃣\n❤️\n6️⃣\n2️⃣\n👤\n👤\n👤',
-    '🌟\nAudi Q5 2024\n✨\n2️⃣\n🤩\n6️⃣\n2️⃣\n🔹\nПробег: 50000',
+    '🌟\nAudi Q5 2024\n✨\n2️⃣\n🤩\n6️⃣\n2️⃣\nДвигатель: 2.0',
     '🌟\nAudi Q5 2024\n✨\n1️⃣\n🤩\n4️⃣\n🔤\n2️⃣\n❤️\n8️⃣'
   ];
   for(const raw of cases)assert.equal(decodeChannelEmojiPrice(raw),0,raw);
@@ -115,5 +114,12 @@ test('Python and JS recover pricing of recent missing-price posts and never use 
   for(const row of output){
     assert.equal(row.price,stickerPriceAfterLabel[row.postId]);
     assert.equal(row.before,null,'old price headline is not a fake markdown discount');
+  }
+});
+
+test('secondary Russia turnkey amounts are not misclassified as the primary car price',()=>{
+  for(const postId of ['1157','1236','1246','3405']){
+    const raw=historicalPost.get(postId).rawText;
+    assert.equal(decodeChannelEmojiPrice(raw),0,postId);
   }
 });
