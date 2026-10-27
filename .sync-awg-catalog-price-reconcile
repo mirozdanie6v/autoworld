@@ -1,6 +1,7 @@
 mode=apply
 source=@AutoWorld_Georgia
 scope=existing-price-records
-reason=2026-10-27-audit-40513950450-116-confirmed-corrections
+reason=2026-10-27-canonical-oidc-price-repair-116-candidates
 approved_pr=93
+verified_read_only_run=40513950450
 replace_source_all=false
