@@ -74,11 +74,11 @@ try{
   assert.equal((await bridge.recordMiniAppEvent({access,eventType:'miniapp_open'})).status,'recorded');
   assert.equal((await bridge.recordMiniAppEvent({access,eventType:'miniapp_open'})).status,'duplicate');
   assert.equal((await bridge.recordMiniAppEvent({
-    access,eventType:'vehicle_view',carId:'verified-car',
+    access,eventType:'vehicle_detail_click',carId:'verified-car',
     catalog:[{id:'verified-car',active:true}]
   })).status,'recorded');
   assert.equal((await bridge.recordMiniAppEvent({
-    access,eventType:'vehicle_view',carId:'hidden-car',
+    access,eventType:'vehicle_detail_click',carId:'hidden-car',
     catalog:[{id:'hidden-car',active:false}]
   })).reason,'vehicle_not_in_current_catalog');
 
@@ -96,9 +96,9 @@ try{
   const finalReceipts=(await repository.listEvents({limit:30})).events;
   assert.equal(finalReceipts.filter(x=>x.eventType==='lead_submit').length,1);
   assert.equal(finalReceipts.find(x=>x.eventType==='lead_submit').campaignId,'StageB-Real-YDB');
-  assert.equal(finalReceipts.find(x=>x.eventType==='manager_contact').campaignId,'StageB-Real-YDB');
+  assert.equal(finalReceipts.find(x=>x.eventType==='first_manager_action').campaignId,'StageB-Real-YDB');
   assert.equal(finalReceipts.filter(x=>x.eventType==='miniapp_open').length,1);
-  assert.equal(finalReceipts.filter(x=>x.eventType==='vehicle_view').length,1);
+  assert.equal(finalReceipts.filter(x=>x.eventType==='vehicle_detail_click').length,1);
 
   const vkOps=await bridge.enrichLeadOperations(sanitized.operations,{
     role:'client',authenticated:true,authType:'vk',user:{id:'111111'}
