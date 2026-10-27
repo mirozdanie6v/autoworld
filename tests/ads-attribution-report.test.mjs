@@ -95,3 +95,27 @@ test('malformed event order and missing continuation page fail closed',async()=>
     repository:{listEvents:async()=>({events:[],nextCursor:'orphan'})}
   }),/invalid_ads_event_cursor/);
 });
+
+test('streaming report handles more than 25k receipts with correct per-campaign unique users',async()=>{
+  const total=25250;
+  let calls=0;
+  const repository={
+    async listEvents({cursor='',limit}){
+      calls++;
+      const first=cursor?Number(cursor.slice(2))+1:1;
+      const events=[];
+      for(let i=first;i<=Math.min(first+limit-1,total);i++){
+        events.push(evt('e_'+String(i).padStart(7,'0'),'scale-campaign',
+          i%5===0?'lead_submit':'bot_start',i%2===0?A:B));
+      }
+      return {events,nextCursor:first+limit-1<total?events.at(-1).eventId:null};
+    }
+  };
+  const rows=await summarizeAdsCampaignsFromRepository({repository,pageSize:250});
+  assert.equal(rows.length,1);
+  assert.equal(rows[0].botStarts,20200);
+  assert.equal(rows[0].leadSubmissions,5050);
+  assert.equal(rows[0].uniqueBotUsers,2);
+  assert.equal(rows[0].costPerLead,null);
+  assert.ok(calls>100);
+});
