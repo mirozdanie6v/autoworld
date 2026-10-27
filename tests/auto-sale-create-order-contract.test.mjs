@@ -81,7 +81,7 @@ test('server rejects mismatched agreed order total or fabricated advance percent
      method:'Банк',paymentStage:'auction_deposit'}]};
  const initial={revision:9,initialized:true,leads:[lead],quotes:[q],orders:[],notes:{},team:[],catalog:[]};
  const badPrice=await syncYdbState(makeStore(initial),{...initial,baseRevision:9,
-   leads:[{...lead,status:'Сделка'}],orders:[order]});
+   leads:[{...lead,status:'Сделка'}],orders:[{...order,paymentPlan:buildUsPaymentPlan({...q,total:q.total},lead.deposit)}]});
  assert.equal(badPrice.data.error,'agreed_order_total_mismatch');
  const badPct=await syncYdbState(makeStore(initial),{...initial,baseRevision:9,
    leads:[{...lead,status:'Сделка',depositPercent:40}],
@@ -89,6 +89,7 @@ test('server rejects mismatched agreed order total or fabricated advance percent
  assert.equal(badPct.data.error,'auction_advance_percent_mismatch');
 });
 
+let bootCounter=0;
 async function boot(origin,legacy=false){
  const dom=new JSDOM('<!doctype html><div id="app"></div>',{url:'https://awgcars.ru/'});
  Object.assign(globalThis,{window:dom.window,document:dom.window.document,
@@ -105,7 +106,7 @@ async function boot(origin,legacy=false){
  localStorage.setItem('auto-sale-team-v1',JSON.stringify(seedTeam()));
  localStorage.setItem('auto-sale-notes-v2','{}');
  localStorage.setItem('auto-sale-catalog-v1','[]');
- await import('../public/auto-sale-app-v3.mjs?create-order-'+origin+'-'+legacy);
+ await import('../public/auto-sale-app-v3.mjs?create-order-'+origin+'-'+legacy+'-'+(++bootCounter));
  const root=document.querySelector('#app');
  root.querySelector('[data-go="leads"]').click();
  root.querySelector('[data-lead="L-103"]').click();
