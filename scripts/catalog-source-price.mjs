@@ -41,7 +41,7 @@ export function rubAmount(value=''){
   return m?Number(m[1].replace(/[^\d]/g,'')):0;
 }
 const TURNKEY=/цен[аы]\s+в\s+россии|стоимост[ьи]\s+автомобиля\s+под\s+ключ|с\s+ремонтом\s+под\s*🔧/iu;
-const PRIMARY=/^(?:\+[-+ ]*)?(?:цена|стоимость\s+автомобиля|цена\s+авто)\b/iu;
+const PRIMARY=/^(?:\+[-+ ]*)?(?:цена|стоимость\s+автомобиля|цена\s+авто)(?=\s|[:–—-]|$)/iu;
 const DISCOUNT=/скидк|цен[аыу]\s+сниж|цен[аыу]\s+со\s+скидк|акци[яию]|горячая\s+цена/iu;
 
 export function extractSourcePrices(raw=''){
@@ -58,7 +58,9 @@ export function extractSourcePrices(raw=''){
       const amount=rubAmount(block);
       if(amount>0){turnkey=turnkey||amount;turnkeyContext=true;}
     }
-    if(PRIMARY.test(line)&&!TURNKEY.test(block.slice(0,120))){
+    const sourceLabel=PRIMARY.test(line)||
+      (DISCOUNT.test(line)&&/цен[аы]\s*[:–—-]/iu.test(line));
+    if(sourceLabel&&!TURNKEY.test(block.slice(0,120))){
       const amount=rubAmount(line);
       if(amount>0)primary=primary||amount;
     }
