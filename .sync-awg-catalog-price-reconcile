@@ -1,7 +1,7 @@
 mode=apply
 source=@AutoWorld_Georgia
 scope=existing-price-records
-reason=2026-10-27-regression-verified-nonadjacent-price-stickers-pr98
-approved_pr=98
-audit_only_run=40539404575
+reason=2026-10-27-legacy-russia-turnkey-18-backfill-with-pr99-source-proof
+approved_pr=99
+audit_only_run=40540166435
 replace_source_all=false
