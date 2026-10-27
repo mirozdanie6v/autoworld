@@ -400,7 +400,7 @@ const server=http.createServer(async(req,res)=>{
         for(const item of items){
           const sourcePostId=String(item.sourcePostId||'').trim();
           const priceRub=Number(item.priceRub);
-          if(!/^\\d+$/.test(sourcePostId)||item.id!=='AWG-'+sourcePostId||
+          if(!/^\d+$/.test(sourcePostId)||item.id!=='AWG-'+sourcePostId||
              !Number.isSafeInteger(priceRub)||priceRub<100000||priceRub>100000000){
             json(res,{error:'price_repair_invalid_item',id:item.id},400);return;
           }
