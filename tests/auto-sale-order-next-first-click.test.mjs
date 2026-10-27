@@ -68,7 +68,8 @@ for(const origin of ['США','Грузия']){
       writes.push(operations);
       const patch=operations.find(x=>x.resource==='order');
       assert.equal(patch.input.stage,writes.length===1?'Подготовка к отправке':'В пути');
-      assert.equal(patch.input.location,origin==='США'?'Лос-Анджелес, готов к отправке':'Тбилиси, готов к отправке');
+      if(writes.length===1)assert.equal(patch.input.location,origin==='США'?'Лос-Анджелес, готов к отправке':'Тбилиси, готов к отправке');
+      else assert.equal(patch.input.location,undefined,'the second transition must not overwrite an unchanged location');
       // The app receives another server snapshot while the first click is saving;
       // it must update the live record, not a detached pre-refresh object.
       if(writes.length===1){
