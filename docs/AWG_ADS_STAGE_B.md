@@ -54,7 +54,7 @@ deployment approval.
   using the **immutable campaign snapshot stored at lead creation**. Later
   /start touches must not rewrite a prior lead's campaign.
 - `server/ads-attribution-stage-b.mjs`: `reconcilePersistedLead` replays
-  canonical lead IDs from persisted CRM and derives `manager_contact`
+  canonical lead IDs from persisted CRM and derives `first_manager_action`
   **only** from the server-owned `firstManagerActionAt` timestamp.
 - `server/ads-stage-b-reconciliation.mjs`: bounded, restartable,
   idempotent keyset-paginated reconciliation from the authoritative CRM
@@ -65,7 +65,7 @@ deployment approval.
   independently confirmed persistent telemetry.
 - `/api/auto-sale/ads/event`: staging-only POST, signed Telegram
   `initData` and verified server identity required. The frontend sends
-  `miniapp_open` and `vehicle_view` with a catalogue vehicle ID,
+  `miniapp_open` and `vehicle_detail_click` with a catalogue vehicle ID,
   **never a campaign ID**. The backend checks the active server catalogue;
   duplicate user/event/car/day receipts are idempotent. VK is excluded.
   Client tracking is loaded only when the authenticated state explicitly
@@ -88,11 +88,12 @@ deployment approval.
   and test the actual server CRM transaction + separate ads receipt.
   The current real-YDB tests use the official disposable local YDB;
   the synthetic CRM commit is not an actual transaction in managed staging.
-- Guarantee recovery of historical campaign attribution if the separate
-  ads database is unavailable *at the moment a CRM lead is saved*.
-  Presently, the lead is preserved and a metrics warning emitted but its
-  initial attribution snapshot might be missing. Backfilling it from the
-  user's **current** campaign is unsafe.
+- Stage B now writes a server-owned `lookup_unavailable` marker when the
+  ads read fails; the reconciler reads indexed bot history strictly as of
+  `clientSubmittedAt` (never a later campaign), then persists the repaired
+  snapshot into canonical CRM via version-checked CAS. A bot touch that was
+  never durably stored, lawfully deleted or past its retention period cannot
+  be reconstructed, and attribution must remain unknown.
 - Production-grade scheduler leader election, persistent metrics/audit,
   monitoring, IAM policy, tested rollback and retention/erasure jobs.
   The current 15-minute timer is staging-only and per-process,
@@ -126,3 +127,53 @@ no Yandex Cloud secrets, no deployment tasks and no migrations.
 
 A draft PR is for review only; never enable auto-merge or production
 deployment until the above gates and the user's release approval are met.
+
+
+## 27 October 2026 — audit repairs / staging-only acceptance
+
+All work remains in draft PR #83. Production, paid advertising, VK and live
+Telegram webhook settings were not changed.
+
+1. **Outage recovery**: additional indexed `awg_ads_touches_by_subject_time`
+   table, bounded ads lookup timeout and a server-owned CRM outage marker.
+   Reconciliation reconstructs a campaign only from verifiable touches at
+   or before the server-validated lead submission, never the user's current
+   campaign, then writes a canonical immutable snapshot using optimistic
+   concurrency control. Stale patches are rejected.
+2. **Reliable submission**: the primary CRM save is acknowledged before
+   optional analytics receipts are written; queued receipts can be replayed
+   from persisted CRM. No form hangs on a stuck secondary ads database.
+3. **Honest metrics**: `first_manager_action` represents a verified first
+   manager status change, not an actual customer contact;
+   `vehicle_detail_click` represents clicking the catalogue card, not
+   proof of display. Director panel uses those names.
+4. **Privacy and spoofing**: internal campaign snapshots and outage markers
+   are excluded from client `/state` and single-lead GET responses.
+   Both Telegram managers and API-key callers have ads campaign fields
+   stripped from ordinary client-initiated CRM mutations; internal CAS
+   persistence is server-only.
+5. **Reporting scale**: primary-key streaming aggregation removes the
+   previous 25,000-receipt default ceiling and avoids buffering the complete
+   event history in process memory; the default ceiling is now
+   `pageSize=250 * maxPages=1000` (250,000 events). A materialized
+   rollup is still needed for larger live deployments.
+6. **Verified real local CRM transactions**: the isolated YDB test now runs
+   real normalized `mutateAutoSaleEntityBatch`, proves a persisted immutable
+   campaign, reproduces an ads lookup outage, checks historical as-of
+   recovery, CAS backfill and stale-version rejection. This does not
+   substitute for Yandex Cloud managed staging.
+
+**Verified CI at end of audit repairs:** 61/61 isolated Stage A+B tests,
+523/523 AutoWorld tests, 10/10 Relay tests:
+https://github.com/mirozdanie6v/autoworld/actions/runs/40475603790
+
+**Actual local YDB, normalized CRM and CAS repair:**
+https://github.com/mirozdanie6v/autoworld/actions/runs/40475530626
+
+**No production approval** until a physically separate managed Yandex Cloud
+staging YDB is verified, least-privilege IAM/schema is configured, live
+Telegram signed and VK regression tests are performed, persistent
+distributed scheduler/retention/audit/alerts are operational, user erasure
+also covers CRM campaign metadata, legal retention/tombstone and re-consent
+policies are approved, and rollback is tested. Third-party paid clicks,
+spend and impressions remain unavailable. No reseller fees authorized.
