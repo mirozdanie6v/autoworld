@@ -4,8 +4,10 @@ const TYPES={
   bot_start:'botStarts',
   miniapp_open:'miniappOpens',
   vehicle_view:'vehicleViews',
+  vehicle_detail_click:'vehicleDetailClicks',
   lead_submit:'leadSubmissions',
-  manager_contact:'managerContacts'
+  manager_contact:'managerContacts',
+  first_manager_action:'managerActions'
 };
 const CAMPAIGN=/^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/;
 
@@ -16,8 +18,10 @@ function createRow(campaignId){
     uniqueBotUsers:0,
     miniappOpens:0,
     vehicleViews:0,
+    vehicleDetailClicks:0,
     leadSubmissions:0,
     managerContacts:0,
+    managerActions:0,
     paidClicks:null,
     impressions:null,
     verifiedSpend:null,
