@@ -27,8 +27,8 @@ test('authorized director panel fetches server report on opening; uses text node
       calls.push({url,opts});
       return {ok:true,json:async()=>({rows:[{
         campaignId:'<img src=x onerror=alert(1)>',
-        botStarts:2,miniappOpens:1,vehicleViews:3,
-        leadSubmissions:1,managerContacts:1,costPerLead:null
+        botStarts:2,miniappOpens:1,vehicleDetailClicks:3,
+        leadSubmissions:1,managerActions:1,costPerLead:null
       }]})};
     }
   });
