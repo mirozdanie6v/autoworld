@@ -1,5 +1,5 @@
 AWG production release
 requested_at=2026-10-27
-source_sha=0043c38da69bdd8ace94fae9025833520351cfec
-reason=fix-client-preliminary-quote-approval-and-changes-pr86
+source_sha=4cd096d45211191fbbe0e48c58841bea8a43d9f4
+reason=client-preliminary-quote-approval-atomic-server-validation-pr87
 run_real_client_e2e=false
