@@ -121,7 +121,8 @@ const vk=createVkService();
 const vkWeb=createVkWebAuth();
 // Optional staging-only background recovery of conversion receipts from the
 // authoritative CRM. Explicit second flag prevents work on standard startup.
-if(adsStageB.enabled&&process.env.AWG_ADS_STAGE_B_RECONCILE_ENABLED==='true'){
+if(adsStageB.enabled&&process.env.AWG_ADS_STAGE_B_RECONCILE_ENABLED==='true'
+  &&process.env.AWG_ADS_MANAGED_JOBS_ENABLED!=='true'){
   const job=createAdsLeadReconciliationJob({
     listCommittedLeads:createPersistedLeadPageReader({
       readAuthoritativeState:async()=> (await getApiState()).state
