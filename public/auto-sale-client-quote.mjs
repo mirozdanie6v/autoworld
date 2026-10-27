@@ -98,10 +98,20 @@ async function saveDecision(id,decision,comment=''){
   saving=true;enhance();
   try{
     if(window.__AUTO_SALE_ENTITY_BATCH__){
-      await window.__AUTO_SALE_ENTITY_BATCH__([
-        {resource:'quote',operation:'patch',id:q.id,input:nextQuote},
-        {resource:'note',operation:'create',leadId:q.leadId,input:note}
+      // Approval is the critical write. Do not couple it to an optional lead
+      // note: a concurrently updated lead must not reject a valid quote decision.
+      // The confirmed quote transition itself is audited and notifies managers.
+      const patch=decision==='agreed'
+        ?{status:'Согласован',clientDecision:'agreed',clientDecisionAt:now,agreedAt:q.agreedAt||now,updatedAt:now}
+        :{status:q.status==='Отправлен'?'На согласовании':q.status,clientDecision:'changes_requested',clientDecisionAt:now,clientComment:comment.trim(),updatedAt:now};
+      const result=await window.__AUTO_SALE_ENTITY_BATCH__([
+        {resource:'quote',operation:'patch',id:q.id,input:patch}
       ]);
+      if(!result?.ok){
+        const error=new Error(result?.error||'client_decision_not_committed');
+        error.code=String(result?.error||'client_decision_not_committed');
+        throw error;
+      }
     }else{
       list[index]=nextQuote;write(K.quotes,list);
       const localNotes=read(K.notes,{});localNotes[q.leadId]=localNotes[q.leadId]||[];localNotes[q.leadId].push(note);write(K.notes,localNotes);
@@ -120,14 +130,27 @@ async function saveDecision(id,decision,comment=''){
       return true;
     }
     list[index]=nextQuote;write(K.quotes,list);
-    const notes=read(K.notes,{});notes[q.leadId]=notes[q.leadId]||[];notes[q.leadId].push(note);write(K.notes,notes);
+    // Do not synthesize an uncommitted note in the client cache: the server
+    // records the clientDecision on the quote and queues manager notifications.
     window.dispatchEvent(new CustomEvent('auto-sale-client-decision',{detail:{leadId:q.leadId,quoteId:q.id,decision}}));
     queueMicrotask(enhance);
     return true;
   }catch(error){
-    console.warn('AUTO SALE client decision entity save failed',error);
+    const code=String(error?.code||error?.message||'client_decision_failed');
+    // Log an operational code, never raw quote fields, auth data or client IDs.
+    console.warn('AUTO SALE client decision failed',code);
     window.dispatchEvent(new CustomEvent('auto-sale-client-decision',{detail:{leadId:q.leadId,quoteId:q.id,decision:'failed'}}));
-    saving=false;enhance();decisionError(error?.code==='entity_conflict'?'Расчёт был изменён менеджером. Откройте его заново и повторите решение.':'Решение не сохранено на сервере. Проверьте соединение и повторите действие.');
+    saving=false;enhance();
+    const message=['entity_conflict','client_quote_locked'].includes(code)
+      ?'Расчёт обновился на сервере. Закройте и снова откройте карточку с актуальной оценкой.'
+      :['row_version_unavailable','row_version_required','entity_shadow_missing'].includes(code)
+        ?'Не удалось получить актуальную версию расчёта. Обновите карточку заявки и повторите подтверждение.'
+        :['client_entity_forbidden','telegram_auth_required','admin_required'].includes(code)
+          ?'Сессия клиента не подтверждена для этого расчёта. Повторно откройте Mini App из бота.'
+          :['invalid_quote','invalid_quote_transition','locked_quote_changed'].includes(code)
+            ?'Сервер отклонил состояние расчёта. Попросите менеджера проверить актуальную версию.'
+            :'Не удалось сохранить решение на сервере. Проверьте соединение и повторите действие.';
+    decisionError(message);
     return false;
   }finally{
     saving=false;enhance();
