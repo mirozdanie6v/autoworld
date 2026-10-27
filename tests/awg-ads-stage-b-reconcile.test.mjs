@@ -150,3 +150,34 @@ test('outage marker without valid historical touch stays unattributed, never ass
   assert.equal((await bridge.reconcilePersistedLead(lead)).reason,'no_verified_historical_touch');
   assert.equal(repository.snapshotForTests().events.filter(x=>x.eventType==='lead_submit').length,0);
 });
+
+test('reconciliation requires CAS persistence for recovered attribution and retries version conflicts',async()=>{
+  let current={id:'L-PENDING',adsAttributionStatus:'lookup_unavailable'};
+  let fail=true;
+  const alerts=[],audits=[];
+  const bridge={enabled:true,reconcilePersistedLead:async()=>({
+    status:'recorded',recoveredSnapshot:{source:'Telegram Ads',
+      firstTouch:{campaignId:'A'},lastTouch:{campaignId:'A'}}
+  })};
+  const job=createAdsLeadReconciliationJob({
+    bridge,
+    listCommittedLeads:async()=>({leads:[current],nextCursor:null}),
+    persistRecoveredSnapshot:async(lead,snapshot)=>{
+      if(fail)return {ok:false};
+      current={...lead,adsAttribution:snapshot,adsAttributionStatus:'recovered'};
+      return {ok:true};
+    },
+    onAudit:async value=>audits.push(value),
+    onAlert:async value=>alerts.push(value)
+  });
+  const failed=await job.run({authorized:true});
+  assert.equal(failed.errors,1);
+  assert.equal(failed.recovered,0);
+  assert.ok(alerts.some(value=>value.code==='ads_reconciliation_lead_error'));
+  fail=false;
+  const good=await job.run({authorized:true});
+  assert.equal(good.errors,0);
+  assert.equal(good.recovered,1);
+  assert.equal(current.adsAttribution.lastTouch.campaignId,'A');
+  assert.equal(audits.length,2);
+});
