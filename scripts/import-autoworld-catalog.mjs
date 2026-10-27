@@ -147,6 +147,7 @@ function sourceQualityReason(source){
   const quality=catalogListingQuality({rawText:source.rawText,vin,brand:title.brand,model:title.model,year:title.year,sourcePostId:source.sourcePostId});
   if(quality)return quality;
   if(!photos.length)return'missing_recovered_photos';
+  if(sourceRubPrices(source).priceRub<=0&&extractBid(source)<=0)return'missing_verified_source_price';
   return'';
 }
 
@@ -217,6 +218,7 @@ export function normalizeCar(source){
   const names=canonicalVehicleName(rawBrand,rawModel,title.title||source.title,vin);
   const brand=names.brand,model=names.model;
   if(catalogListingQuality({rawText:source.rawText,vin,brand,model,year,sourcePostId:source.sourcePostId})||!photos.length)return null;
+  if(sourceRubPrices(source).priceRub<=0&&extractBid(source)<=0)return null;
 
   const engine=clean(source.engine)||field(source.rawText,'Двигатель');
   const transmission=clean(source.transmission)||field(source.rawText,'Коробка');
