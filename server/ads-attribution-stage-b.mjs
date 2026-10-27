@@ -132,6 +132,7 @@ export function createAdsStageBBridge({enabled=false,service,onFailure,lookupTim
       return {status:'ignored',reason:'not_verified_telegram_ads_lead'};
     }
     let campaignSnapshot=lead?.adsAttribution;
+    let recoveredSnapshot=null;
     if(campaignSnapshot?.source!=='Telegram Ads'
       ||!campaignSnapshot.lastTouch?.campaignId){
       if(lead?.adsAttributionStatus!=='lookup_unavailable')
@@ -147,6 +148,7 @@ export function createAdsStageBBridge({enabled=false,service,onFailure,lookupTim
       });
       campaignSnapshot=safeSnapshot(historical);
       if(!campaignSnapshot)return {status:'ignored',reason:'no_verified_historical_touch'};
+      recoveredSnapshot=campaignSnapshot;
     }
     const eventId='lead_'+createHash('sha256').update(leadId).digest('hex');
     if(typeof service.recordTrustedSnapshotEvent!=='function')
@@ -164,7 +166,7 @@ export function createAdsStageBBridge({enabled=false,service,onFailure,lookupTim
         attributionSnapshot:campaignSnapshot
       });
     }
-    return outcome;
+    return recoveredSnapshot?{...outcome,recoveredSnapshot}:outcome;
   }
   return {enabled,recordBotStart,enrichLeadOperations,recordCommittedLeads,reconcilePersistedLead,recordMiniAppEvent};
 }
