@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 8
     env:
-      YC_DEPLOY_SA_ID: ${{ vars.AWG_YC_DEPLOY_SA_ID || 'aje775bcl6hgp40eu8of' }}
+      YC_STAGING_SA_ID: ${{ vars.AWG_ADS_STAGING_SA_ID }}
       YC_FOLDER_ID: b1ggsmuiq7tb2d27f89q
     steps:
       - name: Require restricted AWG CI context
@@ -28,6 +28,8 @@ jobs:
           test "${GITHUB_REPOSITORY}" = "mirozdanie6v/autoworld"
           test "${GITHUB_REF_NAME}" = "feature/awg-ads-stage-b-integration"
           test "${YC_FOLDER_ID}" = "b1ggsmuiq7tb2d27f89q"
+          test -n "$YC_STAGING_SA_ID" || { echo '::error::AWG_ADS_STAGING_SA_ID must name the dedicated Yandex staging service account'; exit 1; }
+          test "$YC_STAGING_SA_ID" != 'aje775bcl6hgp40eu8of' || { echo '::error::Production deploy service account is forbidden for ads staging'; exit 1; }
       - name: Obtain short-lived GitHub OIDC token
         uses: actions/github-script@v7
         id: oidc
@@ -46,12 +48,12 @@ jobs:
             -H 'Content-Type: application/x-www-form-urlencoded' \
             --data-urlencode 'grant_type=urn:ietf:params:oauth:grant-type:token-exchange' \
             --data-urlencode 'requested_token_type=urn:ietf:params:oauth:token-type:access_token' \
-            --data-urlencode "audience=$YC_DEPLOY_SA_ID" \
+            --data-urlencode "audience=$YC_STAGING_SA_ID" \
             --data-urlencode "subject_token=$GITHUB_OIDC_TOKEN" \
             --data-urlencode 'subject_token_type=urn:ietf:params:oauth:token-type:id_token' \
             https://auth.yandex.cloud/oauth/token)
           CODE=$(printf '%s' "$RESPONSE" | tail -n1)
-          if [ "$CODE" != 200 ]; then echo "::error::Yandex OIDC unavailable: HTTP $CODE"; exit 1; fi
+          if [ "$CODE" != 200 ]; then echo "::error::Dedicated staging Yandex IAM token exchange failed: HTTP $CODE. Check exact OIDC subject, issuer, audience and service account federation"; exit 1; fi
           TOKEN=$(printf '%s' "$RESPONSE" | sed '$d' | jq -er '.access_token')
           echo "::add-mask::$TOKEN"
           DB_RESPONSE=$(curl -sS --connect-timeout 10 --max-time 30 -w '\n%{http_code}' \
