@@ -7,6 +7,7 @@
 import {Driver} from '@ydbjs/core';
 import {query} from '@ydbjs/query';
 import {MetadataCredentialsProvider} from '@ydbjs/auth/metadata';
+import {AccessTokenCredentialsProvider} from '@ydbjs/auth/access-token';
 import {createYdbStateStore} from '../server/ydb-state.mjs';
 import {createYdbDomainStore} from '../server/ydb-domain-store.mjs';
 import {mutateAutoSaleEntityBatch} from '../server/ydb-entity-commands.mjs';
@@ -58,7 +59,18 @@ if(subjectSecret.length<32||!/^[a-z0-9]{20}$/.test(iamPrincipalId))
 
 const emitMetric=async metric=>console.info('AWG_ADS_METRIC',JSON.stringify(metric));
 const emitAlert=async alert=>console.error('AWG_ADS_ALERT',JSON.stringify(alert));
-const credentials=new MetadataCredentialsProvider();
+// GitHub Actions receives a short-lived IAM token only from the scoped
+// dedicated STAGING federation. Yandex serverless containers use metadata IAM.
+const inGithubFederation=env.AWG_ADS_STAGING_CI_OIDC==='true';
+if(inGithubFederation&&(
+  env.GITHUB_ACTIONS!=='true'
+  ||env.AWG_ADS_STAGING_SA_ID!==iamPrincipalId
+  ||!String(env.YDB_ACCESS_TOKEN_CREDENTIALS||'')
+  ||env.AWG_ADS_STAGING_SA_ID===env.AWG_YC_DEPLOY_SA_ID
+))reject('ads_managed_ci_requires_dedicated_federated_staging_iam');
+const credentials=inGithubFederation
+  ?new AccessTokenCredentialsProvider({token:String(env.YDB_ACCESS_TOKEN_CREDENTIALS)})
+  :new MetadataCredentialsProvider();
 let driver=null,legacyStore=null,domainStore=null;
 try{
   driver=new Driver(adsUri,{credentialsProvider:credentials});
