@@ -247,8 +247,7 @@ export function createYdbAdsAttributionRepository(sql){
             await tx`DELETE FROM awg_ads_events_by_subject WHERE subject_key=${subjectKey} AND event_id=${eventId}`;
           await tx`DELETE FROM awg_ads_touches_by_subject_time WHERE
             subject_key=${subjectKey} AND occurred_at=${occurredAt} AND event_id=${eventId}`;
-            await tx`DELETE FROM awg_ads_touches_by_subject_time WHERE
-              subject_key=${subjectKey} AND occurred_at=${occurredAt} AND event_id=${eventId}`;
+            
             await tx`DELETE FROM awg_ads_events_by_time WHERE occurred_at=${occurredAt} AND event_id=${eventId}`;
             deletedEvents++;
           }
@@ -285,6 +284,8 @@ export function createYdbAdsAttributionRepository(sql){
           const eventId=String(row.event_id),subjectKey=String(row.subject_key),occurredAt=String(row.occurred_at);
           await tx`DELETE FROM awg_ads_events WHERE event_id=${eventId}`;
           await tx`DELETE FROM awg_ads_events_by_subject WHERE subject_key=${subjectKey} AND event_id=${eventId}`;
+          await tx`DELETE FROM awg_ads_touches_by_subject_time WHERE
+            subject_key=${subjectKey} AND occurred_at=${occurredAt} AND event_id=${eventId}`;
           await tx`DELETE FROM awg_ads_events_by_time WHERE occurred_at=${occurredAt} AND event_id=${eventId}`;
         }
         for(const row of subjectRows.slice(0,batchSize)){
