@@ -108,3 +108,55 @@ local YDB normalized CRM transaction, campaign replay, CAS, scheduler lease.
 managed schema, scheduler, reporting/alerts, cross-store deletion and full
 physical Telegram/VK end to end. Therefore **not accepted** as a production
 release. Resync branch with current main immediately before release audit.
+
+
+## 27.10.2026 — Gated managed job runner prepared, NOT enabled
+
+A dedicated GitHub Actions staging workflow has been added:
+`.github/workflows/run-awg-ads-staging-maintenance.yml`, with CLI
+`scripts/run-awg-ads-staging-operations.mjs`. On the feature branch only
+syntax is executed. Once explicitly released to the default branch, the
+managed schedule is reconciliation every 15 minutes and retention daily,
+but the live job stays OFF by default. A single GitHub concurrency group
+and isolated Ads-YDB serializable leases prevent overlapping job runs.
+
+Before authorizing any cloud execution, all of these must be independently
+verified and configured in the `awg-ads-staging` environment:
+- Dedicated GitHub OIDC federated service account
+  `AWG_ADS_STAGING_SA_ID`; do not reuse the production deploy service account.
+- `AWG_ADS_STAGING_YDB_CONNECTION_STRING` and
+  `AWG_ADS_STAGING_CRM_YDB_CONNECTION_STRING` must point to two distinct
+  *managed staging* YDB instances, never the existing production or VK test
+  databases. Their exact database paths must appear in
+  `AWG_ADS_STAGING_APPROVED_DATABASE_PATHS` and both must differ from
+  `AWG_ADS_PRODUCTION_DB_PATH`.
+- Private `AWG_ADS_STAGE_B_SUBJECT_SECRET` (at least 32 chars), approved
+  scheduler principal `AWG_ADS_STAGING_SCHEDULER_PRINCIPAL`,
+  `AWG_ADS_STAGING_IAM_VERIFIED=true`, then
+  `AWG_ADS_STAGING_MAINTENANCE_ENABLED=true`.
+- For retention, `AWG_ADS_STAGING_RETENTION_APPROVED=true` **only after**
+  privacy/legal policy approval. Audit/alert monitoring and rollback must
+  be observed in the managed staging runs, not inferred from the CI.
+- No schema is created by the cron runner; verified isolated migration is
+  separately gated by `scripts/prepare-awg-ads-stage-b-staging.mjs`.
+
+Read-only Yandex OIDC probe failed with **401 invalid_client**:
+https://github.com/mirozdanie6v/autoworld/actions/runs/40493047780 .
+An isolated staging SA/federation fix is tracked in
+https://linear.app/viiversion/issue/VII-191 .
+Neither a managed Ads YDB nor a managed cron execution has been verified.
+
+Code and QA evidence:
+- Feature code, privacy index TTL, CAS cross-store erasure and fail-closed
+  metrics: https://github.com/mirozdanie6v/autoworld/pull/83
+- Local normalized CRM/Ads YDB, 2 campaigns, outage/replay, cross-store
+  erasure and VK control:
+  https://github.com/mirozdanie6v/autoworld/actions/runs/40492850166
+- Managed workflow **syntax-only** (no Cloud API):
+  https://github.com/mirozdanie6v/autoworld/actions/runs/40494088909
+- CI (73 ads tests, 546 AutoWorld, 10 Relay):
+  https://github.com/mirozdanie6v/autoworld/actions/runs/40494097601
+
+**Acceptance stays NO-GO** for cloud operations, physical Telegram/VK,
+production deployment, and real ad spend pending verified staging IAM,
+resource constraints, physical E2E/rollback, and privacy policy.
