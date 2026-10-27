@@ -1,10 +1,10 @@
 release=direct-object-storage
-source=c6633586aae11516487310ad5fb159418af3bbc9
-reason=legacy-russia-turnkey-prices-18-historical-catalog-cards-pr99
+source=4cf449c27b93a698c0d997751cfd2195bfb29687
+reason=correct-source-turnkey-prices-in-catalog-detail-pr100
 preserve_backend=true
 preserve_ydb=true
 preserve_telegram=true
 vk_auth=enabled
 vk_messaging=enabled
-verified_run=40540165861
+verified_run=40544468574
 browser_rollback_gate=true
