@@ -8,6 +8,7 @@ export const ADS_ATTRIBUTION_TABLES=[
   'awg_ads_subjects',
   'awg_ads_events',
   'awg_ads_events_by_subject',
+  'awg_ads_touches_by_subject_time',
   'awg_ads_events_by_time',
   'awg_ads_erasure_blocks'
 ];
@@ -54,6 +55,17 @@ export async function ensureAdsAttributionSchema(sql,{target}={}){
       event_id Utf8 NOT NULL,
       occurred_at Utf8 NOT NULL,
       PRIMARY KEY (subject_key,event_id)
+    )
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS awg_ads_touches_by_subject_time (
+      subject_key Utf8 NOT NULL,
+      occurred_at Utf8 NOT NULL,
+      event_id Utf8 NOT NULL,
+      campaign_id Utf8 NOT NULL,
+      ad_id Utf8 NOT NULL,
+      creative_id Utf8 NOT NULL,
+      PRIMARY KEY (subject_key,occurred_at,event_id)
     )
   `;
   await sql`
@@ -147,10 +159,35 @@ export function createYdbAdsAttributionRepository(sql){
         `;
         await tx`UPSERT INTO awg_ads_events_by_subject (subject_key,event_id,occurred_at)
           VALUES (${subjectKey},${eventId},${touch.timestamp})`;
+        await tx`UPSERT INTO awg_ads_touches_by_subject_time
+          (subject_key,occurred_at,event_id,campaign_id,ad_id,creative_id)
+          VALUES (${subjectKey},${touch.timestamp},${eventId},
+                  ${touch.campaignId},${touch.adId},${touch.creativeId})`;
         await tx`UPSERT INTO awg_ads_events_by_time (occurred_at,event_id,subject_key)
           VALUES (${touch.timestamp},${eventId},${subjectKey})`;
         return {recorded:true};
       });
+    },
+    // Recovery is strictly as-of a SERVER-OWNED CRM submission timestamp.
+    // Rows are indexed by subject and UTC time; never use the current lastTouch
+    // to attribute a historical lead. Reject incomplete histories.
+    async listBotTouchesAt({subjectKey,asOf,limit=1000}={}){
+      if(!/^[a-f0-9]{64}$/.test(subjectKey)
+        ||typeof asOf!=='string'||!Number.isFinite(Date.parse(asOf))
+        ||!Number.isInteger(limit)||limit<1||limit>1000)
+        throw new Error('invalid_ads_historical_touch_query');
+      const [rows]=await sql`
+        SELECT subject_key,occurred_at,event_id,campaign_id,ad_id,creative_id
+        FROM awg_ads_touches_by_subject_time
+        WHERE subject_key=${subjectKey} AND occurred_at <= ${asOf}
+        ORDER BY subject_key,occurred_at DESC,event_id DESC
+        LIMIT ${new Uint64(BigInt(limit+1))}
+      `;
+      if(rows.length>limit)throw new Error('ads_historical_touch_limit_reached');
+      return rows.map(row=>({
+        campaignId:String(row.campaign_id),adId:String(row.ad_id||''),
+        creativeId:String(row.creative_id||''),timestamp:String(row.occurred_at)
+      }));
     },
     async readSubject(subjectKey){
       const [rows]=await sql`
@@ -208,6 +245,10 @@ export function createYdbAdsAttributionRepository(sql){
             const eventId=String(row.event_id),occurredAt=String(row.occurred_at);
             await tx`DELETE FROM awg_ads_events WHERE event_id=${eventId}`;
             await tx`DELETE FROM awg_ads_events_by_subject WHERE subject_key=${subjectKey} AND event_id=${eventId}`;
+          await tx`DELETE FROM awg_ads_touches_by_subject_time WHERE
+            subject_key=${subjectKey} AND occurred_at=${occurredAt} AND event_id=${eventId}`;
+            await tx`DELETE FROM awg_ads_touches_by_subject_time WHERE
+              subject_key=${subjectKey} AND occurred_at=${occurredAt} AND event_id=${eventId}`;
             await tx`DELETE FROM awg_ads_events_by_time WHERE occurred_at=${occurredAt} AND event_id=${eventId}`;
             deletedEvents++;
           }
