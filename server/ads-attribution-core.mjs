@@ -146,6 +146,30 @@ export function createAdsAttributionService({
   async function getAttribution({telegramUserId}={}){
     return (await activeSubject(telegramUserId,at(clock).getTime()))?.attribution||null;
   }
+  // Outage recovery: derive a conversion's campaign ONLY from recorded bot
+  // touches occurring at or before the server-verified CRM submission time.
+  // Never use a subsequently changed lastTouch. Incomplete/expired history
+  // fails closed instead of fabricating advertising attribution.
+  async function getAttributionAtTime({telegramUserId,asOf}={}){
+    validateTelegramUserId(telegramUserId);
+    const when=Date.parse(asOf);
+    const now=at(clock).getTime();
+    if(typeof asOf!=='string'||!Number.isFinite(when)
+      ||when>now+MAX_FUTURE_SKEW_MS||when<now-90*86400000)
+      throw new Error('invalid_ads_recovery_timestamp');
+    if(typeof repository.listBotTouchesAt!=='function')
+      throw new Error('ads_historical_touch_index_required');
+    let matched=null;
+    for(const key of allSubjectKeys(telegramUserId)){
+      const touches=await repository.listBotTouchesAt({subjectKey:key,asOf,limit:1000});
+      if(!touches.length)continue;
+      const sorted=[...touches].sort((a,b)=>a.timestamp.localeCompare(b.timestamp));
+      const attribution=snapshot({firstTouch:sorted[0],lastTouch:sorted.at(-1)},when-windowMs,when);
+      if(attribution&&(!matched||attribution.lastTouch.timestamp>matched.lastTouch.timestamp))
+        matched=attribution;
+    }
+    return matched;
+  }
   async function recordTrustedEvent({telegramUserId,eventType,eventId}={}){
     if(!ALLOWED_EVENTS.has(eventType))throw new Error('invalid_ads_event_type');
     const matched=await activeSubject(telegramUserId,at(clock).getTime());
@@ -198,7 +222,7 @@ export function createAdsAttributionService({
     if(!Number.isInteger(limit)||limit<1||limit>1000)throw new Error('invalid_ads_event_limit');
     return repository.listEvents({cursor,limit});
   }
-  return {issueCampaign,setCampaignTokenActive,recordBotStart,getAttribution,recordTrustedEvent,recordTrustedSnapshotEvent,listVerifiedEvents};
+  return {issueCampaign,setCampaignTokenActive,recordBotStart,getAttribution,getAttributionAtTime,recordTrustedEvent,recordTrustedSnapshotEvent,listVerifiedEvents};
 }
 
 // Test-only/in-memory adapter. Do not use for a persistent runtime.
@@ -234,6 +258,14 @@ export function createMemoryAdsAttributionRepository(){
       subjects.set(subjectKey,{firstTouch,lastTouch});
       events.set(eventId,{eventId,subjectKey,eventType:'bot_start',...touch,occurredAt:touch.timestamp});
       return {recorded:true};
+    },
+    async listBotTouchesAt({subjectKey,asOf,limit=1000}={}){
+      const rows=[...events.values()].filter(e=>e.subjectKey===subjectKey
+        &&e.eventType==='bot_start'&&e.occurredAt<=asOf)
+        .sort((a,b)=>b.occurredAt.localeCompare(a.occurredAt));
+      if(rows.length>limit)throw new Error('ads_historical_touch_limit_reached');
+      return rows.map(e=>({campaignId:e.campaignId,adId:e.adId||'',
+        creativeId:e.creativeId||'',timestamp:e.occurredAt}));
     },
     async readSubject(key){
       const row=subjects.get(key);
