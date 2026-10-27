@@ -1,5 +1,6 @@
 import {leadTransitionAllowed,quoteTransitionAllowed,validateLead,validateOrder,validateQuote,validateVehicleVerification} from './auto-sale-rules.mjs';
 import {v2Quote,simpleUsQuote} from '../public/auto-sale-quote-v2.mjs';
+import {usdCents,advanceAmountFromPercent,validAdvancePercent} from '../public/auto-sale-payment-balance.mjs';
 
 const arr=v=>Array.isArray(v)?v.filter(x=>x&&typeof x==='object'):[];
 const text=v=>String(v??'').trim();
@@ -143,9 +144,21 @@ export async function syncYdbState(store,input,{includePrevious=false,prepareNot
         return bad('order_prerequisites_missing',{id:order.id});
       }
       if(text(quote.origin)==='США'){
-        const min=Math.ceil(num(quote.total)*.25),max=Math.floor(num(quote.total)*.30),plan=arr(order.paymentPlan);
-        if(num(lead.deposit)<min||num(lead.deposit)>max)return bad('auction_deposit_out_of_range',{id:order.id,min,max});
+        // The simplified USA quote is preliminary. The order is bound to the
+        // separately agreed contract total, never the preliminary estimate.
+        const agreedTotal=simpleUsQuote(quote)?num(lead.agreedOrderTotal):num(quote.total);
+        const plan=arr(order.paymentPlan);
+        if(!(agreedTotal>0)||usdCents(order.total)!==usdCents(agreedTotal))
+          return bad('agreed_order_total_mismatch',{id:order.id,agreedTotal});
+        if(!(num(lead.deposit)>0)||usdCents(lead.deposit)>usdCents(agreedTotal))
+          return bad('auction_advance_invalid',{id:order.id,agreedTotal});
+        if(lead.depositPercent!==undefined&&lead.depositPercent!==null&&String(lead.depositPercent)!==''){
+          if(!validAdvancePercent(lead.depositPercent)||usdCents(advanceAmountFromPercent(agreedTotal,lead.depositPercent))!==usdCents(lead.deposit))
+            return bad('auction_advance_percent_mismatch',{id:order.id,agreedTotal,percent:lead.depositPercent});
+        }
         if(plan.length!==4)return bad('usa_payment_plan_required',{id:order.id});
+        if(usdCents(order.payments?.[0]?.amount)!==usdCents(lead.deposit))
+          return bad('auction_advance_payment_mismatch',{id:order.id});
       }
       if([...previousOrders.values()].some(x=>text(x.leadId)===leadId))return bad('duplicate_order_for_lead',{leadId});
     }

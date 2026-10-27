@@ -109,6 +109,6 @@ for(const origin of ['США','Грузия']){
 test('Telegram and VK entrypoints use the refreshed order-transition scripts',()=>{
   const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
   const bootstrap=readFileSync(new URL('../public/auto-sale-bootstrap.mjs',import.meta.url),'utf8');
-  assert.ok(html.includes('auto-sale-bootstrap.mjs?v=20261027-decision-save-v1'));
-  assert.ok(bootstrap.includes('auto-sale-app-v3.mjs?v=20261027-fully-paid-handoff-v1'));
+  assert.ok(html.includes('auto-sale-bootstrap.mjs?v=20261027-order-advance50-v1'));
+  assert.ok(bootstrap.includes('auto-sale-app-v3.mjs?v=20261027-order-advance50-v1'));
 });

@@ -69,13 +69,17 @@ test('sent quote requires complete cost structure and validity date',()=>{
   assert.equal(validateQuote({leadId:'L-1',model:'BMW',origin:'США',status:'Отправлен',lot:20000,auction:1000,inland:700,ocean:2500,customs:6000,service:1500,repair:0,validUntil:'2026-09-20'}).length,0);
 });
 
-test('order creation enforces verified USA lot plus the 25–30% auction advance',()=>{
+test('order creation accepts editable 50%-default advance against agreed price, never preliminary estimate',()=>{
   const usa={status:'Согласован',origin:'США',total:39000,verification:{lotNumber:'LOT-777',vin:'WAUZZZTEST1234567',year:2023,mileage:18000,damage:'Косметические повреждения',photos:['https://example.com/lot.jpg'],reportUrl:'https://example.com/report',history:'Проверена история.',result:'Одобрен к покупке',checkedAt:'2026-09-25'}};
-  assert.equal(canCreateOrder({quote:{status:'На согласовании',origin:'США',total:39000},deposit:10000}).ok,false);
-  assert.equal(canCreateOrder({quote:{status:'Согласован',origin:'США',total:39000},deposit:10000}).ok,false);
-  assert.equal(canCreateOrder({quote:usa,deposit:5000}).ok,false);
-  assert.equal(canCreateOrder({quote:usa,deposit:10000}).ok,true);
-  assert.deepEqual(auctionDepositRange(39000),{min:9750,max:11700});
+  assert.equal(canCreateOrder({quote:{status:'На согласовании',origin:'США',total:39000},deposit:19500,depositPercent:50}).ok,false);
+  assert.equal(canCreateOrder({quote:{status:'Согласован',origin:'США',total:39000},deposit:19500,depositPercent:50}).ok,false);
+  assert.equal(canCreateOrder({quote:usa,deposit:0}).ok,false);
+  assert.equal(canCreateOrder({quote:usa,deposit:19500,depositPercent:50}).ok,true);
+  assert.equal(canCreateOrder({quote:usa,deposit:15600,depositPercent:40}).ok,true);
+  assert.equal(canCreateOrder({quote:usa,deposit:5000}).ok,true,'old already-received deposits are preserved');
+  assert.equal(canCreateOrder({quote:usa,deposit:10000,depositPercent:50}).ok,false,'a mismatched percentage must not create a false payment');
+  assert.equal(canCreateOrder({quote:usa,deposit:40000,depositPercent:100}).ok,false,'advance cannot exceed the contract total');
+  assert.equal(canCreateOrder({quote:{...usa,status:'Согласован',quoteSchema:'awg-quote-us-simple-2026-10-26',tariffVersion:'2026-10-26-us-car-plus-repair'},deposit:30000,depositPercent:50,agreedOrderTotal:60000}).ok,true);
   assert.equal(canCreateOrder({quote:{status:'Согласован',origin:'Грузия',total:25000},deposit:1000}).ok,true);
 });
 
