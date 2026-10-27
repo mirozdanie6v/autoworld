@@ -20,12 +20,14 @@ function safeSnapshot(attribution){
   return {source:'Telegram Ads',firstTouch:touch(attribution.firstTouch),
     lastTouch:touch(attribution.lastTouch)};
 }
-export function createAdsStageBBridge({enabled=false,service,onFailure}={}){
+export function createAdsStageBBridge({enabled=false,service,onFailure,lookupTimeoutMs=1250}={}){
   if(typeof enabled!=='boolean')throw new Error('invalid_ads_stage_b_flag');
   if(enabled&&(!service||typeof service.recordBotStart!=='function'
       ||typeof service.getAttribution!=='function'||typeof service.recordTrustedEvent!=='function'))
     throw new Error('ads_stage_b_service_required');
   if(enabled&&typeof onFailure!=='function')throw new Error('ads_stage_b_failure_sink_required');
+  if(!Number.isInteger(lookupTimeoutMs)||lookupTimeoutMs<10||lookupTimeoutMs>10000)
+    throw new Error('invalid_ads_lookup_timeout');
 
   const warn=async data=>{try{await onFailure(data)}catch{/* audit sink cannot break a saved lead */}};
   async function recordBotStart(payload){
@@ -40,7 +42,17 @@ export function createAdsStageBBridge({enabled=false,service,onFailure}={}){
     if(!telegramUserId||!operations.some(CREATE_LEAD))return operations;
     let snapshot=null;
     try{
-      snapshot=safeSnapshot(await service.getAttribution({telegramUserId}));
+      // Never let a hanging ADS YDB read hold the CRM form submission forever.
+      // A timed-out lookup persists the same recoverable marker as an outage.
+      let timeout;
+      try{
+        const read=service.getAttribution({telegramUserId});
+        snapshot=safeSnapshot(await Promise.race([
+          read,
+          new Promise((_,reject)=>{timeout=setTimeout(
+            ()=>reject(new Error('ads_snapshot_timeout')),lookupTimeoutMs);})
+        ]));
+      }finally{clearTimeout(timeout);}
     }catch(error){
       // Never turn a working client request into a failed request because the
       // separate advertising database is temporarily unavailable.
