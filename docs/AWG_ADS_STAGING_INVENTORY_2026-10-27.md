@@ -1,42 +1,89 @@
-# AWG Ads managed staging inventory — 27 October 2026
+# AWG Ads managed staging — verified state, 27 October 2026
 
-Status: PARTIAL. No production writes, deploy, bot-webhook changes or real CRM mutations performed by this workstream.
+Status: PARTIAL / BLOCKED at managed YDB query execution.
+Production deployment, real customer records, production Telegram/VK configuration and paid advertising were not modified by this workstream.
 
-## Verified in Cloud Browser
-- Cloud: b1ggsmuiq7tb2d27f89q.
-- Actual folder: b1g8u8vqkgehvtbj8n13. The old inventory workflows incorrectly passed the cloud ID as folderId; this is fixed.
-- Existing databases (read-only list): auto-sale-db etnr90ntl17oucsncg1k, production etn00ojk5iv1u7dgpdar, VK test etnhujtu1t6f89tdtohs. None is an approved ads CRM target.
-- CREATED ads YDB: awg-ads-stage-b-staging / etnseoqfsf7ojn52813t.
-- Path: /ru-central1/b1ggsmuiq7tb2d27f89q/etnseoqfsf7ojn52813t.
-- Connection: grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1ggsmuiq7tb2d27f89q/etnseoqfsf7ojn52813t.
-- Running, Serverless OLTP; enabled throttling 10 RU/s, 1 GB storage ceiling, provisioned RCU 0, deletion protection YES. Budget alert not yet configured. No schema or data initialized.
-- CREATED dedicated service account: awg-ads-staging-ci / aje3j5aat66lel86cd5r, no folder roles or keys assigned by this workstream.
-- CREATED dedicated federation: awg-github-ads-staging / ajebuniclp0pmef8echj. Issuer https://token.actions.githubusercontent.com ; AUD https://github.com/mirozdanie6v ; JWKS https://token.actions.githubusercontent.com/.well-known/jwks .
-- Federation-to-SA binding is prepared in the UI but NOT submitted; cloud-access grant requires action-time confirmation under the Cloud Browser policy.
+## Completed and independently verified
+- Cloud b1ggsmuiq7tb2d27f89q; actual folder b1g8u8vqkgehvtbj8n13. Corrected inventory workflows that previously used cloud ID as folderId.
+- Dedicated SA awg-ads-staging-ci / aje3j5aat66lel86cd5r.
+- Dedicated federation awg-github-ads-staging / ajebuniclp0pmef8echj.
+- Federated credential binding ajeg2utlgppho45e93ul: exact subject repo:mirozdanie6v@49186663/autoworld@1398349654:environment:awg-ads-staging.
+- Issuer https://token.actions.githubusercontent.com ; AUD https://github.com/mirozdanie6v ; JWKS https://token.actions.githubusercontent.com/.well-known/jwks .
+- GitHub environment awg-ads-staging: AWG_ADS_STAGING_SA_ID=aje3j5aat66lel86cd5r read back; deployment restricted to exactly feature/awg-ads-stage-b-integration (1 branch, 0 tags).
+- User explicitly confirmed the new binding, scoped roles and second CRM staging resource before application.
+- Actual short-lived OIDC -> IAM exchange HTTP 200 and read-only database inventory SUCCESS:
+  https://github.com/mirozdanie6v/autoworld/actions/runs/40510964315
+  Latest successful inventory job: 122248517595.
+- No static service-account keys created or IAM tokens logged/stored permanently.
 
-## Actual GitHub OIDC evidence
-https://github.com/mirozdanie6v/autoworld/actions/runs/40510964315
-Job 122212444811 obtained a JWT and verified the exact claims:
-- iss: https://token.actions.githubusercontent.com
-- sub: repo:mirozdanie6v@49186663/autoworld@1398349654:environment:awg-ads-staging
-- aud: https://github.com/mirozdanie6v
+## Physical staging databases
 
-The run correctly stopped before cloud exchange because AWG_ADS_STAGING_SA_ID was absent. This is not proof that IAM exchange succeeds.
-Both read-only workflow guards now require the immutable subject and verified folder, forbid legacy deploy SA fallback, and emit only non-secret claims. Earlier same-day notes containing the plain repo:owner/name subject are superseded.
+| Purpose | Name | ID | Database path |
+|---|---|---|---|
+| Ads | awg-ads-stage-b-staging | etnseoqfsf7ojn52813t | /ru-central1/b1ggsmuiq7tb2d27f89q/etnseoqfsf7ojn52813t |
+| Synthetic CRM | awg-ads-crm-stage-b-staging | etnvd9hmimkt74vpuqa6 | /ru-central1/b1ggsmuiq7tb2d27f89q/etnvd9hmimkt74vpuqa6 |
 
-CI on 16c8cffaa14853a593f9b4f714698b80b09a6ec0:
-- Stage B SUCCESS: https://github.com/mirozdanie6v/autoworld/actions/runs/40510969009
-- AutoWorld SUCCESS: https://github.com/mirozdanie6v/autoworld/actions/runs/40510968995
+Both Running, Serverless OLTP, throttling 10 RU/s, storage ceiling 1 GB, provisioned capacity 0, deletion protection YES.
+Endpoint prefix: grpcs://ydb.serverless.yandexcloud.net:2135/?database=
+Budget alert is still NOT configured; 0 provisioned capacity is not a zero-cost guarantee.
 
-## Pending confirmation and work
-1. Confirm exact federation binding above to aje3j5aat66lel86cd5r; no wildcard subjects or production SA.
-2. Confirm ydb.auditor metadata-only inventory permission on folder b1g8u8vqkgehvtbj8n13, and database-scoped ydb.editor only on explicitly approved staging databases. Never grant folder-wide ydb.editor.
-3. Create separate awg-ads-crm-stage-b-staging with the same 10 RU/s, 1 GB, provisioned 0, deletion-protection configuration. Automatic approval review REJECTED the submit because it considered the second CRM resource outside explicit advertising DB scope and a cost side effect. No retry or alternate API was used.
-4. COMPLETED: GitHub environment variable AWG_ADS_STAGING_SA_ID=aje3j5aat66lel86cd5r saved and visually read back. Deployment branch rule saved and verified: only feature/awg-ads-stage-b-integration, 1 branch and 0 tags. Cloud binding remains unapplied.
-5. Re-run read-only inventory, require HTTP 200 IAM exchange; prove absence of production data access without reading production customer records.
-6. Apply reviewed schemas only after both actual staging IDs and their access are verified; inspect/apply/inspect.
-7. Set IAM_VERIFIED and MAINTENANCE_ENABLED only after evidence; then run bounded reconciliation/retention against disposable staging fixtures and inspect durable leases/audit.
-8. Physical Telegram/VK E2E requires a staging runtime and separate test integrations. Do not reuse/replace production webhook or write into existing real CRM.
-9. Test staging rollback: disable job runner, disable ads flags, switch only staging runtime to previous known revision; verify basic CRM path, no new ads receipts and no production changes. Not yet executed.
+Excluded databases, never approved write targets:
+- auto-sale-db etnr90ntl17oucsncg1k;
+- production etn00ojk5iv1u7dgpdar;
+- existing VK test etnhujtu1t6f89tdtohs.
 
-Managed jobs, physical Telegram/VK E2E, data-plane isolation acceptance and rollback remain NOT_VERIFIED.
+## IAM read-back
+Cloud Browser ACL tables verified:
+- ydb.auditor at folder b1g8u8vqkgehvtbj8n13 only (database metadata, no customer data grant).
+- ydb.editor directly on ads etnseoqfsf7ojn52813t only.
+- ydb.editor directly on CRM staging etnvd9hmimkt74vpuqa6 only.
+No folder/cloud-wide editor/admin role added.
+This is ACL evidence. The managed negative production SELECT 1 probe has NOT yet executed because schema preflight failed earlier.
+
+## Schema and acceptance
+The console root directory independently shows all nine ads tables owned by awg-ads-staging-ci:
+awg_ads_campaigns, awg_ads_erasure_blocks, awg_ads_events,
+awg_ads_events_by_subject, awg_ads_events_by_time, awg_ads_job_audit,
+awg_ads_job_leases, awg_ads_subjects, awg_ads_touches_by_subject_time.
+
+Files:
+- .github/workflows/verify-awg-ads-managed-staging.yml
+- scripts/test-awg-ads-managed-staging.mjs
+
+The workflow verifies exact repo/ref/SA/OIDC claims and actual names/IDs/status of both approved databases before any schema/data operation. It prepares ads schema, requires an independent SELECT inspection, then tests real normalized CRM commits, two campaigns, idempotent receipts, durable leases, controlled reconciliation/retention, and bridge feature-off/on rollback. It deliberately does not claim physical Telegram/VK delivery or deployment rollback. It shares the maintenance concurrency group.
+
+Managed cloud attempts:
+- https://github.com/mirozdanie6v/autoworld/actions/runs/40521583051 — two failed attempts.
+  First failure: read-only schema SELECT after DDL; server YDB 400090 TIMEOUT, Query compilation timed out.
+  Retry: CREATE TABLE IF NOT EXISTS in ensureAdsAttributionSchema; same server error.
+- https://github.com/mirozdanie6v/autoworld/actions/runs/40522783176 — after acceptance fixture ID correction; same schema-stage failure.
+Do not claim managed acceptance PASS. Do not repeatedly rerun compilation timeouts without new evidence or provider recovery.
+
+Current code at 2787c487012284f36d6accb175b8b945d47b3f22:
+- Stage B regression SUCCESS https://github.com/mirozdanie6v/autoworld/actions/runs/40522791523
+- AutoWorld regression SUCCESS https://github.com/mirozdanie6v/autoworld/actions/runs/40522791617
+- Managed script syntax, workflow YAML, shell and OIDC JavaScript syntax checked.
+Code CI does not prove cloud runtime success.
+
+## Not completed
+- Independent managed schema SELECT acceptance; managed CRM schema/fixture transactions.
+- Production data-plane deny probe.
+- Controlled reconciliation/retention execution and audit read-back.
+- Continuous scheduler, persistent alert delivery and budget alert.
+- Physical Telegram/VK Mini App and message lifecycle E2E.
+- Staging deployment rollback; only a bridge feature-flag smoke is prepared, not yet reached.
+
+All live maintenance flags remain disabled. No active cron was enabled and no production branch merge/deploy was performed.
+
+## Physical integration blocker
+GitHub environment has no secrets. Repository secret metadata lists general AWG_TELEGRAM_BOT_TOKEN, AWG_VK_APP_SECRET, AWG_VK_COMMUNITY_TOKEN and relay/infrastructure secrets; no distinct ads-staging integration credentials were found.
+The inspected legacy .github/workflows/test-awg-vk-dmitry-production-e2e.yml explicitly reads the production container and writes production YDB; it was NOT run.
+A separate test Telegram bot and VK test app/community configuration, explicit test recipients and a staging runtime are required before physical acceptance. Do not silently substitute production integration settings or real customer records.
+
+## Safe continuation
+1. Diagnose/recover query execution on the two new staging YDBs; keep current IAM scope and resource ceilings.
+2. Re-run inspect/apply/inspect with bounded, idempotent staging operations only after query service is responsive.
+3. Run managed acceptance and inspect persistent job audit; retain the exact run evidence.
+4. Configure separate test integrations/staging runtime, perform real Telegram/VK signed launch + notification paths.
+5. Exercise staging revision rollback, verify flags off and ordinary CRM/Telegram/VK paths.
+6. Keep production and real advertising disabled pending full acceptance.
