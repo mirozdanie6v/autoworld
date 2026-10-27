@@ -1,0 +1,79 @@
+name: Verify AWG Ads Stage B operations (ISOLATED; no deployment)
+on:
+  push:
+    branches: [feature/awg-ads-stage-b-ops-acceptance]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  unit-and-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: awg_runtime_test
+          POSTGRES_USER: awg_test
+          POSTGRES_PASSWORD: ci-test-only-password
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U awg_test -d awg_runtime_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      AWG_TEST_DATABASE_URL: postgresql://awg_test:ci-test-only-password@localhost:5432/awg_runtime_test
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install locked deps
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Syntax, managed job, privacy and Stage B regression
+        run: |
+          node --check server/ads-stage-b-crm-privacy.mjs
+          node --check server/ads-stage-b-job-ydb.mjs
+          node --check server/ads-stage-b-managed-jobs.mjs
+          node --check scripts/test-awg-ads-ops-local-ydb.mjs
+          node --test tests/ads-attribution*.test.mjs tests/awg-ads-*.test.mjs tests/auto-sale-ads-telegram-hook.test.mjs
+      - name: Full AutoWorld and relay regression
+        run: npm run check
+      - name: Enforce no production config or deploy edits
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          git diff --name-only origin/main...HEAD | while IFS= read -r file; do
+            case "$file" in
+              server/ads-*|server/auto-sale-access.mjs|server/yandex-server.mjs|server/telegram-bot.mjs|public/auto-sale-bootstrap.mjs|public/auto-sale-ads-*.mjs|tests/ads-*|tests/awg-ads-*|scripts/test-awg-ads-*.mjs|docs/AWG_ADS*.md|.github/workflows/verify-awg-ads-*.yml|.github/workflows/audit-awg-ads-*.yml) ;;
+              *) echo "::error::Unreviewed AWG Ads path $file"; exit 1 ;;
+            esac
+          done
+  real-local-ydb:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    env:
+      AWG_ADS_LOCAL_YDB_TEST: 'yes'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Disposable localhost-only YDB
+        run: |
+          set -euo pipefail
+          docker run -d --rm --name awg-ads-ops-local-ydb --hostname localhost \
+            --platform linux/amd64 -p 127.0.0.1:2136:2136 \
+            -e GRPC_PORT=2136 -e YDB_USE_IN_MEMORY_PDISKS=true \
+            ydbplatform/local-ydb:latest
+          timeout 180 bash -c 'until (echo > /dev/tcp/127.0.0.1/2136) >/dev/null 2>&1; do sleep 3; done'
+          sleep 8
+      - name: Prove database leases, TTL cleanup and erasure suppression
+        run: node scripts/test-awg-ads-ops-local-ydb.mjs
+      - name: Stop disposable YDB
+        if: always()
+        run: docker rm -f awg-ads-ops-local-ydb || true
