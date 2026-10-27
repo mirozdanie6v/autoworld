@@ -44,7 +44,7 @@ for(const origin of ['США','Грузия']){
     const batches=[];
     window.__AUTO_SALE_ENTITY_BATCH__=async operations=>{
       batches.push(operations);
-      return{ok:true,rowVersions:{'order:'+order.id:4}};
+      return{ok:true,rowVersions:{['order:'+order.id]:4}};
     };
     form.elements.paymentAmount.value='5199';
     form.elements.paymentNote.value='Окончательный платёж';
