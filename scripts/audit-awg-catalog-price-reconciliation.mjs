@@ -43,7 +43,9 @@ for(const [postId,car] of existing){
     patch.turnkeyDeliverySource=recovered.turnkeyDeliverySource;
   }
   const changed=Object.keys(patch).filter(k=>String(car[k]??(typeof patch[k]==='boolean'?false:k==='catalogPriceEvidence'?'':0))!==String(patch[k]));
-  if(!changed.length)continue;
+  // A backfill of price evidence alone is NOT a catalog discrepancy and
+  // should not generate a database write for an otherwise identical car.
+  if(!changed.some(k=>k!=='catalogPriceEvidence'))continue;
   const original=num(car.priceRub),price=recovered.priceRub;
   // Guard against editing an independently manager-priced car with a wildly
   // different source. Such records require manual investigation.
@@ -69,6 +71,9 @@ const audit={generatedAt:new Date().toISOString(),sourcePosts:source.length,
   liveUnpriced:current.filter(x=>x.source==='AutoWorld_Georgia'&&num(x.priceRub)===0&&num(x.estimatedBidUsd)===0).length,
   sourceStickerRecovered:source.filter(x=>extractSourcePrices(x.rawText||'').priceRub>0).length,
   candidates:report.length,unresolvedCount:unresolved.length,
+  missingPricesCorrectable:report.filter(x=>x.livePriceRub===0&&x.sourcePriceRub>0).length,
+  existingPricesCorrectable:report.filter(x=>x.livePriceRub>0&&x.livePriceRub!==x.sourcePriceRub).length,
+  secondaryPriceCorrections:report.filter(x=>x.livePriceRub===x.sourcePriceRub&&x.fields.some(f=>f!=='catalogPriceEvidence')).length,
   corrections:report,unresolved};
 await writeFile(REPORT_PATH,JSON.stringify(audit,null,2)+'\n');
 await writeFile(DELTA_PATH,JSON.stringify(candidate,null,2)+'\n');
@@ -76,6 +81,9 @@ console.log('AWG_PRICE_AUDIT',JSON.stringify({
   sourcePosts:audit.sourcePosts,liveSourceCars:audit.liveSourceCars,
   liveUnpriced:audit.liveUnpriced,sourceStickerRecovered:audit.sourceStickerRecovered,
   candidates:audit.candidates,unresolvedCount:audit.unresolvedCount,
+  missingPricesCorrectable:audit.missingPricesCorrectable,
+  existingPricesCorrectable:audit.existingPricesCorrectable,
+  secondaryPriceCorrections:audit.secondaryPriceCorrections,
   sample:report.slice(0,35).map(x=>({postId:x.postId,old:x.livePriceRub,new:x.sourcePriceRub,
     turnkey:x.sourceTurnkeyRub,fields:x.fields})),
   unresolvedSample:unresolved.slice(0,25)
