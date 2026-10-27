@@ -4,7 +4,7 @@ import {createAdsStageBBridge,verifiedAdsTelegramIdentity} from '../server/ads-a
 import {adsStageBConfiguration} from '../server/ads-stage-b-runtime.mjs';
 import {createAdsAttributionService,createMemoryAdsAttributionRepository} from '../server/ads-attribution-core.mjs';
 import {createTelegramService} from '../server/telegram-bot.mjs';
-import {sanitizeClientOperations} from '../server/auto-sale-access.mjs';
+import {sanitizeClientOperations,clientState} from '../server/auto-sale-access.mjs';
 
 const access={role:'client',authenticated:true,authType:'telegram',user:{id:'10050'}};
 function fixture(){
@@ -131,4 +131,36 @@ test('separate ads DB failure or broken metrics sink cannot block a new CRM lead
   }}}];
   assert.deepEqual(await bridge.recordCommittedLeads(manuallyPersisted,access,{committed:true}),
     {attempted:1,recorded:0,pending:1});
+});
+
+test('Telegram/VK client state never discloses advertising campaign IDs or outage marker',()=>{
+  const campaign={source:'Telegram Ads',lastTouch:{campaignId:'private-ads-campaign'}};
+  const state={initialized:true,leads:[{
+    id:'L-PRIVACY',clientCreated:true,clientProvider:'telegram',
+    clientProviderUserId:'10050',clientIdentityKey:'telegram:10050',
+    adsAttribution:campaign,adsAttributionStatus:'lookup_unavailable',name:'Client'
+  }],quotes:[],orders:[],catalog:[],team:[],notes:{}};
+  const visible=clientState(state,{provider:'telegram',id:'10050'});
+  assert.equal(visible.leads.length,1);
+  assert.equal(visible.leads[0].id,'L-PRIVACY');
+  assert.equal('adsAttribution' in visible.leads[0],false);
+  assert.equal('adsAttributionStatus' in visible.leads[0],false);
+  assert.equal(state.leads[0].adsAttribution.lastTouch.campaignId,'private-ads-campaign');
+});
+
+test('stalled secondary YDB lookup is bounded and produces recoverable CRM marker',async()=>{
+  const warnings=[];
+  const bridge=createAdsStageBBridge({enabled:true,service:{
+    recordBotStart:async()=>({status:'recorded'}),
+    getAttribution:()=>new Promise(()=>{}),
+    recordTrustedEvent:async()=>({status:'recorded'})
+  },lookupTimeoutMs:20,onFailure:async x=>warnings.push(x)});
+  const started=Date.now();
+  const operations=await bridge.enrichLeadOperations([{
+    resource:'lead',operation:'create',id:'L-TIMEOUT',
+    input:{clientSubmittedAt:'2026-10-27T06:00:00Z',source:'Mini App'}
+  }],access);
+  assert.ok(Date.now()-started<1000);
+  assert.equal(operations[0].input.adsAttributionStatus,'lookup_unavailable');
+  assert.equal(warnings[0].code,'ads_snapshot_unavailable');
 });
