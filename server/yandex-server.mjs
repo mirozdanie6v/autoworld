@@ -12,6 +12,7 @@ import {createTelegramService} from './telegram-bot.mjs';
 import {createAdsStageBServerBridge} from './ads-stage-b-runtime.mjs';
 import {verifiedAdsTelegramIdentity} from './ads-attribution-stage-b.mjs';
 import {isAdsDirector} from './ads-stage-b-director.mjs';
+import {createAdsLeadReconciliationJob,createPersistedLeadPageReader} from './ads-stage-b-reconciliation.mjs';
 import {createVkService} from './vk.mjs';
 import {notificationsEnabled,notificationsSuppressed,collectSaleNotifications,deliverSaleNotifications} from './auto-sale-notifications.mjs';
 import {createVkWebAuth} from './vk-web-auth.mjs';
@@ -118,6 +119,35 @@ const telegram=createTelegramService({
 });
 const vk=createVkService();
 const vkWeb=createVkWebAuth();
+// Optional staging-only background recovery of conversion receipts from the
+// authoritative CRM. Explicit second flag prevents work on standard startup.
+if(adsStageB.enabled&&process.env.AWG_ADS_STAGE_B_RECONCILE_ENABLED==='true'){
+  const job=createAdsLeadReconciliationJob({
+    listCommittedLeads:createPersistedLeadPageReader({
+      readAuthoritativeState:async()=> (await getApiState()).state
+    }),
+    bridge:adsStageB,
+    onAudit:async stats=>console.info('AWG ADS staging reconciler',JSON.stringify({
+      scanned:stats.scanned,recorded:stats.recorded,duplicates:stats.duplicates,
+      errors:stats.errors,complete:stats.complete
+    })),
+    onAlert:async event=>console.warn('AWG ADS staging reconciliation alert',event.code)
+  });
+  let running=false,cursor='';
+  const reconcile=async()=>{
+    if(running)return;
+    running=true;
+    try{
+      const result=await job.run({authorized:true,cursor});
+      cursor=result.nextCursor||'';
+    }catch(error){
+      // Do not log lead payloads, client identities or stack traces.
+      console.warn('AWG ADS staging reconciliation failed','retry_next_cycle');
+    }finally{running=false;}
+  };
+  const timer=setInterval(()=>{void reconcile()},15*60*1000);
+  timer.unref?.();
+}
 async function getStore(){
   if(postgresEnabled)return(await getPostgresStores()).legacyStore;
   if(store)return store;
