@@ -81,6 +81,28 @@ export function createAdsStageBBridge({enabled=false,service,onFailure}={}){
     }
     return {attempted:attributed.length,recorded,pending};
   }
+  async function recordMiniAppEvent({access,eventType,carId='',catalog=[]}={}){
+    if(!enabled)return {status:'disabled'};
+    const telegramUserId=verifiedAdsTelegramIdentity(access);
+    if(!telegramUserId)return {status:'forbidden'};
+    if(!['miniapp_open','vehicle_view'].includes(eventType))
+      throw new Error('invalid_ads_miniapp_event_type');
+    if(eventType==='vehicle_view'){
+      if(typeof carId!=='string'||!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/.test(carId)
+        ||!Array.isArray(catalog)||!catalog.some(car=>car?.active!==false&&String(car?.id)===carId)){
+        return {status:'ignored',reason:'vehicle_not_in_current_catalog'};
+      }
+    }else if(carId!==''){
+      throw new Error('invalid_ads_miniapp_open_payload');
+    }
+    // One event per verified user, event type, vehicle and UTC day.
+    // Raw user ID is hashed, not persisted as an event ID.
+    const day=new Date().toISOString().slice(0,10);
+    const eventId='mini_'+createHash('sha256').update(JSON.stringify([
+      telegramUserId,eventType,carId,day
+    ])).digest('hex');
+    return service.recordTrustedEvent({telegramUserId,eventType,eventId});
+  }
   // A persisted lead (not a browser request) is a durable replay source:
   // reprocess after crashes and never attribute it to a newer campaign.
   async function reconcilePersistedLead(lead){
@@ -102,5 +124,5 @@ export function createAdsStageBBridge({enabled=false,service,onFailure}={}){
       attributionSnapshot:lead.adsAttribution
     });
   }
-  return {enabled,recordBotStart,enrichLeadOperations,recordCommittedLeads,reconcilePersistedLead};
+  return {enabled,recordBotStart,enrichLeadOperations,recordCommittedLeads,reconcilePersistedLead,recordMiniAppEvent};
 }
