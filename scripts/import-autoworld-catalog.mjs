@@ -1,4 +1,6 @@
 import {readFile,writeFile} from 'node:fs/promises';
+import {resolve} from 'node:path';
+import {pathToFileURL} from 'node:url';
 import {catalogListingQuality} from './catalog-listing-quality.mjs';
 import {extractSourcePrices} from './catalog-source-price.mjs';
 
@@ -205,7 +207,7 @@ function inferOrigin(source){
   return'Грузия';
 }
 
-function normalizeCar(source){
+export function normalizeCar(source){
   const title=titleFromRaw(source.rawText);
   const rawBrand=clean(title.brand||source.brand);
   const rawModel=clean(title.model||source.model).replace(/\bSou\s+l\b/i,'Soul');
@@ -297,7 +299,7 @@ function normalizeCar(source){
   };
 }
 
-function dedupe(list){
+export function dedupe(list){
   const byKey=new Map();
   for(const car of list){
     if(!car)continue;
@@ -398,4 +400,5 @@ async function main(){
   throw new Error('state_write_conflict_exhausted');
 }
 
-main().catch(error=>{console.error(error);process.exit(1)});
+if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href)
+  main().catch(error=>{console.error(error);process.exit(1)});
