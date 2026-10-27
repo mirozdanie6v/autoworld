@@ -68,7 +68,8 @@ for(const origin of ['США','Грузия']){
       writes.push(operations);
       const patch=operations.find(x=>x.resource==='order');
       assert.equal(patch.input.stage,writes.length===1?'Подготовка к отправке':'В пути');
-      assert.equal(patch.input.location,origin==='США'?'Лос-Анджелес, готов к отправке':'Тбилиси, готов к отправке');
+      if(writes.length===1)assert.equal(patch.input.location,origin==='США'?'Лос-Анджелес, готов к отправке':'Тбилиси, готов к отправке');
+      else assert.equal(patch.input.location,undefined,'the second transition must not overwrite an unchanged location');
       // The app receives another server snapshot while the first click is saving;
       // it must update the live record, not a detached pre-refresh object.
       if(writes.length===1){
@@ -108,6 +109,6 @@ for(const origin of ['США','Грузия']){
 test('Telegram and VK entrypoints use the refreshed order-transition scripts',()=>{
   const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
   const bootstrap=readFileSync(new URL('../public/auto-sale-bootstrap.mjs',import.meta.url),'utf8');
-  assert.ok(html.includes('auto-sale-bootstrap.mjs?v=20261027-order-next-first-click-v1'));
-  assert.ok(bootstrap.includes('auto-sale-app-v3.mjs?v=20261027-order-next-first-click-v1'));
+  assert.ok(html.includes('auto-sale-bootstrap.mjs?v=20261027-payment-conflict-v1'));
+  assert.ok(bootstrap.includes('auto-sale-app-v3.mjs?v=20261027-payment-conflict-v1'));
 });

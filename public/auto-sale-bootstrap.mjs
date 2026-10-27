@@ -1,3 +1,4 @@
+import {canSafelyRebaseEntityBatch} from './auto-sale-entity-safe-retry.mjs';
 const DATA_KEYS={leads:'auto-sale-leads-v2',quotes:'auto-sale-quotes-v2',orders:'auto-sale-orders-v2',notes:'auto-sale-notes-v2',team:'auto-sale-team-v1',catalog:'auto-sale-catalog-v1'};
 const REVISION_KEY='auto-sale-server-revision-v1';
 window.__AUTO_SALE_LEGACY_AUTOSYNC__=false;
@@ -211,6 +212,13 @@ async function reconcileAmbiguousBatch(expected,status){
 async function entityBatch(operations){
   const raw=Array.isArray(operations)?operations.map(item=>structuredClone(item)):[];
   if(!raw.length)return{ok:true,revision,rowVersions:{}};
+  // Capture the exact state that the user edited before any asynchronous
+  // version lookups or server refresh can replace the local records.
+  const baseline={
+    leads:readCache(DATA_KEYS.leads,[]),quotes:readCache(DATA_KEYS.quotes,[]),
+    orders:readCache(DATA_KEYS.orders,[]),team:readCache(DATA_KEYS.team,[]),
+    catalog:readCache(DATA_KEYS.catalog,[]),notes:readCache(DATA_KEYS.notes,{})
+  };
   const created=new Set(raw.filter(item=>item?.operation==='create'&&!['note','payment'].includes(String(item?.resource||''))).map(item=>{const ref=aggregateRef(item);return ref.resource+':'+ref.id}));
   for(const operation of raw){
     const ref=aggregateRef(operation);
@@ -228,6 +236,7 @@ async function entityBatch(operations){
   try{
     let prepared=raw.map(item=>structuredClone(item));
     let lastError=null;
+    let rebasedOnce=false;
     for(let attempt=1;attempt<=3;attempt++){
       const response=await fetch('/api/auto-sale/entities/batch',{
         method:'POST',
@@ -246,8 +255,20 @@ async function entityBatch(operations){
       }
 
       if(response.status===409&&data.error==='entity_conflict'){
+        // Another save (including a note or payment) advanced a row version.
+        // Verify ambiguous success BEFORE replaying any child creation.
         const recovered=await reconcileAmbiguousBatch(raw,response.status);
         if(recovered)return recovered;
+        const latest={
+          leads:readCache(DATA_KEYS.leads,[]),quotes:readCache(DATA_KEYS.quotes,[]),
+          orders:readCache(DATA_KEYS.orders,[]),team:readCache(DATA_KEYS.team,[]),
+          catalog:readCache(DATA_KEYS.catalog,[]),notes:readCache(DATA_KEYS.notes,{})
+        };
+        if(!rebasedOnce&&attempt<3&&canSafelyRebaseEntityBatch(raw,baseline,latest)){
+          rebasedOnce=true;
+          prepared=refreshOperationVersions(raw);
+          continue;
+        }
         window.__AUTO_SALE_SERVER__={online:true,revision,entityConflict:true,...data};
         window.dispatchEvent(new CustomEvent('auto-sale-entity-conflict',{detail:data}));
         const error=new Error('entity_conflict');error.code='entity_conflict';error.data=data;throw error;
@@ -350,7 +371,7 @@ const vkModule=await import('./auto-sale-vk.mjs?v=20261011-vk-notifications-v1')
 const vkShellPromise=vkLaunchParams()?vkModule.initVkMiniAppShell():Promise.resolve({ok:true,skipped:'not-vk'});
 const initialStatePromise=pullInitialState();
 await import('./auto-sale-submit-bridge.mjs?v=20260921-live-values-1');
-await import('./auto-sale-app-v3.mjs?v=20261027-order-next-first-click-v1');
+await import('./auto-sale-app-v3.mjs?v=20261027-payment-conflict-v1');
 await import('./auto-sale-calc-scroll-performance.mjs?v=20261010-scroll-v1');
 await import('./auto-sale-vk-web.mjs?v=20261010-vk-prod-v1');
 if(['awgcars.ru','www.awgcars.ru','vk-test.awgcars.ru'].includes(window.location.hostname)&&!telegramLaunchDetected()&&!telegramInitData()&&!new URLSearchParams(window.location.search||'').has('vk_app_id'))await import('./auto-sale-vk-status-widget.mjs?v=20261010-web-only-v2');

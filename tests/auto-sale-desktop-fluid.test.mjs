@@ -38,6 +38,6 @@ test('vertical scrollbar stays scrollable and visually blends with dark canvas',
 test('the new desktop stylesheet loads last, without losing previous nav and auth scripts',()=>{
   const existing=html.indexOf('auto-sale-scroll-top.css?v=20261015-scrolltop-v1');
   const desktop=html.indexOf('auto-sale-desktop-fluid.css?v=20261015-fluid-v1');
-  const script=html.indexOf('auto-sale-bootstrap.mjs?v=20261027-order-next-first-click-v1');
+  const script=html.indexOf('auto-sale-bootstrap.mjs?v=20261027-payment-conflict-v1');
   assert.ok(existing>=0&&desktop>existing&&script>desktop);
 });
