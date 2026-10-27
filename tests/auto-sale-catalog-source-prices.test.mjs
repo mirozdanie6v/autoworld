@@ -89,7 +89,7 @@ test('new price decoder stays conservative: no prices from marketing numbers or 
     '🌟\nBMW 530i 2024\n✨\n🔤\n🔤\n🔤\n🔤\n🔤\n🔤\nДвигатель 2.0',
     '🌟\nBMW 530i 2024\n✨\n4️⃣\n❤️\n6️⃣\n2️⃣\n👤\n👤\n👤',
     '🌟\nAudi Q5 2024\n✨\n2️⃣\n🤩\n6️⃣\nДвигатель: 2.0',
-    '🌟\nAudi Q5 2024\n✨\n1️⃣\n🤩\n4️⃣\n🔤\n2️⃣\n❤️\n8️⃣'
+    '🌟\nAudi Q5 2024\n✨\n1️⃣\n🤩\n4️⃣\n❤️\n8️⃣'
   ];
   for(const raw of cases)assert.equal(decodeChannelEmojiPrice(raw),0,raw);
 });
