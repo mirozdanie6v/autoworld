@@ -16,6 +16,8 @@ on:
       - 'tests/awg-ads-*'
       - '.github/workflows/verify-awg-ads-stage-b.yml'
       - '.github/workflows/audit-awg-ads-managed-staging.yml'
+      - '.github/workflows/run-awg-ads-staging-maintenance.yml'
+      - 'scripts/run-awg-ads-staging-operations.mjs'
   workflow_dispatch:
 
 permissions:
@@ -66,6 +68,7 @@ jobs:
           node --check tests/awg-ads-stage-b.test.mjs
           node --check tests/awg-ads-stage-b-reconcile.test.mjs
           node --check scripts/test-awg-ads-stage-b-local-ydb.mjs
+          node --check scripts/run-awg-ads-staging-operations.mjs
       - name: Stage A and Stage B isolated tests
         run: |
           node --test tests/ads-attribution*.test.mjs tests/awg-ads-*.test.mjs tests/auto-sale-ads-telegram-hook.test.mjs
@@ -77,7 +80,7 @@ jobs:
           git fetch --no-tags origin main
           git diff --name-only origin/main...HEAD | while IFS= read -r file; do
             case "$file" in
-              server/ads-*|server/telegram-bot.mjs|server/yandex-server.mjs|server/auto-sale-access.mjs|public/auto-sale-bootstrap.mjs|public/auto-sale-ads-telemetry.mjs|public/auto-sale-ads-director.mjs|tests/ads-*|tests/awg-ads-*|scripts/test-awg-ads-local-ydb.mjs|scripts/test-awg-ads-stage-b-local-ydb.mjs|scripts/prepare-awg-ads-stage-b-staging.mjs|docs/AWG_ADS_ATTRIBUTION_STAGE_A.md|docs/AWG_ADS_STAGE_B.md|docs/AWG_ADS_STAGE_B_OPERATIONS.md|.github/workflows/verify-awg-ads-*.yml|.github/workflows/audit-awg-ads-managed-staging.yml|.github/workflows/audit-awg-ads-yandex-staging-readonly.yml) ;;
+              server/ads-*|server/telegram-bot.mjs|server/yandex-server.mjs|server/auto-sale-access.mjs|public/auto-sale-bootstrap.mjs|public/auto-sale-ads-telemetry.mjs|public/auto-sale-ads-director.mjs|tests/ads-*|tests/awg-ads-*|scripts/test-awg-ads-local-ydb.mjs|scripts/test-awg-ads-stage-b-local-ydb.mjs|scripts/prepare-awg-ads-stage-b-staging.mjs|docs/AWG_ADS_ATTRIBUTION_STAGE_A.md|docs/AWG_ADS_STAGE_B.md|docs/AWG_ADS_STAGE_B_OPERATIONS.md|.github/workflows/verify-awg-ads-*.yml|.github/workflows/audit-awg-ads-managed-staging.yml|.github/workflows/audit-awg-ads-yandex-staging-readonly.yml|.github/workflows/run-awg-ads-staging-maintenance.yml|scripts/run-awg-ads-staging-operations.mjs) ;;
               *) echo "::error::Unexpected production-sensitive diff: $file"; exit 1;;
             esac
           done
