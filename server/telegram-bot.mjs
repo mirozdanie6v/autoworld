@@ -96,6 +96,7 @@ export function createTelegramService({
   relaySecret=process.env.AUTOWORLD_RELAY_SECRET||'',
   now=()=>Date.now(),
   adsStartRecorder=null,
+  adsStartStrict=false,
   maxInitDataAgeSec=86400
 }={}){
   if(adsStartRecorder!==null&&typeof adsStartRecorder!=='function')throw new Error('ads_start_recorder_invalid');
@@ -346,6 +347,7 @@ export function createTelegramService({
         }catch(error){
           // Failed attribution must never block the existing bot welcome path.
           console.warn('AUTO SALE ad start record failed',clean(error?.code)||'ads_record_failed');
+          if(adsStartStrict){error.statusCode=503;throw error;}
         }
       }
     }
