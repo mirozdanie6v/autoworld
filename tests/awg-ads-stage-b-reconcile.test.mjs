@@ -72,10 +72,10 @@ test('server validates vehicle catalog and signer; repeats dedupe daily',async()
   const catalog=[{id:'car-A',active:true},{id:'car-B',active:false}];
   assert.equal((await bridge.recordMiniAppEvent({access,eventType:'miniapp_open'})).status,'recorded');
   assert.equal((await bridge.recordMiniAppEvent({access,eventType:'miniapp_open'})).status,'duplicate');
-  assert.equal((await bridge.recordMiniAppEvent({access,eventType:'vehicle_view',carId:'car-A',catalog})).status,'recorded');
-  assert.equal((await bridge.recordMiniAppEvent({access,eventType:'vehicle_view',carId:'car-B',catalog})).reason,'vehicle_not_in_current_catalog');
+  assert.equal((await bridge.recordMiniAppEvent({access,eventType:'vehicle_detail_click',carId:'car-A',catalog})).status,'recorded');
+  assert.equal((await bridge.recordMiniAppEvent({access,eventType:'vehicle_detail_click',carId:'car-B',catalog})).reason,'vehicle_not_in_current_catalog');
   assert.equal((await bridge.recordMiniAppEvent({access:{...access,authType:'vk'},eventType:'miniapp_open'})).status,'forbidden');
-  assert.equal(repository.snapshotForTests().events.filter(x=>x.eventType==='vehicle_view').length,1);
+  assert.equal(repository.snapshotForTests().events.filter(x=>x.eventType==='vehicle_detail_click').length,1);
   assert.equal(repository.snapshotForTests().events.filter(x=>x.eventType==='miniapp_open').length,1);
 });
 test('browser telemetry posts only type and carId, never forged campaigns or Telegram identifiers',async()=>{
@@ -95,7 +95,7 @@ test('browser telemetry posts only type and carId, never forged campaigns or Tel
   await Promise.resolve();
   assert.equal(calls.length,2);
   assert.deepEqual(calls.map(c=>JSON.parse(c.options.body)),[
-    {eventType:'miniapp_open'},{eventType:'vehicle_view',carId:'CAR-123'}
+    {eventType:'miniapp_open'},{eventType:'vehicle_detail_click',carId:'CAR-123'}
   ]);
   assert.ok(calls.every(x=>x.url==='/api/auto-sale/ads/event'));
   stop();
