@@ -6,6 +6,7 @@ import {MetadataCredentialsProvider} from '@ydbjs/auth/metadata';
 import {createYdbAdsAttributionRepository} from './ads-attribution-ydb.mjs';
 import {createAdsAttributionService} from './ads-attribution-core.mjs';
 import {createAdsStageBBridge} from './ads-attribution-stage-b.mjs';
+import {createAdsRecoverableBridge} from './ads-stage-b-resilient.mjs';
 import {summarizeAdsCampaignsFromRepository} from './ads-attribution-report.mjs';
 
 export function adsStageBConfiguration(env={}){
@@ -29,18 +30,27 @@ export async function createAdsStageBServerBridge({
 }={}){
   const config=adsStageBConfiguration(env);
   if(!config.enabled)return createAdsStageBBridge({enabled:false});
-  const driver=new Driver(config.connection,{
-    credentialsProvider:credentialsProvider||new MetadataCredentialsProvider()
-  });
-  try{
-    await driver.ready();
-    const repository=createYdbAdsAttributionRepository(query(driver));
-    const service=createAdsAttributionService({
-      repository,subjectSecret:config.subjectSecret
+  const connect=async()=>{
+    const driver=new Driver(config.connection,{
+      credentialsProvider:credentialsProvider||new MetadataCredentialsProvider()
     });
-    const bridge=createAdsStageBBridge({enabled:true,service,onFailure});
-    // Runtime retains its own connection. No implicit schema creation,
-    // event fanout or mutation of AWG's primary production database.
-    return {...bridge,report:()=>summarizeAdsCampaignsFromRepository({repository}),close:()=>driver.close()};
-  }catch(error){await driver.close();throw error;}
+    try{
+      await driver.ready();
+      const repository=createYdbAdsAttributionRepository(query(driver));
+      const service=createAdsAttributionService({
+        repository,subjectSecret:config.subjectSecret
+      });
+      return {service,repository,
+        report:()=>summarizeAdsCampaignsFromRepository({repository}),
+        close:()=>driver.close()};
+    }catch(error){await driver.close();throw error;}
+  };
+  // Staging-only opt-in. No network access is needed during AWG HTTP startup.
+  // Strict /start recorder fails with 503 when ads DB is down; CRM leads save
+  // with a recovery marker while the connection is unavailable.
+  if(env.AWG_ADS_STAGE_B_DEGRADED_STARTUP==='true')
+    return createAdsRecoverableBridge({open:connect,onFailure});
+  const backend=await connect();
+  const bridge=createAdsStageBBridge({enabled:true,service:backend.service,onFailure});
+  return {...bridge,report:backend.report,close:backend.close};
 }
