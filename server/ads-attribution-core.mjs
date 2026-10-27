@@ -5,7 +5,7 @@ import {createHash, createHmac, randomBytes} from 'node:crypto';
 const TOKEN_PATTERN=/^[A-Za-z0-9_-]{24,64}$/;
 const ID_PATTERN=/^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/;
 const TELEGRAM_ID_PATTERN=/^[1-9][0-9]{0,19}$/;
-const ALLOWED_EVENTS=new Set(['miniapp_open','vehicle_view','lead_submit','manager_contact']);
+const ALLOWED_EVENTS=new Set(['miniapp_open','vehicle_view','vehicle_detail_click','lead_submit','manager_contact','first_manager_action']);
 const MAX_WINDOW_DAYS=90;
 const MAX_FUTURE_SKEW_MS=5*60*1000;
 const HASH_PATTERN=/^[a-f0-9]{64}$/;
