@@ -172,3 +172,11 @@ Code and QA evidence:
 **Acceptance stays NO-GO** for cloud operations, physical Telegram/VK,
 production deployment, and real ad spend pending verified staging IAM,
 resource constraints, physical E2E/rollback, and privacy policy.
+
+## 27.10.2026 — Managed YDB schema compilation timeout eliminated (staging)
+
+- Code: `scripts/awg-ads-schema-inspection.mjs` uses YDB SchemeService `listDirectory` and checks the nine expected TABLE metadata entries. No per-table `SELECT * ... LIMIT 1` SQL compilation or row reads; incorrect type or missing table causes hard failure.
+- Script: `scripts/prepare-awg-ads-stage-b-staging.mjs` keeps its existing exact staging-database ID, explicit apply approval, and production-deny guards. `inspect` is metadata-only.
+- SDK dependencies and fail-closed unit tests are locked; [Stage B CI](https://github.com/mirozdanie6v/autoworld/actions/runs/40538442768) passed and [cloud acceptance attempt](https://github.com/mirozdanie6v/autoworld/actions/runs/40538834473) returned `AWG_ADS_MANAGED_STAGING_SCHEMA_OK {"mode":"inspect","databaseId":"etnseoqfsf7ojn52813t","tables":9}`.
+- **Current next blocker:** the subsequent protected E2E test halted at `staging SA must have no production data-plane access`. Its probe uses `SELECT 1`, which is a constant expression and **does not demonstrate actual protected-table access**; this failure must be investigated with a zero-row, authorization-enforcing, schema-aware read probe or explicit IAM policy evidence. Never relax the production-isolation acceptance gate on the basis of this result.
+- No production deployment or IAM permissions were changed by this timeout fix; production lead/CRM data was not read by the metadata inspection.
