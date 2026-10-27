@@ -53,7 +53,7 @@ jobs:
           git fetch --no-tags origin main
           git diff --name-only origin/main...HEAD | while IFS= read -r file; do
             case "$file" in
-              server/ads-*|server/auto-sale-access.mjs|server/yandex-server.mjs|server/telegram-bot.mjs|public/auto-sale-bootstrap.mjs|public/auto-sale-ads-*.mjs|tests/ads-*|tests/awg-ads-*|scripts/test-awg-ads-*.mjs|scripts/run-awg-ads-staging-managed-job.mjs|scripts/probe-awg-ads-staging-readonly.mjs|docs/AWG_ADS*.md|.github/workflows/verify-awg-ads-*.yml|.github/workflows/audit-awg-ads-*.yml) ;;
+              server/ads-*|server/auto-sale-access.mjs|server/yandex-server.mjs|server/telegram-bot.mjs|public/auto-sale-bootstrap.mjs|public/auto-sale-ads-*.mjs|tests/ads-*|tests/awg-ads-*|scripts/test-awg-ads-*.mjs|scripts/run-awg-ads-staging-managed-job.mjs|scripts/probe-awg-ads-staging-readonly.mjs|docs/AWG_ADS*.md|.github/workflows/verify-awg-ads-*.yml|.github/workflows/audit-awg-ads-*.yml|.github/workflows/probe-awg-ads-staging-http.yml) ;;
               *) echo "::error::Unreviewed AWG Ads path $file"; exit 1 ;;
             esac
           done
