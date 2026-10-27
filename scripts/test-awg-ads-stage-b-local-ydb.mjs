@@ -191,6 +191,51 @@ try{
     assert.equal((await bridge.recordCommittedLeads(trustedOps,access,{committed:true})).recorded,1);
     const final=await domainStore.loadState();
     assert.deepEqual(final.leads.find(x=>x.id===saved.id).adsAttribution,snapshotAtCommit);
+    // Recovery marker also survives a REAL normalized CRM commit. After
+    // historical reconstruction it is repaired via version-checked mutation.
+    const outageIdentity={provider:'telegram',id:'222222',key:'telegram:222222'};
+    const outageCreate=sanitizeClientOperations(await domainStore.loadState(),[{
+      resource:'lead',operation:'create',id:'L-ADS-REAL-RECOVERY',input:{
+        name:'Synthetic historical recovery',contact:'@synthetic',
+        model:'Kia Sportage',budget:22000
+      }
+    }],{id:'222222',first_name:'Synthetic'},outageIdentity,{
+      now:()=> '2026-10-27T05:10:00Z'
+    });
+    assert.equal(outageCreate.ok,true);
+    const pendingOps=await interrupted.enrichLeadOperations(outageCreate.operations,outageAccess);
+    assert.equal(pendingOps[0].input.adsAttributionStatus,'lookup_unavailable');
+    const pendingCommit=await mutateAutoSaleEntityBatch({
+      legacyStore,domainStore,operations:pendingOps,prepareNotifications:null
+    });
+    assert.equal(pendingCommit.status,200,JSON.stringify(pendingCommit.data));
+    const stateBeforeRepair=await domainStore.loadState();
+    const missing=stateBeforeRepair.leads.find(x=>x.id==='L-ADS-REAL-RECOVERY');
+    assert.equal(missing.adsAttribution,undefined);
+    const restored=await interrupted.reconcilePersistedLead(missing);
+    assert.equal(restored.recoveredSnapshot.lastTouch.campaignId,'outage-campaign-A');
+    const baseRowVersion=await domainStore.entityRowVersion('lead',missing.id);
+    const patch=await mutateAutoSaleEntityBatch({
+      legacyStore,domainStore,operations:[{
+        resource:'lead',operation:'patch',id:missing.id,baseRowVersion,
+        input:{adsAttribution:restored.recoveredSnapshot,adsAttributionStatus:'recovered'}
+      }],prepareNotifications:null
+    });
+    assert.equal(patch.status,200,JSON.stringify(patch.data));
+    const stateAfterRepair=await domainStore.loadState();
+    const repaired=stateAfterRepair.leads.find(x=>x.id===missing.id);
+    assert.equal(repaired.adsAttribution.lastTouch.campaignId,'outage-campaign-A');
+    assert.equal(repaired.adsAttributionStatus,'recovered');
+    // A stale writer must not rewrite immutable provenance.
+    const stale=await mutateAutoSaleEntityBatch({
+      legacyStore,domainStore,operations:[{
+        resource:'lead',operation:'patch',id:missing.id,baseRowVersion,
+        input:{adsAttribution:{source:'Telegram Ads',
+          lastTouch:{campaignId:'later-campaign-B'}}}
+      }],prepareNotifications:null
+    });
+    assert.equal(stale.status,409);
+    console.log('AWG_STAGE_B_LOCAL_YDB_RECOVERY_CAS_PASS');
     console.log('AWG_STAGE_B_LOCAL_YDB_REAL_CRM_COMMIT_PASS',JSON.stringify({
       committed:true,normalizedSource:true,immutableCampaign:true,clientForgeryStripped:true
     }));
