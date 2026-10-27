@@ -1,0 +1,87 @@
+name: Audit AWG Ads dedicated staging Yandex federation (NO WRITES)
+on:
+  push:
+    branches: [feature/awg-ads-stage-b-ops-acceptance]
+    paths: [.github/workflows/audit-awg-ads-stage-b-staging-federation.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: awg-ads-staging-federation-readonly
+  cancel-in-progress: false
+jobs:
+  verify-staging-federation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    env:
+      YC_STAGING_SA_ID: ${{ vars.AWG_ADS_STAGING_SA_ID }}
+      YC_FOLDER_ID: b1ggsmuiq7tb2d27f89q
+    steps:
+      - name: Require exact trusted repo and safe branch
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = mirozdanie6v/autoworld
+          test "$GITHUB_REF_NAME" = feature/awg-ads-stage-b-ops-acceptance
+      - name: Get short-lived GitHub OIDC claims (never log token)
+        id: oidc
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const token=await core.getIDToken('https://github.com/mirozdanie6v');
+            core.setSecret(token);
+            const claims=JSON.parse(Buffer.from(token.split('.')[1],'base64url').toString('utf8'));
+            if(claims.iss!=='https://token.actions.githubusercontent.com'
+              ||claims.aud!=='https://github.com/mirozdanie6v'
+              ||claims.repository!=='mirozdanie6v/autoworld')
+              throw Error('unexpected_github_oidc_claims');
+            core.info('Verified OIDC issuer: '+claims.iss);
+            core.info('Verified OIDC audience: '+claims.aud);
+            core.info('Verified OIDC subject: '+claims.sub);
+            core.setOutput('jwt',token);
+      - name: Require dedicated staging service account (no production SA fallback)
+        run: |
+          set -euo pipefail
+          if ! [[ "$YC_STAGING_SA_ID" =~ ^[a-z0-9]{20}$ ]]; then
+            echo "::error::Missing GitHub variable AWG_ADS_STAGING_SA_ID for a dedicated Yandex Cloud staging service account"
+            echo 'BLOCKED: dedicated ads staging service account not configured; no production fallback attempted.' >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+      - name: Exchange OIDC to dedicated staging IAM token
+        env:
+          GITHUB_OIDC_TOKEN: ${{ steps.oidc.outputs.jwt }}
+        run: |
+          set -euo pipefail
+          RESPONSE=$(curl -sS --connect-timeout 10 --max-time 30 -w '\n%{http_code}' \
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            --data-urlencode 'grant_type=urn:ietf:params:oauth:grant-type:token-exchange' \
+            --data-urlencode 'requested_token_type=urn:ietf:params:oauth:token-type:access_token' \
+            --data-urlencode "audience=$YC_STAGING_SA_ID" \
+            --data-urlencode "subject_token=$GITHUB_OIDC_TOKEN" \
+            --data-urlencode 'subject_token_type=urn:ietf:params:oauth:token-type:id_token' \
+            https://auth.yandex.cloud/oauth/token)
+          HTTP=$(printf '%s' "$RESPONSE" | tail -n1)
+          BODY=$(printf '%s' "$RESPONSE" | sed '$d')
+          if [ "$HTTP" != 200 ]; then
+            CODE=$(printf '%s' "$BODY" | jq -r '.error // "unknown"' 2>/dev/null | tr -cd '[:alnum:]_-')
+            echo "::error::Staging-only Yandex IAM federation exchange: HTTP $HTTP / $CODE"
+            echo "BLOCKED: dedicated staging IAM token exchange HTTP $HTTP / $CODE; check exact branch OIDC sub federation binding." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          TOKEN=$(printf '%s' "$BODY" | jq -er '.access_token')
+          echo "::add-mask::$TOKEN"
+          echo "AWG_ADS_STAGING_IAM_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+      - name: Read-only YDB inventory and non-production boundary
+        run: |
+          set -euo pipefail
+          RESPONSE=$(curl -sS --connect-timeout 10 --max-time 30 -w '\n%{http_code}' \
+            -H "Authorization: Bearer $AWG_ADS_STAGING_IAM_TOKEN" \
+            --get --data-urlencode "folderId=$YC_FOLDER_ID" \
+            'https://ydb.api.cloud.yandex.net/ydb/v1/databases')
+          HTTP=$(printf '%s' "$RESPONSE" | tail -n1)
+          if [ "$HTTP" != 200 ]; then echo "::error::Staging YDB read access HTTP $HTTP";exit 1;fi
+          BODY=$(printf '%s' "$RESPONSE" | sed '$d')
+          DB_COUNT=$(printf '%s' "$BODY" | jq -r '(.databases // [])|length')
+          echo "Yandex YDB staging IAM exchange verified; YDB inventory count=$DB_COUNT; read only."
+          printf '%s' "$BODY" | jq -r '(.databases // [])[] | "database_id="+.id+" status="+(.status//"?")+" storage_limit="+((.serverlessDatabase.storageSizeLimit//"unset")|tostring)+" rcu_limit="+((.serverlessDatabase.throttlingRcuLimit//"unset")|tostring)'
+          echo "Read-only staging YDB inventory completed; no database, IAM, schema, or production mutation performed." >> "$GITHUB_STEP_SUMMARY"
