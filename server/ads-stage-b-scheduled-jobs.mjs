@@ -84,14 +84,24 @@ export function createAdsScheduledJobRunner({
     try{
       const result=kind==='retention'
         ?await runRetention({principal}):await runReconciliation({principal});
-      status=result?.status==='incomplete'||result?.complete===false
-        ||Number(result?.errors||0)>0?'incomplete':'ok';
-      if(status==='incomplete')throw new Error('ads_job_incomplete');
+      const complete=kind==='retention'
+        ?result?.status==='complete'
+        :result?.complete===true&&Number.isInteger(result?.errors)&&result.errors===0;
+      if(!complete){
+        status='incomplete';
+        throw new Error('ads_job_incomplete');
+      }
+      // Do not mark success until the observability sink acknowledged it.
       await emitMetric({name:'awg_ads_job_success',kind,value:1});
+      status='ok';
       return {status:'ok',result};
     }catch(error){
-      await emitAlert({code:'awg_ads_scheduled_job_failed',kind,severity:'high'});
-      await emitMetric({name:'awg_ads_job_failed',kind,value:1});
+      if(status!=='incomplete')status='failed';
+      // A failed metrics sink must not swallow the primary job error.
+      await Promise.allSettled([
+        emitAlert({code:'awg_ads_scheduled_job_failed',kind,severity:'high'}),
+        emitMetric({name:'awg_ads_job_failed',kind,value:1})
+      ]);
       throw error;
     }finally{
       try{await store.audit({kind,status,at:new Date(clock()).toISOString()});}
