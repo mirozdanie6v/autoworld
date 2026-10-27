@@ -37,7 +37,7 @@ test('campaign token is cryptographically random, Telegram deep-link safe, never
   assert.equal(repository.snapshotForTests().campaigns[0].token,undefined);
   assert.equal(repository.snapshotForTests().campaigns[0].tokenHash,hashAdsToken(a.token));
   assert.notEqual(hashAdsToken(a.token),a.token);
-  assert.equal(ADS_ATTRIBUTION_TABLES.length,6);
+  assert.equal(ADS_ATTRIBUTION_TABLES.length,7);
   assert.notEqual(generateAdsToken(),generateAdsToken());
 });
 
@@ -131,7 +131,7 @@ test('YDB schema is explicit, isolated and cannot modify existing CRM tables',as
   await assert.rejects(ensureAdsAttributionSchema(sql),/isolated_test_database/);
   assert.equal(statements.length,0);
   await ensureAdsAttributionSchema(sql,{target:'isolated-test-database'});
-  assert.equal(statements.length,6);
+  assert.equal(statements.length,7);
   for(const [index,name] of ADS_ATTRIBUTION_TABLES.entries()){
     assert.match(statements[index],new RegExp('CREATE TABLE IF NOT EXISTS '+name));
     assert.doesNotMatch(statements[index],/auto_sale_leads|auto_sale_orders|auto_sale_state/i);
