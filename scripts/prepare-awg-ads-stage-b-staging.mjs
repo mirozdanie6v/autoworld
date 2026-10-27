@@ -5,6 +5,7 @@ import {Driver} from '@ydbjs/core';
 import {query} from '@ydbjs/query';
 import {AccessTokenCredentialsProvider} from '@ydbjs/auth/access-token';
 import {ADS_ATTRIBUTION_TABLES,ensureAdsAttributionSchema} from '../server/ads-attribution-ydb.mjs';
+import {inspectAdsStagingTables} from './awg-ads-schema-inspection.mjs';
 import {ensureAdsOperationsSchema} from '../server/ads-stage-b-scheduled-jobs.mjs';
 
 export function validateAdsManagedStagingConfig(env=process.env){
@@ -40,14 +41,10 @@ if(process.argv[1]?.endsWith('/prepare-awg-ads-stage-b-staging.mjs')){
       await ensureAdsAttributionSchema(sql,{target:'isolated-test-database'});
       await ensureAdsOperationsSchema(sql,{target:'isolated-test-database'});
     }
-    // Every expected table must already exist in read-only inspect mode.
-    // Only SELECTs here; missing table causes a failed acceptance, not creation.
-    for(const table of ADS_ATTRIBUTION_TABLES.concat(
-      'awg_ads_job_leases','awg_ads_job_audit')){
-      if(!/^awg_ads_[a-z0-9_]+$/.test(table))throw new Error('unsafe_ads_schema_table');
-      // The identifier is validated and quoted by the YDB SDK; no dynamic raw SQL.
-      await sql`SELECT * FROM ${sql.identifier(table)} LIMIT 1`.isolation('snapshotReadOnly');
-    }
+    // Inspect YDB SchemeService metadata rather than compiling nine SELECT
+    // statements; no table rows are read, and missing tables fail closed.
+    await inspectAdsStagingTables(driver,new URL(config.uri).searchParams.get('database'),
+      ADS_ATTRIBUTION_TABLES.concat('awg_ads_job_leases','awg_ads_job_audit'));
     console.log('AWG_ADS_MANAGED_STAGING_SCHEMA_OK',JSON.stringify({
       mode:config.mode,databaseId:config.databaseId,
       tables:ADS_ATTRIBUTION_TABLES.length+2
