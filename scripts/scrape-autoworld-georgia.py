@@ -145,50 +145,76 @@ def price_amount_rub(value):
     return None
 
 
-def parse_russia_turnkey_rub(text):
-    """Handle Telegram line wraps after 'price in Russia (with repair)'."""
-    lines = [line.strip() for line in str(text or "").splitlines() if line.strip()]
-    for index, line in enumerate(lines):
-        if re.search(r"цена\s+в\s+россии\s*\(\s*с\s+ремонтом\s*\)", line, re.I):
-            price = price_amount_rub(line)
-            if price:
-                return price
-            # One following token can be a wrench; skip it, not another labeled article.
-            for following in lines[index + 1:index + 3]:
-                if re.search(r"(?:таможня|утилизац|двигатель|пробег|год|торги|доставк)", following, re.I):
-                    break
-                price = price_amount_rub(following)
-                if price:
-                    return price
+KEYCAP_DIGIT_RE = re.compile(r"^([0-9])\ufe0f?\u20e3$")
+CHANNEL_EMOJI_ZERO = "🔤"
+
+def parse_channel_emoji_price(text):
+    """Decode the verified ✨ keycap sticker, with 🤩 as decimal and 🔤 as 0."""
+    lines = [x.strip().strip("* ").strip() for x in str(text or "").splitlines() if x.strip()]
+    for i, line in enumerate(lines[:70]):
+        if line not in {"✨", "💰", "💸"}:
+            continue
+        digits = []
+        for next_line in lines[i + 1:i + 13]:
+            if next_line in {"🔹", "🔸", "🔺", "📜", "🛡", "🔎"} or re.match(
+                r"(комплектация|Пробег|Двигатель)", next_line, re.I
+            ):
+                break
+            match = KEYCAP_DIGIT_RE.fullmatch(next_line)
+            if match:
+                digits.append(match.group(1))
+            elif next_line == CHANNEL_EMOJI_ZERO:
+                digits.append("0")
+            elif next_line == "🤩":
+                digits.append(".")
+            else:
+                break
+        if digits.count(".") != 1:
+            continue
+        dot = digits.index(".")
+        whole, fraction = "".join(digits[:dot]), "".join(digits[dot + 1:])
+        if not (1 <= len(whole) <= 2 and 2 <= len(fraction) <= 5):
+            continue
+        value = round(float(whole + "." + fraction) * 1_000_000)
+        if 100_000 <= value <= 200_000_000:
+            return value
     return None
 
+def parse_russia_turnkey_rub(text):
+    """Recognize multiline 'Цена в России (с ремонтом)' as secondary price."""
+    lines = [line.strip() for line in str(text or "").splitlines() if line.strip()]
+    for i in range(len(lines)):
+        block = " ".join(lines[i:i + 9])
+        if re.search(r"цен[аы]\s+в\s+россии\s*\(\s*с\s+ремонтом\s*\)", block, re.I):
+            price = price_amount_rub(block)
+            if price:
+                return price
+        if re.search(r"стоимост[ьи]\s+автомобиля\s+под\s+ключ\s+с\s+ремонтом", block, re.I):
+            price = price_amount_rub(block)
+            if price:
+                return price
+    return None
 
 def parse_rub(text, label):
     if label == "price":
-        # Select only the primary listing price, never the lower 'price in Russia' row.
         for line in str(text or "").splitlines():
-            if re.search(r"цена\s+в\s+россии", line, re.I):
+            if re.search(r"цен[аы]\s+в\s+россии|с\s+ремонтом|таможн|утиль|ремонт|доставк", line, re.I):
                 continue
-            if re.search(r"(?:цена|стоимость\s+автомобиля)", line, re.I):
+            if re.search(r"^(?:цена|стоимость\s+автомобиля)\s*[:–—-]", line.strip(), re.I):
                 price = price_amount_rub(line)
                 if price:
                     return price
-        for line in str(text or "").splitlines():
-            if re.search(r"цена\s+в\s+россии|таможн|утиль|ремонт|доставк", line, re.I):
-                continue
-            price = price_amount_rub(line)
-            if price:
-                return price
+        # A generic ruble number is not evidence of the listing price.
         return None
     patterns = [
         r"таможенн[^\n]{0,90}?([0-9]+(?:[.,][0-9]+)?)\s*тыс",
         r"таможенн[^\n]{0,90}?([0-9]+(?:[.,][0-9]+)?)\s*млн",
     ]
-    for i, p in enumerate(patterns):
-        m = re.search(p, text, re.I | re.S)
-        if m:
-            v = float(m.group(1).replace(",", "."))
-            return int(v * (1_000 if i == 0 else 1_000_000))
+    for i, pattern in enumerate(patterns):
+        match = re.search(pattern, text, re.I | re.S)
+        if match:
+            value = float(match.group(1).replace(",", "."))
+            return int(value * (1_000 if i == 0 else 1_000_000))
     return None
 
 
@@ -250,13 +276,16 @@ def parse_discount_rub(text):
 
 def parse_price_pair(text):
     primary = parse_rub(text, "price")
-    emoji_price = parse_discount_rub(text)
-    explicit = bool(re.search(r"скидк|цен[аыу]\s+сниж|цен[аыу]\s+со\s+скидк|акци[яию]", str(text or ""), re.I))
-    russia_price = parse_russia_turnkey_rub(text)
-    if primary and emoji_price and explicit and primary > emoji_price:
-        return primary, emoji_price, emoji_price
-    # Without an explicit promotion, a second number must never be a strike-through.
-    return None, primary or emoji_price or russia_price, None
+    channel_price = parse_channel_emoji_price(text)
+    explicit_discount = bool(re.search(
+        r"скидк|цен[аыу]\s+сниж|цен[аыу]\s+со\s+скидк|акци[яию]",str(text or ""),re.I
+    ))
+    if explicit_discount and channel_price and primary and primary > channel_price:
+        return primary, channel_price, channel_price
+    # The sticker is the vehicle price, distinct from the "Russia with repair"
+    # total. Do not use a turnkey amount as a fallback listing price.
+    return None, channel_price or primary, None
+
 
 def parse_title(text):
     # Publication captions frequently begin with "на 08.09" (pricing date).

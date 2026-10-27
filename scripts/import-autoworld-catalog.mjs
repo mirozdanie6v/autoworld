@@ -1,5 +1,8 @@
 import {readFile,writeFile} from 'node:fs/promises';
+import {resolve} from 'node:path';
+import {pathToFileURL} from 'node:url';
 import {catalogListingQuality} from './catalog-listing-quality.mjs';
+import {extractSourcePrices} from './catalog-source-price.mjs';
 
 const SOURCE_PATH=process.env.SOURCE_PATH||'data/autoworld-georgia-recent/cars.json';
 const OUTPUT_PATH=process.env.OUTPUT_PATH||'data/autoworld-georgia-recent/catalog-import.json';
@@ -87,30 +90,28 @@ function extractBid(car){
   return m?Number(m[1].replace(/\D/g,''))||0:0;
 }
 
-function extractPromoPriceRub(source){
-  if(Number(source?.priceAfterDiscountRub)>0)return Number(source.priceAfterDiscountRub);
-  const raw=String(source?.rawText||'');
-  const m=raw.match(/([0-9])️⃣\s*\n\s*🤩\s*\n\s*([0-9])️⃣\s*\n\s*([0-9])️⃣\s*\n\s*🔤\s*\n\s*🔤\s*\n\s*🔤/u);
-  return m?Number(`${m[1]}${m[2]}${m[3]}`)*10_000:0;
-}
 function sourceRubPrices(source){
-  const raw=String(source?.rawText||'');
-  const explicit=source?.discountExplicit===true||/скидк|цен[аыу]\s+сниж|цен[аыу]\s+со\s+скидк|акци[яию]/iu.test(raw);
-  const primary=Math.max(0,Number(source?.priceRub)||0);
-  const before=Math.max(0,Number(source?.priceBeforeDiscountRub)||0);
-  const promo=Math.max(0,extractPromoPriceRub(source));
-  // A second "price in Russia (with repair)" is a turnkey estimate, not a discount.
-  const priceRub=(explicit&&before>promo&&promo>0)?promo:(primary||before||promo);
-  const prior=explicit&&before>priceRub?before:0;
-  const russiaTurnkeyRub=Math.max(0,Number(source?.russiaTurnkeyRub)||0);
-  const turnkeyDeliveryRub=russiaTurnkeyRub>=priceRub&&priceRub>0&&russiaTurnkeyRub>0?
-    russiaTurnkeyRub-priceRub:0;
+  const fromText=extractSourcePrices(source?.rawText||'');
+  const sourceRub=Math.max(0,Number(source?.priceRub)||0);
+  const emojiOrLabeled=fromText.priceRub;
+  // Trusted raw-channel evidence overrides a stale scraper fallback. A
+  // historical price field may actually be "Russia with repair", not the
+  // primary sticker price. Never silently infer a zero price as valid.
+  const priceRub=emojiOrLabeled||sourceRub;
+  const russiaTurnkeyRub=fromText.russiaTurnkeyRub||Math.max(0,Number(source?.russiaTurnkeyRub)||0);
+  const discountExplicit=fromText.discountExplicit||(source?.discountExplicit===true&&
+    Number(source?.priceBeforeDiscountRub)>priceRub&&priceRub>0);
+  const priceBeforeDiscountRub=discountExplicit?
+    Math.max(fromText.priceBeforeDiscountRub,Number(source?.priceBeforeDiscountRub)||0):0;
   return{
-    priceBeforeDiscountRub:prior,priceAfterDiscountRub:prior?priceRub:0,
-    priceRub,discountExplicit:Boolean(prior),
+    priceRub,
+    priceBeforeDiscountRub,
+    priceAfterDiscountRub:priceBeforeDiscountRub>priceRub?priceRub:0,
+    discountExplicit:priceBeforeDiscountRub>priceRub,
     russiaTurnkeyRub,
-    turnkeyDeliveryRub,
-    turnkeyDeliverySource:turnkeyDeliveryRub>0?'source_russia_with_repair_difference':''
+    turnkeyDeliveryRub:russiaTurnkeyRub>priceRub&&priceRub>0?russiaTurnkeyRub-priceRub:0,
+    turnkeyDeliverySource:russiaTurnkeyRub>priceRub&&priceRub>0?'source_russia_with_repair_difference':'',
+    priceEvidence:fromText.priceEvidence==='unresolved'?(sourceRub>0?'historical_numeric_source':'unresolved'):fromText.priceEvidence
   };
 }
 
@@ -146,6 +147,7 @@ function sourceQualityReason(source){
   const quality=catalogListingQuality({rawText:source.rawText,vin,brand:title.brand,model:title.model,year:title.year,sourcePostId:source.sourcePostId});
   if(quality)return quality;
   if(!photos.length)return'missing_recovered_photos';
+  if(sourceRubPrices(source).priceRub<=0&&extractBid(source)<=0)return'missing_verified_source_price';
   return'';
 }
 
@@ -206,7 +208,7 @@ function inferOrigin(source){
   return'Грузия';
 }
 
-function normalizeCar(source){
+export function normalizeCar(source){
   const title=titleFromRaw(source.rawText);
   const rawBrand=clean(title.brand||source.brand);
   const rawModel=clean(title.model||source.model).replace(/\bSou\s+l\b/i,'Soul');
@@ -216,6 +218,7 @@ function normalizeCar(source){
   const names=canonicalVehicleName(rawBrand,rawModel,title.title||source.title,vin);
   const brand=names.brand,model=names.model;
   if(catalogListingQuality({rawText:source.rawText,vin,brand,model,year,sourcePostId:source.sourcePostId})||!photos.length)return null;
+  if(sourceRubPrices(source).priceRub<=0&&extractBid(source)<=0)return null;
 
   const engine=clean(source.engine)||field(source.rawText,'Двигатель');
   const transmission=clean(source.transmission)||field(source.rawText,'Коробка');
@@ -262,6 +265,7 @@ function normalizeCar(source){
     priceBeforeDiscountRub:prices.priceBeforeDiscountRub,
     priceAfterDiscountRub:prices.priceAfterDiscountRub,
     priceRub,
+    catalogPriceEvidence:prices.priceEvidence,
     discountExplicit:prices.discountExplicit,
     russiaTurnkeyRub:prices.russiaTurnkeyRub,
     turnkeyDeliveryRub:prices.turnkeyDeliveryRub,
@@ -297,7 +301,7 @@ function normalizeCar(source){
   };
 }
 
-function dedupe(list){
+export function dedupe(list){
   const byKey=new Map();
   for(const car of list){
     if(!car)continue;
@@ -398,4 +402,5 @@ async function main(){
   throw new Error('state_write_conflict_exhausted');
 }
 
-main().catch(error=>{console.error(error);process.exit(1)});
+if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href)
+  main().catch(error=>{console.error(error);process.exit(1)});
