@@ -230,7 +230,7 @@ def parse_power_metric_hp(text):
 KEYCAP_PRICE_DIGIT = r"(?:[0-9]\ufe0f?\u20e3|🔤)"
 KEYCAP_PRICE_RE = re.compile(
     r"(" + KEYCAP_PRICE_DIGIT + r")\s*🤩\s*(" + KEYCAP_PRICE_DIGIT
-    + r")\s*(" + KEYCAP_PRICE_DIGIT + r")\s*🔤\s*🔤\s*🔤",
+    + r")\s*(?:(" + KEYCAP_PRICE_DIGIT + r")\s*)?🔤\s*🔤\s*🔤",
     re.U,
 )
 
@@ -238,8 +238,8 @@ def parse_discount_rub(text):
     """Read source's encoded price. 🔤 means digit zero, not an alphabetic label."""
     hits = []
     for m in KEYCAP_PRICE_RE.finditer(str(text or "")):
-        parts = [int(re.search(r"[0-9]", v).group(0)) if v != "🔤" else 0 for v in m.groups()]
-        value = (parts[0] * 100 + parts[1] * 10 + parts[2]) * 10_000
+        parts = [int(re.search(r"[0-9]", v).group(0)) if v != "🔤" else 0 for v in m.groups() if v is not None]
+        value = (parts[0] * 100 + parts[1] * 10 + (parts[2] if len(parts) > 2 else 0)) * 10_000
         if 100_000 <= value <= 100_000_000:
             hits.append(value)
     if len(set(hits)) == 1:
