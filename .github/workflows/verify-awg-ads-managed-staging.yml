@@ -5,6 +5,8 @@ on:
     paths:
       - .github/workflows/verify-awg-ads-managed-staging.yml
       - scripts/test-awg-ads-managed-staging.mjs
+      - scripts/awg-ads-schema-inspection.mjs
+      - scripts/prepare-awg-ads-stage-b-staging.mjs
   workflow_dispatch:
 permissions:
   contents: read
