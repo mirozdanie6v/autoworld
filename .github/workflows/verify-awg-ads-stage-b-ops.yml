@@ -39,6 +39,7 @@ jobs:
           node --check server/ads-stage-b-crm-privacy.mjs
           node --check server/ads-stage-b-job-ydb.mjs
           node --check server/ads-stage-b-managed-jobs.mjs
+          node --check scripts/run-awg-ads-staging-managed-job.mjs
           node --check scripts/test-awg-ads-ops-local-ydb.mjs
           node --test tests/ads-attribution*.test.mjs tests/awg-ads-*.test.mjs tests/auto-sale-ads-telegram-hook.test.mjs
       - name: Full AutoWorld and relay regression
@@ -49,7 +50,7 @@ jobs:
           git fetch --no-tags origin main
           git diff --name-only origin/main...HEAD | while IFS= read -r file; do
             case "$file" in
-              server/ads-*|server/auto-sale-access.mjs|server/yandex-server.mjs|server/telegram-bot.mjs|public/auto-sale-bootstrap.mjs|public/auto-sale-ads-*.mjs|tests/ads-*|tests/awg-ads-*|scripts/test-awg-ads-*.mjs|docs/AWG_ADS*.md|.github/workflows/verify-awg-ads-*.yml|.github/workflows/audit-awg-ads-*.yml) ;;
+              server/ads-*|server/auto-sale-access.mjs|server/yandex-server.mjs|server/telegram-bot.mjs|public/auto-sale-bootstrap.mjs|public/auto-sale-ads-*.mjs|tests/ads-*|tests/awg-ads-*|scripts/test-awg-ads-*.mjs|scripts/run-awg-ads-staging-managed-job.mjs|docs/AWG_ADS*.md|.github/workflows/verify-awg-ads-*.yml|.github/workflows/audit-awg-ads-*.yml) ;;
               *) echo "::error::Unreviewed AWG Ads path $file"; exit 1 ;;
             esac
           done
