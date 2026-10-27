@@ -2,7 +2,7 @@
 // 1️⃣ 🤩 7️⃣ 9️⃣ 🔤 🔤 🔤 = 1,790,000 RUB. 🔤 is zero;
 // both [1️⃣] and [1⃣] keycap forms are accepted.
 const DIGIT='(?:[0-9]\uFE0F?\u20E3|🔤)';
-const EMOJI_PRICE_RE=new RegExp('('+DIGIT+')\\s*🤩\\s*('+DIGIT+')\\s*('+DIGIT+')\\s*🔤\\s*🔤\\s*🔤','gu');
+const EMOJI_PRICE_RE=new RegExp('('+DIGIT+')\\s*🤩\\s*('+DIGIT+')\\s*(?:('+DIGIT+')\\s*)?🔤\\s*🔤\\s*🔤','gu');
 const PRICE_LABEL=/(?:^|\n)\s*(?:(?:цена|стоимость)\s*(?:автомобиля|авто)?|за\s+автомобиль)\s*[:—–-]?/iu;
 const MONEY_RUB=/(\d+(?:[.,]\d+)?)\s*(?:млн(?:\.|а)?|миллион\w*)|(\d{1,3}(?:[ \u00a0]\d{3})+|\d{6,9})\s*(?:₽|руб(?:лей|ля|\.)?)/iu;
 function decimalMoneyRub(value){const match=String(value||'').match(MONEY_RUB);if(!match)return 0;
@@ -12,7 +12,7 @@ export function telegramEmojiPriceRub(raw=''){
   const s=String(raw||'');let match,prices=[];
   EMOJI_PRICE_RE.lastIndex=0;
   while((match=EMOJI_PRICE_RE.exec(s))!==null){
-    const figures=match.slice(1,4).map(tokenDigit);
+    const figures=[tokenDigit(match[1]),tokenDigit(match[2]),match[3]?tokenDigit(match[3]):0];
     const value=(figures[0]*100+figures[1]*10+figures[2])*10000;
     if(Number.isSafeInteger(value)&&value>=100000&&value<=100000000)prices.push({value,index:match.index});
   }
