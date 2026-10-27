@@ -61,7 +61,7 @@ export function createPersistedLeadPageReader({readAuthoritativeState}={}){
       throw new Error('invalid_ads_authoritative_read_bounds');
     const state=await readAuthoritativeState();
     const leads=(state?.leads||[]).filter(x=>x?.id&&String(x.id)>cursor)
-      .sort((a,b)=>String(a.id).localeCompare(String(b.id)));
+      .sort((a,b)=>String(a.id)<String(b.id)?-1:String(a.id)>String(b.id)?1:0);
     const rows=leads.slice(0,limit);
     return {leads:rows,nextCursor:leads.length>limit?String(rows.at(-1).id):null};
   };
