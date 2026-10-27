@@ -1,4 +1,4 @@
-name: Audit and reconcile AWG source prices
+name: Audit AWG catalog source prices (read only)
 
 on:
   pull_request:
@@ -9,14 +9,10 @@ on:
       - scripts/audit-awg-catalog-price-reconciliation.mjs
       - tests/auto-sale-catalog-source-prices.test.mjs
       - .github/workflows/reconcile-awg-catalog-prices.yml
-  push:
-    branches: [main]
-    paths:
-      - .sync-awg-catalog-price-reconcile
 
 permissions:
   contents: read
-  id-token: write
+  id-token: none
 
 concurrency:
   group: awg-catalog-sync
@@ -52,67 +48,6 @@ jobs:
           node scripts/audit-awg-catalog-price-reconciliation.mjs
           jq -r '"PRICE_RECONCILE candidates=\(.candidates) unresolved=\(.unresolvedCount) currently_unpriced=\(.liveUnpriced)"' \
             /tmp/awg-price-audit/report.json
-      - name: Read explicit release marker mode
-        if: github.event_name == 'push'
-        id: gate
-        run: |
-          set -euo pipefail
-          MODE=$(sed -n 's/^mode=//p' .sync-awg-catalog-price-reconcile | tail -n 1)
-          if [ "$MODE" != 'audit' ] && [ "$MODE" != 'apply' ]; then
-            echo "Unsupported catalog release mode: $MODE"
-            exit 1
-          fi
-          echo "apply=$([ "$MODE" = 'apply' ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
-      - name: Obtain scoped catalog importer token (explicit apply marker only)
-        if: github.event_name == 'push' && steps.gate.outputs.apply == 'true'
-        id: oidc
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const token = await core.getIDToken('autoworld-catalog-import')
-            core.setSecret(token)
-            core.setOutput('token', token)
-      - name: Reimport ONLY identified price discrepancies
-        if: github.event_name == 'push' && steps.gate.outputs.apply == 'true'
-        env:
-          AUTO_SALE_CATALOG_IMPORT_BEARER: ${{ steps.oidc.outputs.token }}
-          SOURCE_PATH: /tmp/awg-price-audit/corrections.json
-          REPLACE_SOURCE_ALL: 'false'
-        run: |
-          set -euo pipefail
-          COUNT=$(jq 'length' "$SOURCE_PATH")
-          if [ "$COUNT" -eq 0 ]; then
-            echo "PRICE_REIMPORT_NO_CHANGES"
-          else
-            test "$COUNT" -le 180
-            node scripts/sync-autoworld-catalog.mjs
-          fi
-      - name: Verify targeted price corrections in live catalog
-        if: github.event_name == 'push' && steps.gate.outputs.apply == 'true'
-        run: |
-          set -euo pipefail
-          curl --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 10 --max-time 40 -fsS \
-            https://awgcars.ru/api/auto-sale/state \
-            | jq '[.catalog[]? | select(.source == "AutoWorld_Georgia")]' \
-            > /tmp/awg-price-audit/catalog-after.json
-          node --input-type=module <<'JS'
-          import {readFileSync} from 'node:fs';
-          const before=JSON.parse(readFileSync('/tmp/awg-price-audit/live-catalog.json','utf8'));
-          const after=JSON.parse(readFileSync('/tmp/awg-price-audit/catalog-after.json','utf8'));
-          const changes=JSON.parse(readFileSync('/tmp/awg-price-audit/corrections.json','utf8'));
-          const byId=new Map(after.map(x=>[x.id,x]));
-          const original=new Map(before.map(x=>[x.id,x]));
-          if(after.length<before.length)throw Error('catalog_shrank_after_price_reconcile');
-          for(const car of changes){
-            const now=byId.get(car.id),prior=original.get(car.id);
-            if(!now||!prior)throw Error('lost_catalog_id_'+car.id);
-            if(Number(now.priceRub)!==Number(car.priceRub))throw Error('price_not_updated_'+car.id);
-            if(prior.active===false&&now.active!==false)throw Error('manager_hidden_car_reactivated_'+car.id);
-            if(now.id!==prior.id||now.sourcePostId!==prior.sourcePostId)
-              throw Error('catalog_identity_changed_'+car.id);
-          }
-          console.log('PRICE_REIMPORT_VERIFIED',JSON.stringify({records:changes.length,liveSourceCount:after.length}));
-          JS
       - name: Upload inspectable catalog pricing audit
         if: always()
         uses: actions/upload-artifact@v4
