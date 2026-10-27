@@ -34,9 +34,8 @@ test('authorized director panel fetches server report on opening; uses text node
   });
   assert.equal(calls.length,0);
   const panel=root.querySelector('.awg-ads-director-report');
-  panel.open=true;
-  panel.dispatchEvent(new dom.window.Event('toggle'));
-  await new Promise(resolve=>setTimeout(resolve,10));
+  panel.open=true; // jsdom emits the native toggle event asynchronously
+  await new Promise(resolve=>setTimeout(resolve,20));
   assert.equal(calls.length,1);
   assert.equal(calls[0].url,'/api/auto-sale/ads/director-report');
   assert.equal(calls[0].opts.headers['x-telegram-init-data'],'signed');
