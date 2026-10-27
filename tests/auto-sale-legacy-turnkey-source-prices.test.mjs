@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {extractLegacyTurnkeySource} from '../scripts/catalog-legacy-turnkey.mjs';
 import {extractSourcePrices} from '../scripts/catalog-source-price.mjs';
-import {catalogPriceRub,catalogVehicleSnapshot} from '../public/auto-sale-catalog-lead.mjs';
+import {catalogPriceRub,catalogVehicleSnapshot,renderCatalogLeadVehicle} from '../public/auto-sale-catalog-lead.mjs';
 
 const archive=JSON.parse(readFileSync(new URL('../data/autoworld-georgia/cars.json',import.meta.url),'utf8'));
 const posts=new Map(archive.map(x=>[String(x.sourcePostId),x]));
@@ -58,4 +58,28 @@ test('catalog shows source turnkey reference as fallback but snapshots preserve 
   assert.equal(snap.russiaTurnkeyMaxRub,4588000);
   assert.equal(snap.usaTurnkeyRub,3577000);
   assert.equal(snap.georgiaTurnkeyRub,4588000);
+});
+
+test('manager lead uses restored Russia source calculation instead of showing no price',()=>{
+  const car={id:'AWG-1363',source:'AutoWorld_Georgia',sourcePostId:'1363',
+    brand:'Range Rover',model:'Evoque',year:2023,
+    price:0,priceRub:0,russiaTurnkeyRub:3840000,russiaTurnkeyKind:'turnkey_single',
+    russiaTurnkeyMaxRub:0,estimatedBidUsd:0};
+  const lead={carId:car.id,origin:'США',estimatedCostRub:0,catalogVehicle:catalogVehicleSnapshot(car)};
+  const html=renderCatalogLeadVehicle(lead,{escape:String,rubMoney:value=>value+' ₽'});
+  assert.match(html,/Расчёт в России с ремонтом \(источник\)/);
+  assert.match(html,/3840000 ₽/);
+  assert.doesNotMatch(html,/уточняется/);
+  assert.equal((html.match(/Расчёт в России с ремонтом \(источник\)/g)||[]).length,1);
+});
+test('route range uses from-price and old lead budgets cannot replace verified source data',()=>{
+  const car={id:'AWG-814',source:'AutoWorld_Georgia',sourcePostId:'814',
+    price:0,priceRub:0,russiaTurnkeyRub:3577000,russiaTurnkeyMaxRub:4588000,
+    usaTurnkeyRub:3577000,georgiaTurnkeyRub:4588000};
+  const html=renderCatalogLeadVehicle({carId:car.id,estimatedCostRub:1200000,
+    catalogVehicle:catalogVehicleSnapshot(car)},{escape:String,rubMoney:value=>value+' ₽'});
+  assert.match(html,/от 3577000 ₽/);
+  assert.match(html,/Оценка через США/);
+  assert.match(html,/Оценка через Грузию/);
+  assert.doesNotMatch(html,/1200000 ₽/);
 });
