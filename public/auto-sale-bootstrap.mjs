@@ -371,7 +371,7 @@ const vkModule=await import('./auto-sale-vk.mjs?v=20261011-vk-notifications-v1')
 const vkShellPromise=vkLaunchParams()?vkModule.initVkMiniAppShell():Promise.resolve({ok:true,skipped:'not-vk'});
 const initialStatePromise=pullInitialState();
 await import('./auto-sale-submit-bridge.mjs?v=20260921-live-values-1');
-await import('./auto-sale-app-v3.mjs?v=20261027-fully-paid-handoff-v1');
+await import('./auto-sale-app-v3.mjs?v=20261027-order-advance50-v1');
 await import('./auto-sale-calc-scroll-performance.mjs?v=20261010-scroll-v1');
 await import('./auto-sale-vk-web.mjs?v=20261010-vk-prod-v1');
 if(['awgcars.ru','www.awgcars.ru','vk-test.awgcars.ru'].includes(window.location.hostname)&&!telegramLaunchDetected()&&!telegramInitData()&&!new URLSearchParams(window.location.search||'').has('vk_app_id'))await import('./auto-sale-vk-status-widget.mjs?v=20261010-web-only-v2');
