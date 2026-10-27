@@ -12,6 +12,13 @@ import {
   ensureAdsManagedJobSchema,createYdbAdsManagedJobRepository
 } from '../server/ads-stage-b-job-ydb.mjs';
 
+import {createAdsPrivacyService} from '../server/ads-attribution-privacy.mjs';
+import {createAdsCrmPrivacyErasure} from '../server/ads-stage-b-crm-privacy.mjs';
+import {createYdbStateStore} from '../server/ydb-state.mjs';
+import {createYdbDomainStore} from '../server/ydb-domain-store.mjs';
+import {legacyStateToDomainRows} from '../server/ydb-domain-migration.mjs';
+import {mutateAutoSaleEntityBatch} from '../server/ydb-entity-commands.mjs';
+
 if(process.env.AWG_ADS_LOCAL_YDB_TEST!=='yes'
   ||process.env.YDB_CONNECTION_STRING||process.env.AWG_ADS_STAGE_B_YDB_CONNECTION_STRING
   ||process.env.YDB_ACCESS_TOKEN_CREDENTIALS)
@@ -73,6 +80,79 @@ try{
   assert.equal((await service.recordBotStart({telegramUserId:888888,
     startPayload:token,updateId:888002})).reason,'erased_subject');
   console.log('AWG_ADS_OPS_ERASURE_SUPPRESSION_ALL_INDEXES_PASS');
+
+  // Actual normalized CRM YDB mutation and cross-store metadata erasure.
+  // Only disposable localhost tables; no real user IDs or notifications.
+  time='2026-10-27T02:00:00.000Z';
+  const person='666666',ownedKey=createAdsSubjectKey(person,secret);
+  assert.equal((await service.recordBotStart({
+    telegramUserId:person,startPayload:token,updateId:666001
+  })).status,'recorded');
+  const originalAttribution=await service.getAttribution({telegramUserId:person});
+  assert.ok(originalAttribution?.lastTouch?.campaignId);
+  const connectionString='grpc://localhost:2136/local';
+  const credential=new AnonymousCredentialsProvider();
+  const legacyStore=await createYdbStateStore({
+    connectionString,credentialsProvider:credential,ensureSchema:true,domainDualWrite:false
+  });
+  const domainStore=await createYdbDomainStore({
+    connectionString,credentialsProvider:credential,ensureSchema:true
+  });
+  try{
+    const base=await legacyStore.loadState();
+    await domainStore.replaceSnapshot(legacyStateToDomainRows(base),{
+      sourceRevision:base.revision,status:'initialized'
+    });
+    const leadId='L-ADS-OPS-PRIVACY-REAL-YDB';
+    const written=await mutateAutoSaleEntityBatch({
+      legacyStore,domainStore,prepareNotifications:null,
+      operations:[{resource:'lead',operation:'create',id:leadId,input:{
+        id:leadId,model:'Test Honda',budget:21300,status:'Новый',
+        clientProvider:'telegram',clientProviderUserId:person,
+        adsAttribution:{source:'Telegram Ads',...originalAttribution}
+      }}]
+    });
+    assert.equal(written.status,200,JSON.stringify(written.data));
+    const before=await domainStore.loadState();
+    assert.equal(before.leads.find(x=>x.id===leadId).adsAttribution.lastTouch.campaignId,
+      'ops-retention-campaign');
+    const priv=createAdsPrivacyService({
+      repository,subjectSecrets:[secret],
+      authorizeOperation:async({principal,permission})=>
+        principal?.id==='qa-verified-privacy-operator'&&permission==='ads:erase',
+      onAudit:async()=>{}
+    });
+    const job=createAdsCrmPrivacyErasure({
+      privacyService:priv,
+      readAuthoritativeState:async()=>domainStore.loadState(),
+      getLeadVersion:id=>domainStore.entityRowVersion('lead',id),
+      patchLead:async({id,baseRowVersion,input})=>mutateAutoSaleEntityBatch({
+        legacyStore,domainStore,prepareNotifications:null,
+        operations:[{resource:'lead',operation:'patch',id,baseRowVersion,input}]
+      }),
+      onAudit:async()=>{},onAlert:async alert=>{throw Error(alert.code);}
+    });
+    await assert.rejects(job.erase({telegramUserId:person,
+      principal:{id:'unauthorized'}}),/forbidden/);
+    assert.ok((await domainStore.loadState()).leads.find(x=>x.id===leadId).adsAttribution);
+    const completed=await job.erase({telegramUserId:person,
+      principal:{id:'qa-verified-privacy-operator'}});
+    assert.equal(completed.status,'complete');
+    assert.equal(completed.scrubbed,1);
+    const after=(await domainStore.loadState()).leads.find(x=>x.id===leadId);
+    assert.equal(after.adsAttribution,null);
+    assert.equal(after.adsAttributionStatus,'erased');
+    assert.equal(after.model,'Test Honda');
+    assert.equal(after.budget,21300);
+    assert.equal(await repository.readSubject(ownedKey),null);
+    assert.equal((await repository.listBotTouchesAt({subjectKey:ownedKey,asOf:time})).length,0);
+    assert.equal((await service.recordBotStart({telegramUserId:person,
+      startPayload:token,updateId:666002})).reason,'erased_subject');
+    console.log('AWG_ADS_OPS_REAL_YDB_CRM_ERASURE_CAS_PASS');
+  }finally{
+    await Promise.allSettled([legacyStore.close(),domainStore.close()]);
+  }
+
 }finally{
   await driver.close();
 }
