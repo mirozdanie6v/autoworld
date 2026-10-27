@@ -121,7 +121,10 @@ test('separate ads DB failure or broken metrics sink cannot block a new CRM lead
     recordTrustedEvent:async()=>{throw Error('db temporarily down')}
   },onFailure:async event=>{events.push(event);throw Error('monitor outage')}});
   const ops=[{resource:'lead',operation:'create',id:'L-new',input:{source:'Mini App'}}];
-  assert.strictEqual(await bridge.enrichLeadOperations(ops,access),ops);
+  const deferred=await bridge.enrichLeadOperations(ops,access);
+  assert.notStrictEqual(deferred,ops);
+  assert.equal(deferred[0].input.adsAttributionStatus,'lookup_unavailable');
+  assert.equal(ops[0].input.adsAttributionStatus,undefined);
   assert.deepEqual(events,[{code:'ads_snapshot_unavailable',eventType:'lead_create'}]);
   const manuallyPersisted=[{...ops[0],input:{...ops[0].input,adsAttribution:{
     source:'Telegram Ads',lastTouch:{campaignId:'previously saved'}
