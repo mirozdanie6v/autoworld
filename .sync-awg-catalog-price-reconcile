@@ -1,7 +1,9 @@
 mode=apply
 source=@AutoWorld_Georgia
-scope=existing-price-records
-reason=2026-10-27-legacy-russia-turnkey-18-backfill-with-pr99-source-proof
-approved_pr=99
-audit_only_run=40540166435
+scope=existing-car-confirmed-source-prices-and-legacy-turnkey-only
+reason=2026-10-27-reconcile-18-archived-priced-listings-and-preserve-manager-visibility
+approved_audit_run=40540166435
+expected_live_catalog_min=169
 replace_source_all=false
+preserve_manual_activation=true
+preserve_existing_vehicle_links=true
