@@ -12,10 +12,15 @@ export function decodeChannelEmojiPrice(raw=''){
   // rather than requiring the first token after ✨ to be a digit.
   // Only unambiguous keycap/🤩/🔤 sequences are accepted as source evidence.
   const lines=String(raw||'').split(/\r?\n/u).map(x=>x.replace(/^[* ]+|[* ]+$/g,'').trim()).filter(Boolean);
-  for(let i=0;i<Math.min(lines.length,150);i++){
+  // Never adopt a later sticker that belongs to the Russia turnkey price,
+  // a separate financial amount that follows mileage/technical details.
+  const details=/^(?:комплектация|Пробег|Двигатель|Коробка|Привод|Безопасность|Салон|История автомобиля)/iu;
+  const firstDetail=lines.findIndex(line=>details.test(line));
+  const headerEnd=firstDetail>=0?firstDetail:lines.length;
+  for(let i=0;i<Math.min(headerEnd,150);i++){
     if(!KEYCAP.test(lines[i]))continue;
     const tokens=[];
-    for(let j=i;j<Math.min(lines.length,i+10);j++){
+    for(let j=i;j<Math.min(headerEnd,i+10);j++){
       const line=lines[j];
       if(STOP.test(line))break;
       if(line===DELIMITER){tokens.push('.');continue;}
