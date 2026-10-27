@@ -1,0 +1,4 @@
+mode=audit
+source=@AutoWorld_Georgia
+scope=existing-price-records
+reason=2026-10-27-confirmed-pr93
