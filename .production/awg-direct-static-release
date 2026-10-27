@@ -1,10 +1,10 @@
 release=direct-object-storage
-source=4cf449c27b93a698c0d997751cfd2195bfb29687
-reason=correct-source-turnkey-prices-in-catalog-detail-pr100
+source=c210f6f52ddf98a928bd7b903f82230a18f581dc
+reason=show-verified-source-turnkey-prices-in-manager-leads-pr102
 preserve_backend=true
 preserve_ydb=true
 preserve_telegram=true
 vk_auth=enabled
 vk_messaging=enabled
-verified_run=40544468574
+verified_run=40548334069
 browser_rollback_gate=true
