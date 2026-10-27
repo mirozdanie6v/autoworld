@@ -282,3 +282,25 @@ test('verified Telegram customer can approve $51,172.92 quote after a manager no
   assert.equal(store.getState().quotes[0].total,51172.92);
   assert.equal(store.getState().notes['L-1'].length,1,'manager note remains intact');
 });
+
+test('final USA auction quote still requires verified dossier before approval',async()=>{
+  const state=base();
+  state.leads[0].telegramUserId='501';
+  state.quotes=[{
+    id:'Q-FINAL',leadId:'L-1',model:'BMW 2025',origin:'США',
+    status:'Отправлен',version:1,lot:50172.92,repair:1000,service:1000,
+    total:52172.92,auction:0,inland:0,ocean:0,customs:0,
+    validUntil:'2026-12-01'
+  }];
+  const store=makeStores(state);
+  const client=sanitizeClientOperations(store.getState(),[
+    {resource:'quote',operation:'patch',id:'Q-FINAL',baseRowVersion:10,
+      input:{status:'Согласован',clientDecision:'agreed',clientDecisionAt:'2026-10-27T09:15:00Z'}}
+  ],{id:501});
+  assert.equal(client.ok,true);
+  const result=await mutateAutoSaleEntityBatch({...store,operations:client.operations});
+  assert.equal(result.status,400);
+  assert.equal(result.data.error,'invalid_quote');
+  assert.ok(result.data.details.includes('verification_lot_required'));
+  assert.equal(store.getState().quotes[0].status,'Отправлен');
+});
