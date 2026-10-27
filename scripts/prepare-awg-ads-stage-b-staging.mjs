@@ -45,9 +45,8 @@ if(process.argv[1]?.endsWith('/prepare-awg-ads-stage-b-staging.mjs')){
     for(const table of ADS_ATTRIBUTION_TABLES.concat(
       'awg_ads_job_leases','awg_ads_job_audit')){
       if(!/^awg_ads_[a-z0-9_]+$/.test(table))throw new Error('unsafe_ads_schema_table');
-      // YDB's query builder is intentionally not used for identifiers.
-      const statement='SELECT * FROM '+table+' LIMIT 1';
-      await sql.unsafe(statement);
+      // The identifier is validated and quoted by the YDB SDK; no dynamic raw SQL.
+      await sql`SELECT * FROM ${sql.identifier(table)} LIMIT 1`.isolation('snapshotReadOnly');
     }
     console.log('AWG_ADS_MANAGED_STAGING_SCHEMA_OK',JSON.stringify({
       mode:config.mode,databaseId:config.databaseId,
