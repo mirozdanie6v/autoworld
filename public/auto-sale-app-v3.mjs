@@ -313,7 +313,7 @@ const entityErrorText=error=>error?.code==='catalog_car_binding_required'
   :error?.code==='origin_forbidden'
     ?'Запрос отклонён проверкой безопасности. Обновите страницу и попробуйте снова.'
     :error?.code==='entity_conflict'
-      ?'Данные изменились в другом окне. Карточка обновлена с сервера — повторите действие.'
+      ?'Данные на сервере обновились. Ваши введённые значения сохранены в форме. Проверьте их и повторите сохранение.'
   :Array.isArray(error?.data?.details)&&error.data.details.length?error.data.details.join(' ')
   :'Не удалось сохранить изменения. Проверьте данные и повторите.';
 const leadDeleteErrorText=error=>error?.code==='entity_conflict'
@@ -324,7 +324,12 @@ const leadDeleteErrorText=error=>error?.code==='entity_conflict'
 async function commitEntities(operations,form=null){
   if(!window.__AUTO_SALE_ENTITY_BATCH__)return{ok:true,localOnly:true};
   try{return await window.__AUTO_SALE_ENTITY_BATCH__(operations)}
-  catch(error){if(form)showErrors(form,[entityErrorText(error)]);else console.warn('AUTO SALE entity action rejected',error);return null}
+  catch(error){
+    const liveForm=form?.isConnected?form:form?.id?root.querySelector('#'+form.id):null;
+    if(liveForm)showErrors(liveForm,[entityErrorText(error)]);
+    else console.warn('AUTO SALE entity action rejected',error);
+    return null;
+  }
 }
 function reloadFromCache(){
   leads=parse(localStorage,KEYS.leads,[])||[];
@@ -370,8 +375,8 @@ function refreshRuntimeFromServer(){
   const pendingValues=clientRequest?Object.fromEntries(new FormData(request).entries()):null;
   // A server refresh can arrive while the manager is editing or advancing an
   // order. Preserve its modal and unsaved form values, just like lead edits.
-  const managerType=state.role!=='client'&&['lead','order'].includes(state.modal?.type)?state.modal.type:null;
-  const managerForm=managerType?root.querySelector(managerType==='order'?'#orderForm':'#leadEditForm'):null;
+  const managerType=state.role!=='client'&&['lead','order','quote'].includes(state.modal?.type)?state.modal.type:null;
+  const managerForm=managerType?root.querySelector(managerType==='order'?'#orderForm':managerType==='quote'?'#quoteForm':'#leadEditForm'):null;
   const managerModal=managerForm&&hasAdminAccess?{...state.modal}:null;
   const managerValues=managerForm?Object.fromEntries(new FormData(managerForm).entries()):null;
   const managerFocus=managerForm?.contains(document.activeElement)?document.activeElement?.name:null;
@@ -384,12 +389,14 @@ function refreshRuntimeFromServer(){
   if(!nav[state.role]?.some(([id])=>id===state.route))state.route=nav[state.role][0][0];
   const managerRecordExists=managerModal&&(managerModal.type==='order'
     ?orders.some(item=>item.id===managerModal.id)
-    :leads.some(item=>item.id===managerModal.id));
+    :managerModal.type==='quote'
+      ?managerModal.id?quotes.some(item=>item.id===managerModal.id):leads.some(item=>item.id===managerModal.leadId)
+      :leads.some(item=>item.id===managerModal.id));
   state.modal=pendingModal&&state.role==='client'?pendingModal:
     managerRecordExists&&hasAdminAccess?managerModal:null;
   render();
   if(managerValues&&state.modal===managerModal){
-    const live=root.querySelector(managerType==='order'?'#orderForm':'#leadEditForm');
+    const live=root.querySelector(managerType==='order'?'#orderForm':managerType==='quote'?'#quoteForm':'#leadEditForm');
     if(live)for(const [name,value] of Object.entries(managerValues)){
       // IDs and hidden scenario-owned fields always come from authoritative
       // records. A stage can only be restored if the server still permits it.
@@ -400,6 +407,7 @@ function refreshRuntimeFromServer(){
       field.value=value;
     }
     if(managerFocus&&live?.elements[managerFocus])live.elements[managerFocus].focus({preventScroll:true});
+    if(managerType==='quote'&&live)updateQuotePreview(live);
   }
   if(pendingValues&&state.modal===pendingModal){
     const form=root.querySelector('#requestForm');
@@ -997,7 +1005,13 @@ async function submitOrder(form){
     saveAll();state.modal={type:'order',id:order.id};render();
   }finally{pendingOrderSaves.delete(order.id)}
 }
-window.addEventListener('auto-sale-entity-conflict',()=>{reloadFromCache();render()});
+window.addEventListener('auto-sale-entity-conflict',()=>{
+  // The bootstrap has already fetched authoritative state and preserved active
+  // form edits through auto-sale-server-synced. Never render again over a
+  // still-open editor: it would drop the unsaved payment amount or quote.
+  if(root.querySelector('#orderForm,#leadEditForm,#quoteForm,#requestForm'))return;
+  reloadFromCache();render();
+});
 window.addEventListener('auto-sale-client-decision',()=>{
   quotes=parse(localStorage,KEYS.quotes,[])||[];
   notes=parse(localStorage,KEYS.notes,{})||{};
