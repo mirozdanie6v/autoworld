@@ -47,7 +47,14 @@ export function publicState(state){
 export function clientState(state,userIdentity){
   const identity=identityFrom(userIdentity);
   const key=identity?.key||'';
-  const leads=(Array.isArray(state?.leads)?state.leads:[]).filter(item=>leadIdentity(item)?.key===key);
+  // Advertising campaign identifiers belong to the operator's internal analytics.
+  // Do not send them to a Telegram/VK client through /state or entity reads.
+  const leads=(Array.isArray(state?.leads)?state.leads:[])
+    .filter(item=>leadIdentity(item)?.key===key)
+    .map(item=>{
+      const {adsAttribution,adsAttributionStatus,...visible}=item;
+      return visible;
+    });
   const leadIds=new Set(leads.map(item=>clean(item.id)));
   return{
     ...state,
