@@ -5,6 +5,8 @@ const IMPORT_URL=process.env.AUTO_SALE_CATALOG_IMPORT_URL||'https://awgcars.ru/a
 const IMPORT_KEY=String(process.env.AUTO_SALE_CATALOG_IMPORT_KEY||'').trim();
 const IMPORT_BEARER=String(process.env.AUTO_SALE_CATALOG_IMPORT_BEARER||'').trim();
 const REPLACE_SOURCE_ALL=/^(1|true|yes)$/i.test(String(process.env.REPLACE_SOURCE_ALL||''));
+const PRICE_REPAIR_ONLY=/^(1|true|yes)$/i.test(String(process.env.PRICE_REPAIR_ONLY||''));
+if(PRICE_REPAIR_ONLY&&REPLACE_SOURCE_ALL)throw new Error('price_repair_cannot_replace_catalog');
 const SOURCE_NAME='AutoWorld_Georgia';
 
 if(!IMPORT_KEY&&!IMPORT_BEARER)throw new Error('catalog import credential is required');
@@ -15,6 +17,7 @@ if(!Array.isArray(items)||!items.length)throw new Error('catalog_import_source_e
 const payload=JSON.stringify({
   source:SOURCE_NAME,
   replaceSourceAll:REPLACE_SOURCE_ALL,
+  priceRepairOnly:PRICE_REPAIR_ONLY,
   items
 });
 
@@ -57,5 +60,8 @@ console.log('AUTOWORLD_CATALOG_ENTITY_IMPORT_OK',JSON.stringify({
   skipped:data.skipped,
   revision:data.revision,
   changed:data.changed,
-  replaceSourceAll:REPLACE_SOURCE_ALL
+  replaceSourceAll:REPLACE_SOURCE_ALL,
+  priceRepairOnly:PRICE_REPAIR_ONLY,
+  alreadyPriced:data.alreadyPriced,
+  unmatched:data.unmatched
 }));

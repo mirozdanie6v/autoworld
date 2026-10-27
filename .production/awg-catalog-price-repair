@@ -1,0 +1,5 @@
+phase=plan
+source=telegram-AutoWorld_Georgia
+safeguard=zero-rub-only-source-post-id-exact
+preserve_existing_positive_prices=true
+preserve_media_and_visibility=true

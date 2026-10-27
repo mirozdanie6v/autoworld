@@ -1,5 +1,6 @@
 import {readFile,writeFile} from 'node:fs/promises';
 import {catalogListingQuality} from './catalog-listing-quality.mjs';
+import {verifiedSourceRubPrice} from './catalog-price-extract.mjs';
 
 const SOURCE_PATH=process.env.SOURCE_PATH||'data/autoworld-georgia-recent/cars.json';
 const OUTPUT_PATH=process.env.OUTPUT_PATH||'data/autoworld-georgia-recent/catalog-import.json';
@@ -87,30 +88,22 @@ function extractBid(car){
   return m?Number(m[1].replace(/\D/g,''))||0:0;
 }
 
-function extractPromoPriceRub(source){
-  if(Number(source?.priceAfterDiscountRub)>0)return Number(source.priceAfterDiscountRub);
-  const raw=String(source?.rawText||'');
-  const m=raw.match(/([0-9])️⃣\s*\n\s*🤩\s*\n\s*([0-9])️⃣\s*\n\s*([0-9])️⃣\s*\n\s*🔤\s*\n\s*🔤\s*\n\s*🔤/u);
-  return m?Number(`${m[1]}${m[2]}${m[3]}`)*10_000:0;
-}
 function sourceRubPrices(source){
-  const raw=String(source?.rawText||'');
-  const explicit=source?.discountExplicit===true||/скидк|цен[аыу]\s+сниж|цен[аыу]\s+со\s+скидк|акци[яию]/iu.test(raw);
-  const primary=Math.max(0,Number(source?.priceRub)||0);
+  const verified=verifiedSourceRubPrice(source);
+  const primary=verified.priceRub;
   const before=Math.max(0,Number(source?.priceBeforeDiscountRub)||0);
-  const promo=Math.max(0,extractPromoPriceRub(source));
-  // A second "price in Russia (with repair)" is a turnkey estimate, not a discount.
-  const priceRub=(explicit&&before>promo&&promo>0)?promo:(primary||before||promo);
-  const prior=explicit&&before>priceRub?before:0;
+  const explicit=source?.discountExplicit===true||/скидк|цен[аыу]\s+сниж|цен[аыу]\s+со\s+скидк|акци[яию]/iu.test(String(source?.rawText||''));
+  const prior=explicit&&before>primary?before:0;
   const russiaTurnkeyRub=Math.max(0,Number(source?.russiaTurnkeyRub)||0);
-  const turnkeyDeliveryRub=russiaTurnkeyRub>=priceRub&&priceRub>0&&russiaTurnkeyRub>0?
-    russiaTurnkeyRub-priceRub:0;
+  const turnkeyDeliveryRub=russiaTurnkeyRub>=primary&&primary>0&&russiaTurnkeyRub>0?
+    russiaTurnkeyRub-primary:0;
   return{
-    priceBeforeDiscountRub:prior,priceAfterDiscountRub:prior?priceRub:0,
-    priceRub,discountExplicit:Boolean(prior),
+    priceBeforeDiscountRub:prior,priceAfterDiscountRub:prior?primary:0,
+    priceRub:primary,discountExplicit:Boolean(prior),
     russiaTurnkeyRub,
     turnkeyDeliveryRub,
-    turnkeyDeliverySource:turnkeyDeliveryRub>0?'source_russia_with_repair_difference':''
+    turnkeyDeliverySource:turnkeyDeliveryRub>0?'source_russia_with_repair_difference':'',
+    priceResolution:verified.method||verified.reason
   };
 }
 
@@ -146,6 +139,7 @@ function sourceQualityReason(source){
   const quality=catalogListingQuality({rawText:source.rawText,vin,brand:title.brand,model:title.model,year:title.year,sourcePostId:source.sourcePostId});
   if(quality)return quality;
   if(!photos.length)return'missing_recovered_photos';
+  if(!sourceRubPrices(source).priceRub&&!(extractBid(source)>0))return'price_unresolved';
   return'';
 }
 
@@ -229,6 +223,7 @@ function normalizeCar(source){
   const bid=extractBid(source);
   const prices=sourceRubPrices(source);
   const priceRub=prices.priceRub;
+  if(!(priceRub>0)&&!(bid>0))return null;
   const customsRub=Number(source.customsRub)||0;
   const drive=normalizeDrive(source.drive,source.rawText);
   const highlights=[
@@ -262,6 +257,7 @@ function normalizeCar(source){
     priceBeforeDiscountRub:prices.priceBeforeDiscountRub,
     priceAfterDiscountRub:prices.priceAfterDiscountRub,
     priceRub,
+    priceResolution:prices.priceResolution,
     discountExplicit:prices.discountExplicit,
     russiaTurnkeyRub:prices.russiaTurnkeyRub,
     turnkeyDeliveryRub:prices.turnkeyDeliveryRub,
@@ -359,6 +355,7 @@ async function main(){
     discountedRub:imported.filter(x=>Number(x.priceBeforeDiscountRub)>Number(x.priceRub)&&Number(x.priceRub)>0).length,
     pricedBid:imported.filter(x=>Number(x.estimatedBidUsd)>0).length,
     noPrice:imported.filter(x=>!Number(x.priceRub)&&!Number(x.estimatedBidUsd)).length,
+    skippedMissingPrice:skipped.filter(x=>x.reason==='price_unresolved').length,
     withPhotos:imported.filter(x=>x.image).length,
     originCounts,
     brandCounts,

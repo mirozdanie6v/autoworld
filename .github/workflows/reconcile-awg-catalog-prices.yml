@@ -1,0 +1,113 @@
+name: Audit and repair AWG catalog source prices
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .production/awg-catalog-price-repair
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: awg-catalog-sync
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout canonical AutoWorld
+        uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Select guarded phase
+        run: |
+          set -euo pipefail
+          phase="$(sed -n 's/^phase=//p' .production/awg-catalog-price-repair | head -1)"
+          if [[ "$phase" != plan && "$phase" != apply ]]; then echo "Invalid repair phase"; exit 1; fi
+          echo "REPAIR_PHASE=$phase" >> "$GITHUB_ENV"
+
+      - name: Install scraper dependencies
+        run: python -m pip install --disable-pip-version-check requests beautifulsoup4
+
+      - name: Request catalog OIDC token
+        uses: actions/github-script@v7
+        id: oidc
+        with:
+          script: |
+            const token = await core.getIDToken('autoworld-catalog-import')
+            core.setSecret(token)
+            core.setOutput('token', token)
+
+      - name: Export catalogue token
+        env:
+          CATALOG_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        run: |
+          test -n "$CATALOG_OIDC_TOKEN"
+          echo "::add-mask::$CATALOG_OIDC_TOKEN"
+          echo "AUTO_SALE_CATALOG_IMPORT_BEARER=$CATALOG_OIDC_TOKEN" >> "$GITHUB_ENV"
+
+      - name: Snapshot live source catalogue
+        run: |
+          set -euo pipefail
+          curl --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 10 --max-time 45 -fsS https://awgcars.ru/api/auto-sale/state | jq '{catalog:.catalog}' > /tmp/awg-price-state.json
+          test "$(jq '.catalog|length' /tmp/awg-price-state.json)" -ge 100
+
+      - name: Scrape recent source prices without media uploads
+        env:
+          OUT_DIR: /tmp/awg-price-scrape
+          MAX_PAGES: '20'
+          REQUEST_DELAY: '0.30'
+          UPLOAD_MISSING_PHOTOS: 'false'
+          MERGE_EXISTING: 'false'
+        run: python scripts/scrape-autoworld-georgia.py
+
+      - name: Build source-to-live price comparison
+        run: |
+          set -euo pipefail
+          node scripts/reconcile-awg-catalog-prices.mjs
+          echo "Repaired price candidates: $(jq '.repairCount' /tmp/awg-price-repair-audit.json)" >> "$GITHUB_STEP_SUMMARY"
+          echo "Existing positive-price differences (untouched): $(jq '.positivePriceConflicts|length' /tmp/awg-price-repair-audit.json)" >> "$GITHUB_STEP_SUMMARY"
+          echo "Missing source records: $(jq '.missingSources|length' /tmp/awg-price-repair-audit.json)" >> "$GITHUB_STEP_SUMMARY"
+          echo "Unresolved source prices: $(jq '.unresolved|length' /tmp/awg-price-repair-audit.json)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Apply only verified missing price patches
+        if: env.REPAIR_PHASE == 'apply'
+        env:
+          SOURCE_PATH: /tmp/awg-price-repair-items.json
+          PRICE_REPAIR_ONLY: 'true'
+          REPLACE_SOURCE_ALL: 'false'
+          AUTO_SALE_CATALOG_IMPORT_URL: https://awgcars.ru/api/auto-sale/admin/catalog-import
+        run: |
+          set -euo pipefail
+          if [[ "$(jq 'length' "$SOURCE_PATH")" -gt 0 ]]; then
+            node scripts/sync-autoworld-catalog.mjs
+          else
+            echo "Nothing to repair"
+          fi
+
+      - name: Verify persisted repairs and preserved manual visibility
+        if: env.REPAIR_PHASE == 'apply'
+        run: |
+          set -euo pipefail
+          curl --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 10 --max-time 45 -fsS https://awgcars.ru/api/auto-sale/state | jq '{catalog:.catalog}' > /tmp/awg-price-state-after.json
+          node scripts/verify-awg-catalog-price-repairs.mjs
+
+      - name: Upload catalog audit and repair plan
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: awg-catalog-price-reconciliation
+          path: |
+            /tmp/awg-price-repair-audit.json
+            /tmp/awg-price-repair-items.json
+            /tmp/awg-price-scrape/report.json
+          if-no-files-found: ignore

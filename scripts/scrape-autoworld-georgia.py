@@ -149,7 +149,7 @@ def parse_russia_turnkey_rub(text):
     """Handle Telegram line wraps after 'price in Russia (with repair)'."""
     lines = [line.strip() for line in str(text or "").splitlines() if line.strip()]
     for index, line in enumerate(lines):
-        if re.search(r"цена\s+в\s+россии\s*\(\s*с\s+ремонтом\s*\)", line, re.I):
+        if re.search(r"цена\s+в\s+россии\s*\(\s*с\s+ремонтом\s*\)|стоимост[ьи]\s+автомобиля\s+под\s+ключ\s+с\s+ремонтом", line, re.I):
             price = price_amount_rub(line)
             if price:
                 return price
@@ -167,14 +167,14 @@ def parse_rub(text, label):
     if label == "price":
         # Select only the primary listing price, never the lower 'price in Russia' row.
         for line in str(text or "").splitlines():
-            if re.search(r"цена\s+в\s+россии", line, re.I):
+            if re.search(r"цена\s+в\s+россии|стоимост[ьи]\s+автомобиля\s+под\s+ключ\s+с\s+ремонтом", line, re.I):
                 continue
             if re.search(r"(?:цена|стоимость\s+автомобиля)", line, re.I):
                 price = price_amount_rub(line)
                 if price:
                     return price
         for line in str(text or "").splitlines():
-            if re.search(r"цена\s+в\s+россии|таможн|утиль|ремонт|доставк", line, re.I):
+            if re.search(r"цена\s+в\s+россии|таможн|утиль|ремонт|доставк|под\s+ключ", line, re.I):
                 continue
             price = price_amount_rub(line)
             if price:
@@ -227,18 +227,25 @@ def parse_power_metric_hp(text):
     # Mechanical hp differs from the Russian metric л.с. / PS.
     return round(power * 1.013869665, 2) if m.group(2).upper() == "HP" else power
 
+KEYCAP_PRICE_DIGIT = r"(?:[0-9]\ufe0f?\u20e3|🔤)"
 KEYCAP_PRICE_RE = re.compile(
-    r"([0-9])️⃣\s*\n\s*🤩\s*\n\s*([0-9])️⃣\s*\n\s*([0-9])️⃣\s*\n\s*🔤\s*\n\s*🔤\s*\n\s*🔤",
+    r"(" + KEYCAP_PRICE_DIGIT + r")\s*🤩\s*(" + KEYCAP_PRICE_DIGIT
+    + r")\s*(" + KEYCAP_PRICE_DIGIT + r")\s*🔤\s*🔤\s*🔤",
     re.U,
 )
 
 def parse_discount_rub(text):
-    """Decode the channel's custom-emoji price such as 1️⃣ 🤩 7️⃣ 2️⃣ 🔤🔤🔤 => 1.72M RUB."""
-    m = KEYCAP_PRICE_RE.search(str(text or ""))
-    if m:
-        return int(m.group(1) + m.group(2) + m.group(3)) * 10_000
-
-    # Fallback for posts where the promotional price is plain text.
+    """Read source's encoded price. 🔤 means digit zero, not an alphabetic label."""
+    hits = []
+    for m in KEYCAP_PRICE_RE.finditer(str(text or "")):
+        parts = [int(re.search(r"[0-9]", v).group(0)) if v != "🔤" else 0 for v in m.groups()]
+        value = (parts[0] * 100 + parts[1] * 10 + parts[2]) * 10_000
+        if 100_000 <= value <= 100_000_000:
+            hits.append(value)
+    if len(set(hits)) == 1:
+        return hits[0]
+    if len(set(hits)) > 1:
+        return None
     for p in [
         r"(?:скидк|акци|горячая\s+цена|торопитесь)[^\d]{0,80}([0-9]+(?:[.,][0-9]+)?)\s*млн",
         r"(?:теперь|сейчас|итого)[^\d]{0,40}([0-9]+(?:[.,][0-9]+)?)\s*млн",
@@ -253,9 +260,13 @@ def parse_price_pair(text):
     emoji_price = parse_discount_rub(text)
     explicit = bool(re.search(r"скидк|цен[аыу]\s+сниж|цен[аыу]\s+со\s+скидк|акци[яию]", str(text or ""), re.I))
     russia_price = parse_russia_turnkey_rub(text)
-    if primary and emoji_price and explicit and primary > emoji_price:
-        return primary, emoji_price, emoji_price
-    # Without an explicit promotion, a second number must never be a strike-through.
+    if primary and emoji_price and primary != emoji_price:
+        if explicit and primary > emoji_price:
+            return primary, emoji_price, emoji_price
+        # Two different, unlabelled amounts must not be reconciled by guessing.
+        return None, None, None
+    # 'Price in Russia with repair' is the only price if no primary exists;
+    # its presence alone is never evidence of a discount.
     return None, primary or emoji_price or russia_price, None
 
 def parse_title(text):

@@ -378,7 +378,7 @@ const server=http.createServer(async(req,res)=>{
         if(!id)continue;
         const item={...structuredClone(rawItem),id,source:sourceName,active:rawItem.active!==false};
         const vin=String(item.vin||'').trim().toUpperCase();
-        const key=vin?('vin:'+vin):('id:'+id);
+        const key=input?.priceRepairOnly===true?('id:'+id):(vin?('vin:'+vin):('id:'+id));
         const previous=byIdentity.get(key);
         if(!previous||Number(item.sourcePostId||0)>=Number(previous.sourcePostId||0))byIdentity.set(key,item);
       }
@@ -390,6 +390,44 @@ const server=http.createServer(async(req,res)=>{
       const sourceExisting=existingCatalog.filter(item=>String(item?.source||'')===sourceName);
       const existingById=new Map(sourceExisting.map(item=>[String(item.id||''),item]));
       const existingByVin=new Map(sourceExisting.filter(item=>String(item.vin||'').trim()).map(item=>[String(item.vin).trim().toUpperCase(),item]));
+      // A dedicated price-repair mode patches only a missing RUB source price.
+      // It cannot create/delete cars, reactivate hidden cars, replace photos,
+      // or overwrite manager-edited positive prices.
+      if(input?.priceRepairOnly===true){
+        if(input.replaceSourceAll){json(res,{error:'price_repair_replace_forbidden'},400);return}
+        const priceOperations=[];
+        let repaired=0,alreadyPriced=0,unmatched=0;
+        for(const item of items){
+          const sourcePostId=String(item.sourcePostId||'').trim();
+          const priceRub=Number(item.priceRub);
+          if(!/^\d+$/.test(sourcePostId)||item.id!=='AWG-'+sourcePostId||
+             !Number.isSafeInteger(priceRub)||priceRub<100000||priceRub>100000000){
+            json(res,{error:'price_repair_invalid_item',id:item.id},400);return;
+          }
+          const exact=existingById.get(item.id);
+          if(!exact||String(exact.sourcePostId||'')!==sourcePostId){unmatched++;continue}
+          if(Number(exact.priceRub)>0){alreadyPriced++;continue}
+          const rowVersion=await entityStores.domainStore.entityRowVersion('catalog',exact.id);
+          if(rowVersion===null){json(res,{error:'catalog_shadow_missing',id:exact.id},409);return}
+          priceOperations.push({resource:'catalog',operation:'patch',id:exact.id,
+            baseRowVersion:rowVersion,input:{priceRub,priceResolution:'telegram_source_reconciled'}});
+          repaired++;
+        }
+        if(!priceOperations.length){
+          json(res,{ok:true,source:sourceName,received:items.length,created:0,patched:0,
+            replaced:0,deleted:0,skipped:items.length,alreadyPriced,unmatched,
+            revision:Number(state.revision)||0,changed:false,priceRepairOnly:true});
+          return;
+        }
+        const result=await mutateAutoSaleEntityBatch({...entityStores,
+          operations:priceOperations,prepareNotifications:null});
+        if(result.status<200||result.status>=300){json(res,result.data,result.status);return}
+        json(res,{ok:true,source:sourceName,received:items.length,created:0,
+          patched:repaired,replaced:0,deleted:0,skipped:items.length-repaired,
+          alreadyPriced,unmatched,revision:Number(result.data?.revision)||0,
+          changed:true,priceRepairOnly:true,rowVersions:result.data?.rowVersions||{}});
+        return;
+      }
       const operations=[];
       const retainedIds=new Set();
       let created=0,patched=0,replaced=0,skipped=0,deleted=0;
