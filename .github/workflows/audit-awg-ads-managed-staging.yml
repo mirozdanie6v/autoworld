@@ -1,0 +1,70 @@
+name: Audit AWG Ads managed YDB staging (READ ONLY)
+on:
+  push:
+    branches: [feature/awg-ads-stage-b-integration]
+    paths: [.github/workflows/audit-awg-ads-managed-staging.yml]
+  workflow_dispatch:
+
+# Read-only inventory: no deploy, schema modification, database creation,
+# permissions mutation, Telegram/VK interactions, or production state writes.
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: awg-ads-staging-inventory
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    env:
+      YC_DEPLOY_SA_ID: ${{ vars.AWG_YC_DEPLOY_SA_ID || 'aje775bcl6hgp40eu8of' }}
+      YC_FOLDER_ID: b1ggsmuiq7tb2d27f89q
+    steps:
+      - name: Require restricted AWG CI context
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${GITHUB_REPOSITORY}" = "mirozdanie6v/autoworld"
+          test "${GITHUB_REF_NAME}" = "feature/awg-ads-stage-b-integration"
+          test "${YC_FOLDER_ID}" = "b1ggsmuiq7tb2d27f89q"
+      - name: Obtain short-lived GitHub OIDC token
+        uses: actions/github-script@v7
+        id: oidc
+        with:
+          script: |
+            const token=await core.getIDToken('https://github.com/mirozdanie6v')
+            core.setSecret(token)
+            core.setOutput('token',token)
+      - name: Read-only Yandex YDB inventory (no cloud mutation)
+        shell: bash
+        env:
+          GITHUB_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        run: |
+          set -euo pipefail
+          RESPONSE=$(curl -sS --connect-timeout 10 --max-time 30 -w '\n%{http_code}' \
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            --data-urlencode 'grant_type=urn:ietf:params:oauth:grant-type:token-exchange' \
+            --data-urlencode 'requested_token_type=urn:ietf:params:oauth:token-type:access_token' \
+            --data-urlencode "audience=$YC_DEPLOY_SA_ID" \
+            --data-urlencode "subject_token=$GITHUB_OIDC_TOKEN" \
+            --data-urlencode 'subject_token_type=urn:ietf:params:oauth:token-type:id_token' \
+            https://auth.yandex.cloud/oauth/token)
+          CODE=$(printf '%s' "$RESPONSE" | tail -n1)
+          if [ "$CODE" != 200 ]; then echo "::error::Yandex OIDC unavailable: HTTP $CODE"; exit 1; fi
+          TOKEN=$(printf '%s' "$RESPONSE" | sed '$d' | jq -er '.access_token')
+          echo "::add-mask::$TOKEN"
+          DB_RESPONSE=$(curl -sS --connect-timeout 10 --max-time 30 -w '\n%{http_code}' \
+            -H "Authorization: Bearer $TOKEN" \
+            --get --data-urlencode "folderId=$YC_FOLDER_ID" \
+            'https://ydb.api.cloud.yandex.net/ydb/v1/databases')
+          DB_CODE=$(printf '%s' "$DB_RESPONSE" | tail -n1)
+          if [ "$DB_CODE" != 200 ]; then echo "::error::YDB read-only listing unavailable: HTTP $DB_CODE"; exit 1; fi
+          printf '%s' "$DB_RESPONSE" | sed '$d' | jq -r '
+            "Managed databases found: "+((.databases // [])|length|tostring),
+            ((.databases // [])[] | "YDB NAME="+.name+" ID="+.id+" STATUS="+(.status//"?")+
+              " SERVERLESS="+(has("serverlessDatabase")|tostring)+
+              " STORAGE_LIMIT="+(.serverlessDatabase.storageSizeLimit//"?")+
+              " RCU_THROTTLE="+(.serverlessDatabase.throttlingRcuLimit//"?"))
+          '
+          printf '%s\n' 'Read-only YDB inventory PASS. No database or IAM changes were made.' >> "$GITHUB_STEP_SUMMARY"
