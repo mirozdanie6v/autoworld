@@ -69,6 +69,37 @@ try{
   assert.equal(leads.length,1);
   assert.equal(leads[0].campaignId,'StageB-Real-YDB');
 
+  // Client-side event payload cannot choose a campaign; the server verifies
+  // catalog identity and creates one receipt per user/car/day.
+  assert.equal((await bridge.recordMiniAppEvent({access,eventType:'miniapp_open'})).status,'recorded');
+  assert.equal((await bridge.recordMiniAppEvent({access,eventType:'miniapp_open'})).status,'duplicate');
+  assert.equal((await bridge.recordMiniAppEvent({
+    access,eventType:'vehicle_view',carId:'verified-car',
+    catalog:[{id:'verified-car',active:true}]
+  })).status,'recorded');
+  assert.equal((await bridge.recordMiniAppEvent({
+    access,eventType:'vehicle_view',carId:'hidden-car',
+    catalog:[{id:'hidden-car',active:false}]
+  })).reason,'vehicle_not_in_current_catalog');
+
+  // Once the CRM lead was saved under A, a later B touch must NOT
+  // retroactively re-attribute that old lead or the manager's first contact.
+  const other=await service.issueCampaign({campaignId:'StageB-Other-Campaign'});
+  await bridge.recordBotStart({
+    telegramUserId:111111,startPayload:other.token,updateId:9990102
+  });
+  const persistedLead={...authoritativeCrm[0],id:'L-stageB-local-01',
+    clientProvider:'telegram',clientProviderUserId:'111111',
+    firstManagerActionAt:'2026-10-27T06:00:00Z'
+  };
+  assert.equal((await bridge.reconcilePersistedLead(persistedLead)).status,'duplicate');
+  const finalReceipts=(await repository.listEvents({limit:30})).events;
+  assert.equal(finalReceipts.filter(x=>x.eventType==='lead_submit').length,1);
+  assert.equal(finalReceipts.find(x=>x.eventType==='lead_submit').campaignId,'StageB-Real-YDB');
+  assert.equal(finalReceipts.find(x=>x.eventType==='manager_contact').campaignId,'StageB-Real-YDB');
+  assert.equal(finalReceipts.filter(x=>x.eventType==='miniapp_open').length,1);
+  assert.equal(finalReceipts.filter(x=>x.eventType==='vehicle_view').length,1);
+
   const vkOps=await bridge.enrichLeadOperations(sanitized.operations,{
     role:'client',authenticated:true,authType:'vk',user:{id:'111111'}
   });
@@ -77,6 +108,7 @@ try{
   console.log('AWG_STAGE_B_LOCAL_YDB_BRIDGE_PASS',JSON.stringify({
     campaign:'StageB-Real-YDB',verifiedLeadReceipts:leads.length,
     duplicateLeadSubmitDeduped:true,vkExcluded:true,
-    serverSourceOfTruth:true
+    serverSourceOfTruth:true,immutableConversionCampaign:true,
+    managerContactDerived:true,miniAppAndVehicleViewsVerified:true
   }));
 }finally{await driver.close();}
