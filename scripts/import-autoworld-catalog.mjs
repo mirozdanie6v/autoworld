@@ -97,7 +97,7 @@ function sourceRubPrices(source){
   // Trusted raw-channel evidence overrides a stale scraper fallback. A
   // historical price field may actually be "Russia with repair", not the
   // primary sticker price. Never silently infer a zero price as valid.
-  const priceRub=emojiOrLabeled||sourceRub;
+  const priceRub=fromText.priceEvidence==='russia_turnkey_only'?0:emojiOrLabeled||sourceRub;
   const russiaTurnkeyRub=fromText.russiaTurnkeyRub||Math.max(0,Number(source?.russiaTurnkeyRub)||0);
   const discountExplicit=fromText.discountExplicit||(source?.discountExplicit===true&&
     Number(source?.priceBeforeDiscountRub)>priceRub&&priceRub>0);
@@ -109,6 +109,10 @@ function sourceRubPrices(source){
     priceAfterDiscountRub:priceBeforeDiscountRub>priceRub?priceRub:0,
     discountExplicit:priceBeforeDiscountRub>priceRub,
     russiaTurnkeyRub,
+    russiaTurnkeyMaxRub:fromText.russiaTurnkeyMaxRub||0,
+    russiaTurnkeyKind:fromText.russiaTurnkeyKind||'',
+    usaTurnkeyRub:fromText.usaTurnkeyRub||0,
+    georgiaTurnkeyRub:fromText.georgiaTurnkeyRub||0,
     turnkeyDeliveryRub:russiaTurnkeyRub>priceRub&&priceRub>0?russiaTurnkeyRub-priceRub:0,
     turnkeyDeliverySource:russiaTurnkeyRub>priceRub&&priceRub>0?'source_russia_with_repair_difference':'',
     priceEvidence:fromText.priceEvidence==='unresolved'?(sourceRub>0?'historical_numeric_source':'unresolved'):fromText.priceEvidence
@@ -147,7 +151,7 @@ function sourceQualityReason(source){
   const quality=catalogListingQuality({rawText:source.rawText,vin,brand:title.brand,model:title.model,year:title.year,sourcePostId:source.sourcePostId});
   if(quality)return quality;
   if(!photos.length)return'missing_recovered_photos';
-  if(sourceRubPrices(source).priceRub<=0&&extractBid(source)<=0)return'missing_verified_source_price';
+  {const prices=sourceRubPrices(source);if(prices.priceRub<=0&&prices.russiaTurnkeyRub<=0&&extractBid(source)<=0)return'missing_verified_source_price';}
   return'';
 }
 
@@ -218,7 +222,7 @@ export function normalizeCar(source){
   const names=canonicalVehicleName(rawBrand,rawModel,title.title||source.title,vin);
   const brand=names.brand,model=names.model;
   if(catalogListingQuality({rawText:source.rawText,vin,brand,model,year,sourcePostId:source.sourcePostId})||!photos.length)return null;
-  if(sourceRubPrices(source).priceRub<=0&&extractBid(source)<=0)return null;
+  {const prices=sourceRubPrices(source);if(prices.priceRub<=0&&prices.russiaTurnkeyRub<=0&&extractBid(source)<=0)return null;}
 
   const engine=clean(source.engine)||field(source.rawText,'Двигатель');
   const transmission=clean(source.transmission)||field(source.rawText,'Коробка');
@@ -268,6 +272,10 @@ export function normalizeCar(source){
     catalogPriceEvidence:prices.priceEvidence,
     discountExplicit:prices.discountExplicit,
     russiaTurnkeyRub:prices.russiaTurnkeyRub,
+    russiaTurnkeyMaxRub:prices.russiaTurnkeyMaxRub,
+    russiaTurnkeyKind:prices.russiaTurnkeyKind,
+    usaTurnkeyRub:prices.usaTurnkeyRub,
+    georgiaTurnkeyRub:prices.georgiaTurnkeyRub,
     turnkeyDeliveryRub:prices.turnkeyDeliveryRub,
     turnkeyDeliverySource:prices.turnkeyDeliverySource,
     estimatedBidUsd:bid,
@@ -362,7 +370,7 @@ async function main(){
     pricedRub:imported.filter(x=>Number(x.priceRub)>0).length,
     discountedRub:imported.filter(x=>Number(x.priceBeforeDiscountRub)>Number(x.priceRub)&&Number(x.priceRub)>0).length,
     pricedBid:imported.filter(x=>Number(x.estimatedBidUsd)>0).length,
-    noPrice:imported.filter(x=>!Number(x.priceRub)&&!Number(x.estimatedBidUsd)).length,
+    noPrice:imported.filter(x=>!Number(x.priceRub)&&!Number(x.russiaTurnkeyRub)&&!Number(x.estimatedBidUsd)).length,
     withPhotos:imported.filter(x=>x.image).length,
     originCounts,
     brandCounts,

@@ -198,6 +198,13 @@ jobs:
             const old=prev.get(car.id),next=now.get(car.id);
             if(!old||!next)throw Error('car_missing_'+car.id);
             if(Number(next.priceRub)!==Number(car.priceRub))throw Error('price_mismatch_'+car.id);
+            // A legacy turnkey-only listing still has purchase price 0; verify
+            // its actual Russia-with-repair amount and any range/route metadata.
+            for(const field of ['russiaTurnkeyRub','russiaTurnkeyMaxRub','russiaTurnkeyKind',
+              'usaTurnkeyRub','georgiaTurnkeyRub','catalogPriceEvidence']){
+              if(Object.hasOwn(car,field)&&String(next[field]??(typeof car[field]==='number'?0:''))!==String(car[field]))
+                throw Error('source_price_metadata_mismatch_'+car.id+'_'+field);
+            }
             if(old.active===false&&next.active!==false)throw Error('hidden_car_reactivated_'+car.id);
             if(next.sourcePostId!==old.sourcePostId)throw Error('source_identity_changed_'+car.id);
           }

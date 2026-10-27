@@ -28,6 +28,31 @@ for(const [postId,car] of existing){
     continue;
   }
   const recovered=extractSourcePrices(row.rawText);
+  // Legacy captions can publish only a Russia-with-repair estimate (possibly
+  // a range or two route-specific estimates). Restore the displayed price
+  // basis, but never invent a base purchase price.
+  if(num(car.priceRub)===0&&recovered.priceEvidence==='russia_turnkey_only'&&recovered.russiaTurnkeyRub>0){
+    const patch={
+      russiaTurnkeyRub:recovered.russiaTurnkeyRub,
+      russiaTurnkeyMaxRub:recovered.russiaTurnkeyMaxRub||0,
+      russiaTurnkeyKind:recovered.russiaTurnkeyKind||'turnkey_single',
+      usaTurnkeyRub:recovered.usaTurnkeyRub||0,
+      georgiaTurnkeyRub:recovered.georgiaTurnkeyRub||0,
+      catalogPriceEvidence:'russia_turnkey_only',
+      turnkeyDeliveryRub:0,
+      turnkeyDeliverySource:''
+    };
+    const changed=Object.keys(patch).filter(key=>String(car[key]??(typeof patch[key]==='number'?0:''))!==String(patch[key]));
+    if(changed.length){
+      candidate.push({...car,...patch,id:car.id,source:'AutoWorld_Georgia',active:car.active!==false});
+      report.push({postId,sourceUrl:row.sourceUrl||'https://t.me/AutoWorld_Georgia/'+postId,
+        livePriceRub:0,sourcePriceRub:0,liveTurnkeyRub:num(car.russiaTurnkeyRub),
+        sourceTurnkeyRub:num(recovered.russiaTurnkeyRub),evidence:'russia_turnkey_only',
+        sourceTurnkeyMaxRub:num(recovered.russiaTurnkeyMaxRub),kind:patch.russiaTurnkeyKind,
+        fields:changed,active:car.active!==false});
+    }
+    continue;
+  }
   if(!recovered.priceRub||recovered.priceEvidence==='unresolved'){
     const raw=String(row.rawText||'');
     // Public channel evidence for price discrepancies only; no account data.
@@ -74,7 +99,7 @@ for(const [postId,car] of existing){
     evidence:recovered.priceEvidence,fields:changed,active:car.active!==false});
 }
 if(candidate.length>180)throw Error('price_correction_scope_exceeds_180');
-if(candidate.some(item=>!(item.priceRub>0)||!existing.has(clean(item.sourcePostId))))
+if(candidate.some(item=>(!(item.priceRub>0)&&!(item.russiaTurnkeyRub>0&&item.catalogPriceEvidence==='russia_turnkey_only'))||!existing.has(clean(item.sourcePostId))))
   throw Error('invalid_price_correction_payload');
 if(candidate.some(item=>item.source!=='AutoWorld_Georgia'))throw Error('cross_source_edit_forbidden');
 if(new Set(candidate.map(x=>x.id)).size!==candidate.length)throw Error('duplicate_catalog_record_target');
@@ -96,7 +121,8 @@ const audit={generatedAt:new Date().toISOString(),sourcePosts:source.length,
   candidates:report.length,unresolvedCount:unresolved.length,
   missingPricesCorrectable:report.filter(x=>x.livePriceRub===0&&x.sourcePriceRub>0).length,
   existingPricesCorrectable:report.filter(x=>x.livePriceRub>0&&x.livePriceRub!==x.sourcePriceRub).length,
-  secondaryPriceCorrections:report.filter(x=>x.livePriceRub===x.sourcePriceRub&&x.fields.some(f=>f!=='catalogPriceEvidence')).length,
+  secondaryPriceCorrections:report.filter(x=>x.livePriceRub===x.sourcePriceRub&&x.sourcePriceRub>0&&x.fields.some(f=>f!=='catalogPriceEvidence')).length,
+  legacyTurnkeyOnlyCorrectable:report.filter(x=>x.evidence==='russia_turnkey_only').length,
   corrections:report,unresolved};
 audit.unpricedDiagnostics=unpricedCases;
 audit.unpricedArchiveSummary=unpricedArchiveSummary;
@@ -110,6 +136,7 @@ console.log('AWG_PRICE_AUDIT',JSON.stringify({
   missingPricesCorrectable:audit.missingPricesCorrectable,
   existingPricesCorrectable:audit.existingPricesCorrectable,
   secondaryPriceCorrections:audit.secondaryPriceCorrections,
+  legacyTurnkeyOnlyCorrectable:audit.legacyTurnkeyOnlyCorrectable,
   sample:report.slice(0,35).map(x=>({postId:x.postId,old:x.livePriceRub,new:x.sourcePriceRub,
     turnkey:x.sourceTurnkeyRub,fields:x.fields})),
   unresolvedSample:unresolved.slice(0,25)

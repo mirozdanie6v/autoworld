@@ -1,3 +1,4 @@
+import {extractLegacyTurnkeySource} from './catalog-legacy-turnkey.mjs';
 // Read the listing's verified RUB prices, never infer one from model years,
 // exchange rates, customs costs, engine displacement or bid estimates.
 // The Telegram channel writes prices as keycaps + 🤩 decimal + 🔤 zeroes.
@@ -54,6 +55,7 @@ const DISCOUNT=/скидк|цен[аыу]\s+сниж|цен[аыу]\s+со\s+с�
 
 export function extractSourcePrices(raw=''){
   const text=String(raw||'');
+  const legacy=extractLegacyTurnkeySource(text);
   const emoji=decodeChannelEmojiPrice(text);
   const lines=text.split(/\r?\n/u).map(x=>x.trim()).filter(Boolean);
   let turnkey=0,primary=0,turnkeyContext=false;
@@ -78,6 +80,9 @@ export function extractSourcePrices(raw=''){
   // Accept a plain figure only when explicitly tagged as the vehicle price.
   const discounted=Boolean(DISCOUNT.test(text));
   const priceRub=emoji||primary;
+  // An old '1.92–2.23 млн' range is displayed FROM 1.92m; the
+  // generic rubAmount parser otherwise grabs 2.23m at the end of the range.
+  const turnkeyRub=legacy?.minRub||turnkey||0;
   const discountPriceRub=discounted&&emoji&&primary&&primary>emoji?emoji:0;
   const priceBeforeDiscountRub=discountPriceRub?primary:0;
   return {
@@ -85,9 +90,13 @@ export function extractSourcePrices(raw=''){
     priceBeforeDiscountRub,
     priceAfterDiscountRub:discountPriceRub,
     discountExplicit:Boolean(discountPriceRub),
-    russiaTurnkeyRub:turnkey,
-    turnkeyDeliveryRub:turnkey>priceRub&&priceRub>0?turnkey-priceRub:0,
-    turnkeyDeliverySource:turnkey>priceRub&&priceRub>0?'source_russia_with_repair_difference':'',
-    priceEvidence:emoji?'channel_emoji':primary?'source_label':'unresolved'
+    russiaTurnkeyRub:turnkeyRub,
+    russiaTurnkeyMaxRub:legacy?.maxRub||0,
+    russiaTurnkeyKind:legacy?.kind||'',
+    usaTurnkeyRub:legacy?.usaRub||0,
+    georgiaTurnkeyRub:legacy?.georgiaRub||0,
+    turnkeyDeliveryRub:turnkeyRub>priceRub&&priceRub>0?turnkeyRub-priceRub:0,
+    turnkeyDeliverySource:turnkeyRub>priceRub&&priceRub>0?'source_russia_with_repair_difference':'',
+    priceEvidence:emoji?'channel_emoji':primary?'source_label':legacy?.minRub?'russia_turnkey_only':'unresolved'
   };
 }

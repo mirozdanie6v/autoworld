@@ -5,7 +5,7 @@ import {quoteCostRows,quoteRowsTotal,ageCategoryForDate,ageCategoryForMonth,ageC
 import {quoteVehicleFields,quoteCostAuditFields,quoteCustomsFields} from './auto-sale-quote-form.mjs';
 import {AWG_GEORGIA_TARIFF_VERSION,georgiaQuoteForm,georgiaQuoteAmounts,georgiaDraftForEditing,formatGeorgiaUsd} from './auto-sale-georgia-quote.mjs';
 import {normalizePowerUnit,toMetricHorsepower,quotePowerInput,convertPowerInput} from './auto-sale-power-units.mjs';
-import {catalogVehicleSnapshot,isCatalogVehicleLead,catalogLeadSpecsText,renderCatalogLeadVehicle,catalogCarForLead,catalogBudgetUsd,catalogPriceRub} from './auto-sale-catalog-lead.mjs';
+import {catalogVehicleSnapshot,isCatalogVehicleLead,catalogLeadSpecsText,renderCatalogLeadVehicle,catalogCarForLead,catalogBudgetUsd,catalogPriceRub} from './auto-sale-catalog-lead.mjs?v=20261027-legacy-turnkey-v1';
 import {catalogRubPerUsd} from './auto-sale-catalog-fx.mjs';
 import {catalogCustomsFacts,catalogCustomsForLead} from './auto-sale-catalog-customs.mjs';
 import {installNumericZeroFocus} from './auto-sale-numeric-zero-focus.mjs';
@@ -50,6 +50,10 @@ const rubMoney=v=>new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).forma
 const catalogPriceText=car=>{
   if(Number(car?.price)>0)return 'от '+money(car.price);
   if(Number(car?.priceRub)>0)return rubMoney(car.priceRub);
+  if(Number(car?.russiaTurnkeyRub)>0){
+    const prefix=Number(car.russiaTurnkeyMaxRub)>Number(car.russiaTurnkeyRub)?'от ':'';
+    return prefix+rubMoney(car.russiaTurnkeyRub);
+  }
   if(Number(car?.estimatedBidUsd)>0)return 'ставка ≈ '+money(car.estimatedBidUsd);
   return 'по расчёту';
 };
@@ -57,7 +61,7 @@ const catalogOldPriceRub=car=>{
   const before=Number(car?.priceBeforeDiscountRub)||0,current=Number(car?.priceRub)||0;
   return car?.discountExplicit===true&&before>current&&current>0?before:0;
 };
-const catalogPriceSub=car=>catalogOldPriceRub(car)?'цена со скидкой':Number(car?.price)>0?'ориентир под ключ':Number(car?.priceRub)>0?'цена источника':Number(car?.estimatedBidUsd)>0?'расчётная ставка':'стоимость уточняется';
+const catalogPriceSub=car=>catalogOldPriceRub(car)?'цена со скидкой':Number(car?.price)>0?'ориентир под ключ':Number(car?.priceRub)>0?'цена источника':Number(car?.russiaTurnkeyRub)>0?(car.russiaTurnkeyKind==='route_comparison'?'расчёт в России: США / Грузия':'цена в России с ремонтом (источник)'):Number(car?.estimatedBidUsd)>0?'расчётная ставка':'стоимость уточняется';
 const catalogDeliveryHint=car=>{const value=String(car?.delivery||'').trim();return !value||value==='Срок по запросу'?(carOrigin(car)==='США'?'2,5–3,5 месяца':'5–10 дней'):value};
 const catalogPriceHtml=car=>{
   const old=catalogOldPriceRub(car);
