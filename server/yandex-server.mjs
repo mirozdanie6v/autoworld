@@ -139,7 +139,9 @@ if(adsStageB.enabled&&process.env.AWG_ADS_STAGE_B_RECONCILE_ENABLED==='true'){
     running=true;
     try{
       const result=await job.run({authorized:true,cursor});
-      cursor=result.nextCursor||'';
+      // Any failed receipt must be revisited on the next cycle;
+      // successful receipts are idempotent and safe to replay.
+      cursor=result.errors>0?'':(result.nextCursor||'');
     }catch(error){
       // Do not log lead payloads, client identities or stack traces.
       console.warn('AWG ADS staging reconciliation failed','retry_next_cycle');
