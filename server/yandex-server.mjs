@@ -617,6 +617,13 @@ const server=http.createServer(async(req,res)=>{
         if(!visibleEntity(accessState,access,resource,id)){json(res,{error:access.role==='public'?'not_found':'forbidden'},access.role==='public'?404:403);return}
         const entityStores=await getEntityStores();
         const result=await readAutoSaleEntity({...entityStores,resource,id});
+        // Individual entity reads must enforce the same advertising privacy
+        // boundary as the filtered /state endpoint.
+        if(resource==='lead'&&access.role==='client'&&result.data?.entity){
+          const {adsAttribution,adsAttributionStatus,...visible}=result.data.entity;
+          json(res,{...result.data,entity:visible},result.status);
+          return;
+        }
         json(res,result.data,result.status);return;
       }
       if(access.role!=='admin'){json(res,{error:access.role==='public'?'telegram_auth_required':'admin_required'},access.role==='public'?401:403);return}
