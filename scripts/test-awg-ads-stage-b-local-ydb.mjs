@@ -8,6 +8,10 @@ import {createYdbAdsAttributionRepository,ensureAdsAttributionSchema} from '../s
 import {createAdsAttributionService} from '../server/ads-attribution-core.mjs';
 import {createAdsStageBBridge} from '../server/ads-attribution-stage-b.mjs';
 import {sanitizeClientOperations} from '../server/auto-sale-access.mjs';
+import {createYdbStateStore} from '../server/ydb-state.mjs';
+import {createYdbDomainStore} from '../server/ydb-domain-store.mjs';
+import {legacyStateToDomainRows} from '../server/ydb-domain-migration.mjs';
+import {mutateAutoSaleEntityBatch} from '../server/ydb-entity-commands.mjs';
 
 if(process.env.AWG_ADS_LOCAL_YDB_TEST!=='yes'
   ||process.env.YDB_CONNECTION_STRING
@@ -140,6 +144,59 @@ try{
   assert.equal(recoveredReceipts.find(e=>e.eventType==='lead_submit'
     &&e.eventId.startsWith('ads:lead_')&&e.campaignId==='outage-campaign-A')?.campaignId,'outage-campaign-A');
   console.log('AWG_STAGE_B_LOCAL_YDB_AS_OF_RECOVERY_PASS');
+
+  // Actual normalized CRM YDB transaction, not an in-memory mock. All tables
+  // reside exclusively in this disposable localhost CI process. No notifications.
+  const localConnection='grpc://localhost:2136/local';
+  const credentialsProvider=new AnonymousCredentialsProvider();
+  const legacyStore=await createYdbStateStore({
+    connectionString:localConnection,credentialsProvider,
+    ensureSchema:true,domainDualWrite:false
+  });
+  const domainStore=await createYdbDomainStore({
+    connectionString:localConnection,credentialsProvider,ensureSchema:true
+  });
+  try{
+    const original=await legacyStore.loadState();
+    await domainStore.replaceSnapshot(legacyStateToDomainRows(original),{
+      sourceRevision:original.revision,status:'initialized'
+    });
+    const initial=await domainStore.loadState();
+    const realOps=sanitizeClientOperations(initial,[{
+      resource:'lead',operation:'create',id:'L-ADS-REAL-NORMALIZED',input:{
+        name:'Synthetic Stage B Client',contact:'@synthetic',
+        model:'BMW 320',budget:29000,
+        adsAttribution:{source:'Telegram Ads',lastTouch:{campaignId:'injected'}}
+      }
+    }],{id:'111111',first_name:'Synthetic'},identity,{
+      now:()=> '2026-10-27T06:00:00Z'
+    });
+    assert.equal(realOps.ok,true);
+    assert.equal(realOps.operations[0].input.adsAttribution,undefined);
+    const trustedOps=await bridge.enrichLeadOperations(realOps.operations,access);
+    assert.equal(trustedOps[0].input.adsAttribution.lastTouch.campaignId,'StageB-Other-Campaign');
+    // A newer campaign at commit time is expected; the snapshot cannot change
+    // after CRM successfully saves it.
+    const committed=await mutateAutoSaleEntityBatch({
+      legacyStore,domainStore,operations:trustedOps,
+      prepareNotifications:null
+    });
+    assert.equal(committed.status,200,JSON.stringify(committed.data));
+    const persisted=await domainStore.loadState();
+    const saved=persisted.leads.find(x=>x.id==='L-ADS-REAL-NORMALIZED');
+    assert.ok(saved);
+    assert.equal(saved.clientProvider,'telegram');
+    assert.equal(saved.adsAttribution.lastTouch.campaignId,'StageB-Other-Campaign');
+    const snapshotAtCommit=saved.adsAttribution;
+    assert.equal((await bridge.recordCommittedLeads(trustedOps,access,{committed:true})).recorded,1);
+    const final=await domainStore.loadState();
+    assert.deepEqual(final.leads.find(x=>x.id===saved.id).adsAttribution,snapshotAtCommit);
+    console.log('AWG_STAGE_B_LOCAL_YDB_REAL_CRM_COMMIT_PASS',JSON.stringify({
+      committed:true,normalizedSource:true,immutableCampaign:true,clientForgeryStripped:true
+    }));
+  }finally{
+    await Promise.allSettled([legacyStore.close(),domainStore.close()]);
+  }
   console.log('AWG_STAGE_B_LOCAL_YDB_BRIDGE_PASS',JSON.stringify({
     campaign:'StageB-Real-YDB',verifiedLeadReceipts:leads.length,
     duplicateLeadSubmitDeduped:true,vkExcluded:true,
