@@ -85,9 +85,9 @@ export function createAdsStageBBridge({enabled=false,service,onFailure}={}){
     if(!enabled)return {status:'disabled'};
     const telegramUserId=verifiedAdsTelegramIdentity(access);
     if(!telegramUserId)return {status:'forbidden'};
-    if(!['miniapp_open','vehicle_view'].includes(eventType))
+    if(!['miniapp_open','vehicle_detail_click'].includes(eventType))
       throw new Error('invalid_ads_miniapp_event_type');
-    if(eventType==='vehicle_view'){
+    if(eventType==='vehicle_detail_click'){
       if(typeof carId!=='string'||!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/.test(carId)
         ||!Array.isArray(catalog)||!catalog.some(car=>car?.active!==false&&String(car?.id)===carId)){
         return {status:'ignored',reason:'vehicle_not_in_current_catalog'};
@@ -126,9 +126,9 @@ export function createAdsStageBBridge({enabled=false,service,onFailure}={}){
     // firstManagerActionAt is set by the existing server-controlled
     // manager-claim policy. Client-reported "contacts" never count.
     if(lead.firstManagerActionAt&&Number.isFinite(Date.parse(lead.firstManagerActionAt))){
-      const contactEventId='contact_'+createHash('sha256').update(leadId).digest('hex');
+      const contactEventId='manager_action_'+createHash('sha256').update(leadId).digest('hex');
       await service.recordTrustedSnapshotEvent({
-        telegramUserId,eventType:'manager_contact',eventId:contactEventId,
+        telegramUserId,eventType:'first_manager_action',eventId:contactEventId,
         attributionSnapshot:lead.adsAttribution
       });
     }
