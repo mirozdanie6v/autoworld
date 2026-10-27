@@ -65,6 +65,13 @@ Current code at 2787c487012284f36d6accb175b8b945d47b3f22:
 - Managed script syntax, workflow YAML, shell and OIDC JavaScript syntax checked.
 Code CI does not prove cloud runtime success.
 
+## Independent Cloud Console query diagnosis
+- SELECT 1 AS staging_health completed and returned 1.
+- SELECT * FROM awg_ads_campaigns LIMIT 1 failed with GRpc error (4): Deadline Exceeded.
+- Both were executed only on ads staging etnseoqfsf7ojn52813t using the signed-in cloud owner session.
+- Therefore table access failure is reproduced independently of the GitHub runner and its staging SA. The exact service/metadata/shard root cause is still unknown; do not claim a global YDB outage.
+- No query is left running. Console screenshot and nine-table list were captured.
+
 ## Not completed
 - Independent managed schema SELECT acceptance; managed CRM schema/fixture transactions.
 - Production data-plane deny probe.
