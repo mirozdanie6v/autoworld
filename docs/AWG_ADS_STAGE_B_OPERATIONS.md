@@ -1,5 +1,17 @@
 # AutoWorld Ads B — staging / operations / acceptance log (27.10.2026)
 
+## Current verified state — supersedes the historical status below
+
+OIDC -> IAM exchange and read-only inventory are now SUCCESS. Two physically separate managed staging YDBs, dedicated SA/federation and scoped grants are created and verified. All nine advertising schema tables are visible with the dedicated SA as owner. Full code CI is green.
+
+Managed runtime acceptance is BLOCKED: three cloud attempts failed with server Query compilation timed out. Independent Cloud Console SELECT 1 succeeds, but SELECT from awg_ads_campaigns fails with gRPC Deadline Exceeded. The exact data-plane root cause is not yet established. Controlled maintenance jobs were not reached, physical Telegram/VK E2E has no separate staging credentials/runtime, and deployment rollback is not verified. Maintenance flags remain disabled; this workstream did not change production.
+
+Authoritative current IDs, ACL read-back, run evidence and continuation:
+[Managed staging inventory](AWG_ADS_STAGING_INVENTORY_2026-10-27.md).
+
+The remaining sections retain earlier implementation history and pre-recovery findings; their 401/no-resource statements are historical.
+
+
 ## Decision
 **PARTIAL technical PASS / NO-GO managed staging and production.**
 All code changes stay in draft PR #83 on `feature/awg-ads-stage-b-integration`.
