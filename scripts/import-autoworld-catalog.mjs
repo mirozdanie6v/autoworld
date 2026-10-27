@@ -97,7 +97,7 @@ function sourceRubPrices(source){
   // Trusted raw-channel evidence overrides a stale scraper fallback. A
   // historical price field may actually be "Russia with repair", not the
   // primary sticker price. Never silently infer a zero price as valid.
-  const priceRub=emojiOrLabeled||sourceRub;
+  const priceRub=fromText.priceEvidence==='russia_turnkey_only'?0:emojiOrLabeled||sourceRub;
   const russiaTurnkeyRub=fromText.russiaTurnkeyRub||Math.max(0,Number(source?.russiaTurnkeyRub)||0);
   const discountExplicit=fromText.discountExplicit||(source?.discountExplicit===true&&
     Number(source?.priceBeforeDiscountRub)>priceRub&&priceRub>0);
