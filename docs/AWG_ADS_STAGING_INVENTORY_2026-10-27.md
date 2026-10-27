@@ -32,7 +32,7 @@ CI on 16c8cffaa14853a593f9b4f714698b80b09a6ec0:
 1. Confirm exact federation binding above to aje3j5aat66lel86cd5r; no wildcard subjects or production SA.
 2. Confirm ydb.auditor metadata-only inventory permission on folder b1g8u8vqkgehvtbj8n13, and database-scoped ydb.editor only on explicitly approved staging databases. Never grant folder-wide ydb.editor.
 3. Create separate awg-ads-crm-stage-b-staging with the same 10 RU/s, 1 GB, provisioned 0, deletion-protection configuration. Automatic approval review REJECTED the submit because it considered the second CRM resource outside explicit advertising DB scope and a cost side effect. No retry or alternate API was used.
-4. Configure GitHub environment variable AWG_ADS_STAGING_SA_ID=aje3j5aat66lel86cd5r; restrict deployment branch to feature/awg-ads-stage-b-integration before granting federation trust.
+4. COMPLETED: GitHub environment variable AWG_ADS_STAGING_SA_ID=aje3j5aat66lel86cd5r saved and visually read back. Deployment branch rule saved and verified: only feature/awg-ads-stage-b-integration, 1 branch and 0 tags. Cloud binding remains unapplied.
 5. Re-run read-only inventory, require HTTP 200 IAM exchange; prove absence of production data access without reading production customer records.
 6. Apply reviewed schemas only after both actual staging IDs and their access are verified; inspect/apply/inspect.
 7. Set IAM_VERIFIED and MAINTENANCE_ENABLED only after evidence; then run bounded reconciliation/retention against disposable staging fixtures and inspect durable leases/audit.
