@@ -149,36 +149,41 @@ KEYCAP_DIGIT_RE = re.compile(r"^([0-9])\ufe0f?\u20e3$")
 CHANNEL_EMOJI_ZERO = "🔤"
 
 def parse_channel_emoji_price(text):
-    """Decode the verified ✨ keycap sticker, with 🤩 as decimal and 🔤 as 0."""
+    """Decode verified contiguous price stickers, tolerating labels/padding."""
+    # Telegram captions put ❗️, an outdated headline RUB estimate, or
+    # multiple 🔤 placeholders between ✨ and the current encoded sticker.
+    # Decode ONLY recognized keycaps + 🤩 decimal + 🔤 zeros, never guess
+    # from other emoji/custom-emoji content.
     lines = [x.strip().strip("* ").strip() for x in str(text or "").splitlines() if x.strip()]
-    for i, line in enumerate(lines[:70]):
-        if line not in {"✨", "💰", "💸"}:
+    for i, line in enumerate(lines[:150]):
+        if not KEYCAP_DIGIT_RE.fullmatch(line):
             continue
-        digits = []
-        for next_line in lines[i + 1:i + 13]:
+        tokens = []
+        for next_line in lines[i:i + 10]:
             if next_line in {"🔹", "🔸", "🔺", "📜", "🛡", "🔎"} or re.match(
                 r"(комплектация|Пробег|Двигатель)", next_line, re.I
             ):
                 break
             match = KEYCAP_DIGIT_RE.fullmatch(next_line)
             if match:
-                digits.append(match.group(1))
+                tokens.append(match.group(1))
             elif next_line == CHANNEL_EMOJI_ZERO:
-                digits.append("0")
+                tokens.append("0")
             elif next_line == "🤩":
-                digits.append(".")
+                tokens.append(".")
             else:
                 break
-        if digits.count(".") != 1:
+        if tokens.count(".") != 1:
             continue
-        dot = digits.index(".")
-        whole, fraction = "".join(digits[:dot]), "".join(digits[dot + 1:])
+        dot = tokens.index(".")
+        whole, fraction = "".join(tokens[:dot]), "".join(tokens[dot + 1:])
         if not (1 <= len(whole) <= 2 and 2 <= len(fraction) <= 5):
             continue
         value = round(float(whole + "." + fraction) * 1_000_000)
         if 100_000 <= value <= 200_000_000:
             return value
     return None
+
 
 def parse_russia_turnkey_rub(text):
     """Recognize multiline 'Цена в России (с ремонтом)' as secondary price."""
