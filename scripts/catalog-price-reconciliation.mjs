@@ -12,8 +12,9 @@ export function planCatalogPriceRepairs(liveCatalog=[],archivePosts=[],recentPos
     if(!/^\d+$/.test(id)||!String(source?.rawText||'').trim())continue;
     const resolved=verifiedSourceRubPrice(source);
     const current=sources.get(id);
-    if(!current || (resolved.priceRub>0 && !current.resolution.priceRub) ||
-      (source===current.source && resolved.priceRub>0))sources.set(id,{source,resolution:resolved});
+    // Newer source text wins when it contains a verified price.
+    if(!current || resolved.priceRub>0 || !current.resolution.priceRub)
+      sources.set(id,{source,resolution:resolved});
   }
   const repairItems=[],priceConflicts=[],unresolved=[],missingSources=[],priced=[],bidOnly=[];
   for(const car of liveCatalog){
