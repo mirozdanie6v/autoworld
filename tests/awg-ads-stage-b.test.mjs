@@ -4,7 +4,7 @@ import {createAdsStageBBridge,verifiedAdsTelegramIdentity} from '../server/ads-a
 import {adsStageBConfiguration} from '../server/ads-stage-b-runtime.mjs';
 import {createAdsAttributionService,createMemoryAdsAttributionRepository} from '../server/ads-attribution-core.mjs';
 import {createTelegramService} from '../server/telegram-bot.mjs';
-import {sanitizeClientOperations,clientState} from '../server/auto-sale-access.mjs';
+import {sanitizeClientOperations,sanitizeAdminOperations,clientState} from '../server/auto-sale-access.mjs';
 
 const access={role:'client',authenticated:true,authType:'telegram',user:{id:'10050'}};
 function fixture(){
@@ -163,4 +163,16 @@ test('stalled secondary YDB lookup is bounded and produces recoverable CRM marke
   assert.ok(Date.now()-started<1000);
   assert.equal(operations[0].input.adsAttributionStatus,'lookup_unavailable');
   assert.equal(warnings[0].code,'ads_snapshot_unavailable');
+});
+
+test('manager and API-key callers cannot inject or rewrite internal ads attribution fields',()=>{
+  const patch={resource:'lead',operation:'patch',id:'L-001',
+    input:{status:'В работе',adsAttribution:{source:'Telegram Ads',
+      lastTouch:{campaignId:'forged'}},adsAttributionStatus:'recovered'}};
+  for(const apiKey of [false,true]){
+    const [clean]=sanitizeAdminOperations([patch],{apiKey});
+    assert.equal(clean.input.status,'В работе');
+    assert.equal('adsAttribution' in clean.input,false);
+    assert.equal('adsAttributionStatus' in clean.input,false);
+  }
 });
