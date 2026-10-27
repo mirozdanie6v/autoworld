@@ -101,3 +101,52 @@ test('browser telemetry posts only type and carId, never forged campaigns or Tel
   stop();
   assert.equal(handlers.has('click'),false);
 });
+
+
+test('ads DB lookup outage persists recovery marker and replays campaign as-of CRM submit, not newer /start',async()=>{
+  const repository=createMemoryAdsAttributionRepository();
+  let current='2026-10-27T08:00:00Z';
+  const service=createAdsAttributionService({repository,subjectSecret:SECRET,clock:()=>new Date(current)});
+  const tokenA=(await service.issueCampaign({campaignId:'outage-A'})).token;
+  const tokenB=(await service.issueCampaign({campaignId:'later-B'})).token;
+  await service.recordBotStart({telegramUserId:'9991',startPayload:tokenA,updateId:'7001'});
+  current='2026-10-27T08:10:00Z';
+  const warning=[];
+  const impaired=createAdsStageBBridge({enabled:true,
+    service:{...service,getAttribution:async()=>{throw Error('temporary ads YDB read failure')}},
+    onFailure:async row=>warning.push(row)});
+  const access={role:'client',authenticated:true,authType:'telegram',user:{id:'9991'}};
+  const decorated=await impaired.enrichLeadOperations([
+    {resource:'lead',operation:'create',id:'L-OUTAGE-1',input:{
+      id:'L-OUTAGE-1',source:'Mini App',clientSubmittedAt:current,
+      clientProvider:'telegram',clientProviderUserId:'9991'
+    }}
+  ],access);
+  assert.equal(decorated[0].input.adsAttribution,undefined);
+  assert.equal(decorated[0].input.adsAttributionStatus,'lookup_unavailable');
+  assert.equal(warning[0].code,'ads_snapshot_unavailable');
+  // This is the record actually committed by CRM, with no chosen campaign.
+  const committed={...decorated[0].input};
+  current='2026-10-27T08:20:00Z';
+  await service.recordBotStart({telegramUserId:'9991',startPayload:tokenB,updateId:'7002'});
+  assert.equal((await service.getAttribution({telegramUserId:'9991'})).lastTouch.campaignId,'later-B');
+  const recovered=await impaired.reconcilePersistedLead(committed);
+  assert.equal(recovered.status,'recorded');
+  assert.equal((await impaired.reconcilePersistedLead(committed)).status,'duplicate');
+  const receipt=repository.snapshotForTests().events.find(x=>x.eventType==='lead_submit');
+  assert.equal(receipt.campaignId,'outage-A');
+  committed.firstManagerActionAt=current;
+  await impaired.reconcilePersistedLead(committed);
+  assert.equal(repository.snapshotForTests().events.find(x=>x.eventType==='first_manager_action').campaignId,'outage-A');
+});
+
+test('outage marker without valid historical touch stays unattributed, never assigns later campaign',async()=>{
+  const {service,bridge,repository}=setup();
+  const token=(await service.issueCampaign({campaignId:'late'})).token;
+  await service.recordBotStart({telegramUserId:'9001',startPayload:token,updateId:'9001'});
+  const lead={id:'L-MISSING',clientProvider:'telegram',clientProviderUserId:'9001',
+    clientSubmittedAt:'2026-10-27T08:30:00Z',
+    adsAttributionStatus:'lookup_unavailable'};
+  assert.equal((await bridge.reconcilePersistedLead(lead)).reason,'no_verified_historical_touch');
+  assert.equal(repository.snapshotForTests().events.filter(x=>x.eventType==='lead_submit').length,0);
+});
