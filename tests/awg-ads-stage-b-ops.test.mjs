@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createAdsCrmPrivacyErasure} from '../server/ads-stage-b-crm-privacy.mjs';
+import {createAdsRecoverableBridge} from '../server/ads-stage-b-resilient.mjs';
 import {createAdsManagedJobRunner,registerAdsExternallyManagedJobs} from '../server/ads-stage-b-managed-jobs.mjs';
 import {ensureAdsManagedJobSchema,createYdbAdsManagedJobRepository} from '../server/ads-stage-b-job-ydb.mjs';
 
@@ -149,4 +150,43 @@ test('CRM CAS failure never reports successful cross-store erasure',async()=>{
     principal:{id:'operator-iam'}}),/retry_exhausted/);
   assert.ok(alerts.some(x=>x.code==='ads_crm_erasure_retry_exhausted'));
   assert.equal(audit[0].outcome,'incomplete');
+});
+
+test('recoverable bridge keeps CRM lead creation safe during ads DB outage and reconnects',async()=>{
+  let now=1000,attempts=0,alerts=[];
+  const bridge=createAdsRecoverableBridge({
+    now:()=>now,retryDelayMs:100,openDeadlineMs:500,
+    onFailure:async e=>alerts.push(e),
+    open:async()=>{
+      attempts++;
+      if(attempts===1)throw Error('staging_ads_unreachable');
+      return {repository:{},close:async()=>{},
+        report:async()=>[{campaignId:'A',leadSubmissions:1}],
+        service:{
+          recordBotStart:async()=>({status:'recorded'}),
+          getAttribution:async()=>({
+            firstTouch:{campaignId:'A',timestamp:'2026-10-27T00:00:00Z'},
+            lastTouch:{campaignId:'A',timestamp:'2026-10-27T00:00:00Z'}
+          }),
+          recordTrustedEvent:async()=>({status:'recorded'}),
+          recordTrustedSnapshotEvent:async()=>({status:'recorded'})
+        }};
+    }
+  });
+  const access={authenticated:true,authType:'telegram',role:'client',user:{id:'1212'}};
+  const ops=[{resource:'lead',operation:'create',id:'L-reconnect',input:{
+    clientSubmittedAt:'2026-10-27T00:00:00Z'
+  }}];
+  const lost=await bridge.enrichLeadOperations(ops,access);
+  assert.equal(lost[0].input.adsAttributionStatus,'lookup_unavailable');
+  await assert.rejects(bridge.recordBotStart({telegramUserId:'1212',
+    startPayload:'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',updateId:'1'}),/unavailable/);
+  assert.equal(attempts,1);
+  now+=101;
+  const restored=await bridge.enrichLeadOperations(ops,access);
+  assert.equal(restored[0].input.adsAttribution.lastTouch.campaignId,'A');
+  assert.deepEqual(await bridge.report(),[{campaignId:'A',leadSubmissions:1}]);
+  assert.equal(attempts,2);
+  assert.equal(alerts[0].code,'ads_staging_connection_retry_pending');
+  await bridge.close();
 });
