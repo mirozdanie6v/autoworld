@@ -23,7 +23,11 @@ export function catalogVehicleSnapshot(car){
     priceBeforeDiscountRub:num(car.priceBeforeDiscountRub),
     priceAfterDiscountRub:num(car.priceAfterDiscountRub),
     discountExplicit:car.discountExplicit===true,
-    russiaTurnkeyRub:num(car.russiaTurnkeyRub),turnkeyDeliveryRub:num(car.turnkeyDeliveryRub),
+    russiaTurnkeyRub:num(car.russiaTurnkeyRub),
+    russiaTurnkeyMaxRub:num(car.russiaTurnkeyMaxRub),
+    russiaTurnkeyKind:str(car.russiaTurnkeyKind),
+    usaTurnkeyRub:num(car.usaTurnkeyRub),georgiaTurnkeyRub:num(car.georgiaTurnkeyRub),
+    turnkeyDeliveryRub:num(car.turnkeyDeliveryRub),
     turnkeyDeliverySource:str(car.turnkeyDeliverySource),
     interiorPhotos:photoList(car.interiorPhotos),otherPhotos:photoList(car.otherPhotos)
   };
@@ -58,7 +62,10 @@ export function renderCatalogLeadVehicle(lead={}, {escape=String,money=v=>'$'+v,
     label('Стоимость из карточки',cost),
     ...(num(s.price)>0&&valueRub?[label('Стоимость в рублях',rubMoney(valueRub))]:[]),
     ...(s.discountExplicit===true&&originalBefore&&originalBefore>valueRub?[label('До скидки',rubMoney(originalBefore))]:[]),
-    ...(num(s.russiaTurnkeyRub)>0?[label('Цена в России с ремонтом (источник)',rubMoney(s.russiaTurnkeyRub))]:[]),
+    ...(num(s.russiaTurnkeyRub)>0?[label('Цена в России с ремонтом (источник)',num(s.russiaTurnkeyMaxRub)>num(s.russiaTurnkeyRub)
+      ?rubMoney(s.russiaTurnkeyRub)+' – '+rubMoney(s.russiaTurnkeyMaxRub):rubMoney(s.russiaTurnkeyRub))]:[]),
+    ...(num(s.usaTurnkeyRub)>0?[label('Оценка через США (источник)',rubMoney(s.usaTurnkeyRub))]:[]),
+    ...(num(s.georgiaTurnkeyRub)>0?[label('Оценка через Грузию (источник)',rubMoney(s.georgiaTurnkeyRub))]:[]),
     ...(num(s.turnkeyDeliveryRub)>0?[label('Разница: доставка под ключ (источник)',rubMoney(s.turnkeyDeliveryRub))]:[]),
     ...(str(s.auction)?[label('Аукцион / площадка',s.auction)]:[]),
     ...(str(s.auctionDate)?[label('Дата аукциона',s.auctionDate)]:[]),
@@ -106,7 +113,9 @@ export function catalogCarForLead(lead={},cars=[]){
 }
 
 export function catalogPriceRub(car){
-  return Number(car?.priceRub)||Number(car?.priceAfterDiscountRub)||0;
+  // Last-resort catalog display/budget estimate: the source's Russia turnkey
+  // price, never mislabeled as the underlying car purchase price.
+  return Number(car?.priceRub)||Number(car?.priceAfterDiscountRub)||Number(car?.russiaTurnkeyRub)||0;
 }
 export function catalogBudgetUsd(car,rubPerUsd,step=200){
   const usd=Number(car?.price)>0?Number(car.price):catalogPriceRub(car)/Number(rubPerUsd);
