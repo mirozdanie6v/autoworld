@@ -30,8 +30,8 @@ export function mountAdsDirectorReport({root,documentObj,fetchImpl,authHeaders}=
       if(!Array.isArray(data.rows))throw new Error('invalid_ads_report');
       const columns=[
         ['campaignId','Кампания'],['botStarts','Запуски бота'],
-        ['miniappOpens','Открытия Mini App'],['vehicleViews','Просмотры авто'],
-        ['leadSubmissions','Заявки'],['managerContacts','Контакты менеджера'],
+        ['miniappOpens','Открытия Mini App'],['vehicleDetailClicks','Переходы к карточкам'],
+        ['leadSubmissions','Заявки'],['managerActions','Действия менеджера'],
         ['costPerLead','CPL']
       ];
       const table=documentObj.createElement('table');
