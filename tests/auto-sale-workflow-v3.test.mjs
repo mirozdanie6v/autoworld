@@ -51,7 +51,7 @@ test('USA Mini App workflow preserves separate preliminary and agreed contract t
   root.querySelector('[data-go="leads"]').click();
   root.querySelector('[data-lead="'+lead.id+'"]').click();
   form=root.querySelector('#leadEditForm');
-  for(const [name,value] of Object.entries({agreedOrderTotal:'30000',deposit:'8000',depositDate:'2026-10-26',paymentMethod:'Банк'}))set(form,'[name="'+name+'"]',value);
+  for(const [name,value] of Object.entries({agreedOrderTotal:'30000',depositDate:'2026-10-26',paymentMethod:'Банк'}))set(form,'[name="'+name+'"]',value);
   submit(dom,form);await tick();
   const convert=root.querySelector('[data-convert-order="'+lead.id+'"]');
   assert.ok(convert);
@@ -62,12 +62,13 @@ test('USA Mini App workflow preserves separate preliminary and agreed contract t
   assert.equal(order.total,30000);
   assert.equal(order.preliminaryTotal,27200);
   assert.equal(order.priceBasis,'agreed_contract');
-  assert.equal(order.paid,8000);
-  assert.deepEqual(order.paymentPlan.map(x=>x.amount),[8000,22000,0,0]);
+  assert.equal(order.paid,15000);
+  assert.equal(order.advancePercent,50);
+  assert.deepEqual(order.paymentPlan.map(x=>x.amount),[15000,15000,0,0]);
   assert.equal(order.vin,'WAUZZZTEST1234567');
   form=root.querySelector('#orderForm');
   for(const [name,value] of Object.entries({stage:'Подготовка к отправке',lot:'998877',eta:'2026-11-15',
-    location:'Long Beach, CA',paymentAmount:'22000',paymentDate:'2026-10-27',paymentMethod:'Банк'}))set(form,'[name="'+name+'"]',value);
+    location:'Long Beach, CA',paymentAmount:'15000',paymentDate:'2026-10-27',paymentMethod:'Банк'}))set(form,'[name="'+name+'"]',value);
   submit(dom,form);await tick();
   order=JSON.parse(localStorage.getItem('auto-sale-orders-v2')).find(x=>x.id===order.id);
   assert.equal(order.stage,'Подготовка к отправке');
