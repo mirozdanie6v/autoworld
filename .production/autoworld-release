@@ -1,5 +1,5 @@
 AWG production release
 requested_at=2026-10-27
-source_sha=e50fe3908e539d8e692b26777d80674bc25b6092
-reason=fix-order-check-and-advance-first-click-us-georgia-pr81
+source_sha=ce208f1c50dc1b5bce53e5a8070fda79833a9872
+reason=order-next-first-click-us-georgia-cache-bust-final-pr81-pr82
 run_real_client_e2e=false
