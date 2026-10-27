@@ -52,7 +52,7 @@ test('process CSS loads last after desktop and mobile CSS without disturbing exi
     assert.ok(index>last,'CSS loading order invalid for '+path);
     last=index;
   }
-  assert.match(html,/auto-sale-bootstrap\.mjs\?v=20261027-legacy-turnkey-v1/);
+  assert.match(html,/auto-sale-bootstrap\.mjs\?v=20261027-source-price-v3/);
   assert.match(html,/auto-sale-scroll-top\.mjs\?v=20261015-scrolltop-v1/);
 });
 
