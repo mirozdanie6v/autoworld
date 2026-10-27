@@ -50,7 +50,7 @@ for(const origin of ['США','Грузия']){
     form.elements.paymentNote.value='Окончательный платёж';
     form.querySelector('button[type="submit"]').click();
     await tick();await tick();
-    assert.equal(batches.length,1);
+    assert.equal(batches.length,1,'save did not reach batch: '+(root.querySelector('#orderForm .auto-form-error')?.textContent||'no form error')+'; submit data '+JSON.stringify(Object.fromEntries(new FormData(form).entries())));
     assert.deepEqual(batches[0].map(x=>x.resource),['payment'],'payment-only cannot update unrelated lead');
     assert.equal(batches[0][0].input.amount,5199);
     const saved=JSON.parse(localStorage.getItem('auto-sale-orders-v2'))[0];
@@ -82,7 +82,7 @@ for(const origin of ['США','Грузия']){
     assert.ok(live,'modal must remain open after conflict');
     assert.equal(live.elements.paymentAmount.value,'5199','unsaved payment amount must not reset');
     assert.equal(live.elements.paymentNote.value,'Оплата наличными');
-    assert.match(live.querySelector('.auto-form-error')?.textContent||'',/Данные на сервере обновились/);
+    assert.match(live.querySelector('.auto-form-error')?.textContent||'',/Данные на сервере обновились/,'missing conflict feedback: '+JSON.stringify(Object.fromEntries(new FormData(live).entries()))+' | rejected='+rejected.length);
     assert.equal(rejected.length,1);
     assert.equal(JSON.parse(localStorage.getItem('auto-sale-orders-v2'))[0].paid,6801,'failed payment must not be added');
     delete window.__AUTO_SALE_ENTITY_BATCH__;
