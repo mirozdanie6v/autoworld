@@ -29,7 +29,20 @@ for(const [postId,car] of existing){
   }
   const recovered=extractSourcePrices(row.rawText);
   if(!recovered.priceRub||recovered.priceEvidence==='unresolved'){
-    unresolved.push({postId,reason:'source_price_not_confirmed',livePriceRub:num(car.priceRub)});
+    const raw=String(row.rawText||'');
+    // Public channel evidence for price discrepancies only; no account data.
+    // Keep the original token boundaries so irregular emoji formats can be
+    // investigated without guessing a price or touching production cars.
+    const priceIndicators={
+      keycaps:(raw.match(/[0-9]\uFE0F?\u20E3/gu)||[]).length,
+      emojiZeros:(raw.match(/🔤/gu)||[]).length,
+      emojiSeparator:(raw.match(/🤩/gu)||[]).length,
+      rubLabels:(raw.match(/руб|₽|млн|тыс/giu)||[]).length,
+      explicitPrices:(raw.match(/цен[аыу]|стоимост[ьи]/giu)||[]).length
+    };
+    unresolved.push({postId,reason:'source_price_not_confirmed',
+      livePriceRub:num(car.priceRub),sourceUrl:row.sourceUrl||'https://t.me/AutoWorld_Georgia/'+postId,
+      priceIndicators,sourceCaption:raw.slice(0,2600)});
     continue;
   }
   const patch={priceRub:recovered.priceRub,
@@ -70,6 +83,7 @@ const audit={generatedAt:new Date().toISOString(),sourcePosts:source.length,
   liveSourceCars:existing.size,
   liveUnpriced:current.filter(x=>x.source==='AutoWorld_Georgia'&&num(x.priceRub)===0&&num(x.estimatedBidUsd)===0).length,
   sourceStickerRecovered:source.filter(x=>extractSourcePrices(x.rawText||'').priceRub>0).length,
+  unresolvedZeroPriceSourceIds:unresolved.filter(x=>num(x.livePriceRub)===0).map(x=>x.postId),
   candidates:report.length,unresolvedCount:unresolved.length,
   missingPricesCorrectable:report.filter(x=>x.livePriceRub===0&&x.sourcePriceRub>0).length,
   existingPricesCorrectable:report.filter(x=>x.livePriceRub>0&&x.livePriceRub!==x.sourcePriceRub).length,
