@@ -1,5 +1,5 @@
 AWG production release
 requested_at=2026-10-27
-source_sha=4c57047026611e60fd885b8bac1f8b1a8e58af69
-reason=fix-order-first-click-usa-georgia-and-editable-50-percent-auction-advance-pr89
+source_sha=add50924474f02316943680ae56245dc31e8d9ff
+reason=pr91-initialize-editable-50-percent-advance-immediately-and-preserve-historical-deposit
 run_real_client_e2e=false
