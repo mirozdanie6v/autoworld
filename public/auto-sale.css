@@ -180,6 +180,7 @@ input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; marg
 
 /* Manager advance entry: required fields stay evident before and after focus. */
 #leadEditForm .auto-required-explainer{
+  grid-column:1/-1;
   margin:6px 0 0;
   font-size:12px;
   color:var(--warn,#ffb347);
