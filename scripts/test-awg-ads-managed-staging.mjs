@@ -6,9 +6,10 @@ import {spawn} from 'node:child_process';
 import {readFile} from 'node:fs/promises';
 import {Driver} from '@ydbjs/core';
 import {fromBinary} from '@bufbuild/protobuf';
-import {TableServiceDefinition,CreateSessionResultSchema,DescribeTableResultSchema} from '@ydbjs/api/table';
+import {TableServiceDefinition,CreateSessionResultSchema,DescribeTableResultSchema,ExecuteQueryResultSchema} from '@ydbjs/api/table';
 import {query} from '@ydbjs/query';
 import {Type_PrimitiveTypeId} from '@ydbjs/api/value';
+import {Uint64} from '@ydbjs/value/primitive';
 import {SchemeServiceDefinition,ListDirectoryResultSchema} from '@ydbjs/api/scheme';
 import {AccessTokenCredentialsProvider} from '@ydbjs/auth/access-token';
 import {createYdbAdsAttributionRepository} from '../server/ads-attribution-ydb.mjs';
@@ -121,6 +122,17 @@ async function prepareCrmStagingSchema(){
       }
       console.log('AWG_CRM_STAGING_TABLE_VERIFIED',spec.name);
     }
+    const nativeRead=await client.executeDataQuery({
+      sessionId,query:{query:{case:'yqlText',value:'SELECT id FROM auto_sale_state WHERE id=1ul;'}},
+      txControl:{txSelector:{case:'beginTx',value:{txMode:{case:'onlineReadOnly',value:{}}}},commitTx:true}
+    },{signal:AbortSignal.timeout(70000)});
+    decode(nativeRead,ExecuteQueryResultSchema,'crm_native_sql');
+    console.log('AWG_CRM_STAGING_NATIVE_SQL_OK');
+    // Give a single cold QueryService compilation its server-side time budget.
+    // Runtime store timeouts are unchanged; no retries or timeout is accepted as PASS.
+    await query(db)`SELECT revision,payload FROM auto_sale_state WHERE id=${new Uint64(1n)}`
+      .isolation('onlineReadOnly',{allowInconsistentReads:false}).timeout(70000);
+    console.log('AWG_CRM_STAGING_QUERY_SERVICE_OK');
   }finally{
     if(sessionId)await client.deleteSession({sessionId}).catch(()=>{});
     await db.close();
