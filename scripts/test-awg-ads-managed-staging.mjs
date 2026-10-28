@@ -7,7 +7,7 @@ import {Driver} from '@ydbjs/core';
 import {query} from '@ydbjs/query';
 import {AccessTokenCredentialsProvider} from '@ydbjs/auth/access-token';
 import {createYdbAdsAttributionRepository} from '../server/ads-attribution-ydb.mjs';
-import {createAdsAttributionService} from '../server/ads-attribution-core.mjs';
+import {createAdsAttributionService,createAdsSubjectKey} from '../server/ads-attribution-core.mjs';
 import {createAdsStageBBridge} from '../server/ads-attribution-stage-b.mjs';
 import {createAdsStageBServerBridge} from '../server/ads-stage-b-runtime.mjs';
 import {createYdbStateStore} from '../server/ydb-state.mjs';
@@ -57,18 +57,30 @@ async function cli(kind){
 try{
   await driver.ready();
   const sql=query(driver);
-  // Harmless constant query: does not fetch any production customer row.
+  // Auditor may connect and evaluate constants. Only an explicit authorization
+  // rejection for a real table read establishes the data-plane deny boundary.
+  // auto_sale_state has the application's singleton at id=1. Request only the
+  // non-sensitive primary key at Uint64 max; never select payload/customer data.
   const deniedDriver=new Driver(prod,{credentialsProvider:creds});
   let denied=false;
   try{
     await deniedDriver.ready();
-    await query(deniedDriver)`SELECT 1 AS isolation_probe`.isolation('snapshotReadOnly');
-  }catch(e){
-    denied=/UNAUTHORIZED|PERMISSION_DENIED|ACCESS_DENIED|permission denied|access denied/i.test(String(e?.message));
-    if(!denied)throw new Error('production_deny_probe_inconclusive');
+    const productionSql=query(deniedDriver);
+    await productionSql`SELECT 1 AS isolation_probe`.isolation('snapshotReadOnly').timeout(10000);
+    report.productionConstantQueryAllowed=true;
+    try{
+      await productionSql`SELECT id FROM auto_sale_state WHERE id=18446744073709551615ul LIMIT 1`
+        .isolation('snapshotReadOnly').timeout(10000);
+    }catch(e){
+      denied=/UNAUTHORIZED|PERMISSION_DENIED|ACCESS_DENIED|permission denied|access denied/i.test(String(e?.message));
+      if(!denied)throw new Error('production_table_deny_probe_inconclusive');
+    }
   }finally{await deniedDriver.close();}
-  assert.equal(denied,true,'staging SA must have no production data-plane access');
-  report.productionConstantQueryDenied=true;
+  assert.equal(denied,true,'staging SA must be explicitly denied production table reads');
+  report.productionTableReadDenied=true;
+  console.log('AWG_STAGING_ISOLATION_VERIFIED',JSON.stringify({
+    constantAllowed:true,productionTableReadDenied:true,productionWrites:0,customerColumnsRequested:0
+  }));
 
   legacyStore=await createYdbStateStore({connectionString:crm,credentialsProvider:creds,ensureSchema:true,domainDualWrite:false});
   domainStore=await createYdbDomainStore({connectionString:crm,credentialsProvider:creds,ensureSchema:true});
@@ -121,10 +133,41 @@ try{
   assert.equal(await leases.acquire({...lease,owner:'QA-B'}),false);
   assert.equal(await leases.release({kind,owner:'QA-A'}),true);
   report.managedLeaseExclusion=true;
+  // Simulate a committed CRM lead whose conversion receipt was missed.
+  const replayId='L-ADS-REPLAY-'+suffix;
+  const replayOps=operations.map(op=>({...op,id:replayId,input:{...op.input}}));
+  assert.equal((await mutateAutoSaleEntityBatch({legacyStore,domainStore,operations:replayOps,prepareNotifications:null})).status,200);
+  const beforeReplay=(await repository.listEvents({limit:1000})).events
+    .filter(x=>x.campaignId===campaignA&&x.eventType==='lead_submit').length;
+  assert.equal(beforeReplay,1);
+  // Retention must remove an expired synthetic subject and indexed event,
+  // while keeping current campaign/CRM rows.
+  const expiredAt=new Date(Date.now()-120*86400000).toISOString();
+  const expiredSubject=createAdsSubjectKey(String(BigInt(user)+1n),secret);
+  const expiredEvent='qa-expired-'+suffix;
+  await repository.recordTouch({eventId:expiredEvent,subjectKey:expiredSubject,
+    touch:{campaignId:campaignA,adId:'',creativeId:'',timestamp:expiredAt}});
+  assert.ok(await repository.readSubject(expiredSubject));
+  const jobsStartedAt=new Date().toISOString();
   await cli('reconciliation');
+  const afterReplay=(await repository.listEvents({limit:1000})).events
+    .filter(x=>x.campaignId===campaignA&&x.eventType==='lead_submit').length;
+  assert.equal(afterReplay,2,'reconciliation must recover the missing committed lead receipt');
+  report.reconciliationRecoveredReceipt=true;
   await cli('retention');
-  const audit=await sql`SELECT * FROM awg_ads_job_audit LIMIT 20`.isolation('snapshotReadOnly');
-  assert.ok(audit[0]?.length>0,'persistent job audit must exist');
+  assert.equal(await repository.readSubject(expiredSubject),null,'retention removes expired synthetic subject');
+  assert.ok(!(await repository.listEvents({limit:1000})).events.some(x=>x.eventId===expiredEvent),
+    'retention removes expired synthetic event');
+  assert.ok((await domainStore.loadState()).leads.some(x=>x.id===id),'retention preserves CRM lead');
+  report.retentionRemovedExpiredFixture=true;
+  const [audit]=await sql`SELECT job_id,status,at FROM awg_ads_job_audit`.isolation('snapshotReadOnly');
+  for(const job of ['reconciliation','retention']){
+    assert.ok(audit.some(row=>String(row.job_id)===job&&String(row.status)==='ok'&&String(row.at)>=jobsStartedAt),
+      'current '+job+' job must have a persistent success audit');
+  }
+  const [remainingLeases]=await sql`SELECT job_id FROM awg_ads_job_leases`.isolation('snapshotReadOnly');
+  assert.equal(remainingLeases.length,0,'one-time jobs must release all staging leases');
+  report.jobAuditReadback=true;report.jobLeasesReleased=true;
   report.managedJobs=true;
   // Feature-off rollback smoke at the bridge boundary; no deployment rollback claimed.
   const off=await createAdsStageBServerBridge({env:{},credentialsProvider:creds});
