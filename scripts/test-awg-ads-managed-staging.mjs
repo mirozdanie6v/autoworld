@@ -131,13 +131,13 @@ async function prepareCrmStagingSchema(){
     assert.ok(nativeParts>0,'CRM native stream must acknowledge read');
     console.log('AWG_CRM_STAGING_NATIVE_READ_OK');
     const qualified=await client.executeDataQuery({
-      sessionId,query:{query:{case:'yqlText',value:'SELECT id FROM `'+path+'/auto_sale_state` WHERE id=1ul;'}},
+      operationParams:{operationTimeout:{seconds:65n},cancelAfter:{seconds:65n}},sessionId,query:{query:{case:'yqlText',value:'SELECT id FROM `'+path+'/auto_sale_state` WHERE id=1ul;'}},
       txControl:{txSelector:{case:'beginTx',value:{txMode:{case:'onlineReadOnly',value:{}}}},commitTx:true}
     },{signal:AbortSignal.timeout(70000)});
     decode(qualified,ExecuteQueryResultSchema,'crm_qualified_native_sql');
     console.log('AWG_CRM_STAGING_QUALIFIED_SQL_OK');
     const nativeRead=await client.executeDataQuery({
-      sessionId,query:{query:{case:'yqlText',value:'SELECT id FROM auto_sale_state WHERE id=1ul;'}},
+      operationParams:{operationTimeout:{seconds:65n},cancelAfter:{seconds:65n}},sessionId,query:{query:{case:'yqlText',value:'SELECT id FROM auto_sale_state WHERE id=1ul;'}},
       txControl:{txSelector:{case:'beginTx',value:{txMode:{case:'onlineReadOnly',value:{}}}},commitTx:true}
     },{signal:AbortSignal.timeout(70000)});
     decode(nativeRead,ExecuteQueryResultSchema,'crm_native_sql');
