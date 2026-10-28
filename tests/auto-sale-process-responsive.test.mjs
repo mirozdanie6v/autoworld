@@ -42,7 +42,7 @@ test('styles only affect process cards on 901-1550px and preserve all adjacent v
 });
 
 test('process CSS loads last after desktop and mobile CSS without disturbing existing app',()=>{
-  const order=['auto-sale.css?v=20261026-no-spinners-v1',
+  const order=['auto-sale.css?v=20261028-date-three-part-v1',
     'auto-sale-responsive.css?v=20260926-calc-cta-v1',
     'auto-sale-desktop-fluid.css?v=20261015-fluid-v1',
     'auto-sale-process-responsive.css?v=20261015-process-v2'];
@@ -52,7 +52,7 @@ test('process CSS loads last after desktop and mobile CSS without disturbing exi
     assert.ok(index>last,'CSS loading order invalid for '+path);
     last=index;
   }
-  assert.match(html,/auto-sale-bootstrap\.mjs\?v=20261027-source-price-v3/);
+  assert.match(html,/auto-sale-bootstrap\.mjs\?v=20261028-date-three-part-v1/);
   assert.match(html,/auto-sale-scroll-top\.mjs\?v=20261015-scrolltop-v1/);
 });
 
