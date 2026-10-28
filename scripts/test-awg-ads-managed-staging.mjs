@@ -3,10 +3,13 @@
 import assert from 'node:assert/strict';
 import {randomBytes,randomUUID} from 'node:crypto';
 import {spawn} from 'node:child_process';
+import {readFile} from 'node:fs/promises';
 import {Driver} from '@ydbjs/core';
 import {fromBinary} from '@bufbuild/protobuf';
-import {TableServiceDefinition,CreateSessionResultSchema} from '@ydbjs/api/table';
+import {TableServiceDefinition,CreateSessionResultSchema,DescribeTableResultSchema} from '@ydbjs/api/table';
 import {query} from '@ydbjs/query';
+import {Type_PrimitiveTypeId} from '@ydbjs/api/value';
+import {SchemeServiceDefinition,ListDirectoryResultSchema} from '@ydbjs/api/scheme';
 import {AccessTokenCredentialsProvider} from '@ydbjs/auth/access-token';
 import {createYdbAdsAttributionRepository} from '../server/ads-attribution-ydb.mjs';
 import {createAdsAttributionService,createAdsSubjectKey} from '../server/ads-attribution-core.mjs';
@@ -56,6 +59,69 @@ async function cli(kind){
   });
   assert.equal(result,0,'managed '+kind+' job must finish successfully');
 }
+
+async function prepareCrmStagingSchema(){
+  assert.equal(env.YDB_CONNECTION_STRING,crm);
+  const db=new Driver(crm,{credentialsProvider:creds});
+  let client,sessionId;
+  const decode=(response,schema,label)=>{
+    const op=response?.operation;
+    if(op?.ready!==true||op.status!==400000||!op.result?.value)
+      throw new Error(label+'_'+op?.status);
+    return fromBinary(schema,op.result.value);
+  };
+  try{
+    await db.ready();
+    const path=new URL(crm).searchParams.get('database');
+    const scheme=db.createClient(SchemeServiceDefinition);
+    const listing=decode(await scheme.listDirectory({path}),ListDirectoryResultSchema,'crm_list');
+    const existing=new Set(listing.children.map(x=>x.name));
+    const specs=[];
+    // Use the existing application's simple CREATE declarations as the source
+    // of truth; fail closed on any unsupported syntax/type or unexpected table.
+    for(const file of ['server/ydb-state.mjs','server/ydb-domain-store.mjs']){
+      const source=await readFile(file,'utf8');
+      for(const match of source.matchAll(/CREATE TABLE IF NOT EXISTS (auto_sale_\\w+) \\(([\\s\\S]*?)PRIMARY KEY \\(([^)]+)\\)\\s*\\)/g)){
+        const columns=match[2].split(',').map(x=>x.trim()).filter(Boolean).map(text=>{
+          const m=text.match(/^(\\w+)\\s+(Utf8|Uint64|Bool|Double)( NOT NULL)?$/);
+          if(!m)throw new Error('crm_schema_unsupported_column');
+          const id=Type_PrimitiveTypeId[{Utf8:'UTF8',Uint64:'UINT64',Bool:'BOOL',Double:'DOUBLE'}[m[2]]];
+          const primitive={type:{case:'typeId',value:id}};
+          return {name:m[1],notNull:!!m[3],type:m[3]?primitive:
+            {type:{case:'optionalType',value:{item:primitive}}}};
+        });
+        specs.push({name:match[1],columns,primaryKey:match[3].split(',').map(x=>x.trim())});
+      }
+    }
+    const expected=["auto_sale_state","auto_sale_notification_outbox","auto_sale_admin_access","auto_sale_schema_meta","auto_sale_state_meta","auto_sale_leads","auto_sale_quotes","auto_sale_orders","auto_sale_payments","auto_sale_notes","auto_sale_team","auto_sale_catalog","auto_sale_telegram_bindings"];
+    assert.deepEqual(specs.map(x=>x.name).sort(),[...expected].sort());
+    client=db.createClient(TableServiceDefinition);
+    sessionId=decode(await client.createSession({}),CreateSessionResultSchema,'crm_session').sessionId;
+    for(const spec of specs){
+      const fullPath=path+'/'+spec.name;
+      if(!existing.has(spec.name)){
+        const created=await client.createTable({sessionId,path:fullPath,columns:spec.columns,primaryKey:spec.primaryKey},
+          {signal:AbortSignal.timeout(30000)});
+        if(created.operation?.ready!==true||created.operation.status!==400000)
+          throw new Error('crm_create_'+spec.name+'_'+created.operation?.status);
+      }
+      const described=decode(await client.describeTable({sessionId,path:fullPath}),
+        DescribeTableResultSchema,'crm_describe_'+spec.name);
+      assert.deepEqual(described.primaryKey,spec.primaryKey);
+      assert.equal(described.columns.length,spec.columns.length);
+      for(const column of spec.columns){
+        const actual=described.columns.find(x=>x.name===column.name);
+        assert.ok(actual,'missing CRM column '+column.name);
+        assert.deepEqual(actual.type.type,column.type.type,'CRM column type '+column.name);
+      }
+      console.log('AWG_CRM_STAGING_TABLE_VERIFIED',spec.name);
+    }
+  }finally{
+    if(sessionId)await client.deleteSession({sessionId}).catch(()=>{});
+    await db.close();
+  }
+}
+
 try{
   await driver.ready();
   const sql=query(driver);
@@ -101,8 +167,12 @@ try{
     constantAllowed:true,productionTableReadDenied:true,productionWrites:0,customerColumnsRequested:0
   }));
 
-  legacyStore=await createYdbStateStore({connectionString:crm,credentialsProvider:creds,ensureSchema:true,domainDualWrite:false});
-  domainStore=await createYdbDomainStore({connectionString:crm,credentialsProvider:creds,ensureSchema:true});
+  await prepareCrmStagingSchema();
+  console.log('AWG_CRM_STAGING_SCHEMA_VERIFIED');
+  legacyStore=await createYdbStateStore({connectionString:crm,credentialsProvider:creds,ensureSchema:false,domainDualWrite:false});
+  domainStore=await createYdbDomainStore({connectionString:crm,credentialsProvider:creds,ensureSchema:false});
+  console.log('AWG_CRM_STAGING_STORES_OPEN');
+
   const original=await legacyStore.loadState();
   // Bootstrap once; subsequent acceptance runs must preserve prior staging fixtures.
   const existing=await domainStore.loadState();
