@@ -1,3 +1,4 @@
+import {manufactureDatePickerHtml} from './auto-sale-manufacture-date.mjs?v=20261028-date-three-part-v1';
 // New quotes only: AutoWorld customer meeting 22.10.2026.
 // Do not reinterpret immutable historical Georgia / USA quote versions.
 export const AWG_QUOTE_V2_SCHEMA='awg-quote-2026-10-23';
@@ -113,7 +114,7 @@ export function quoteV2Form(q={},leads=[],statuses=[],esc=String,verificationPho
     (simpleUs?'<label>VIN<input name="vin" value="'+safe(q.vin||q.catalogVin||'')+'"></label>':'')+
     '<input type="hidden" name="sourcePriceRub" value="'+safe(q.sourcePriceRub||0)+'">'+
     '<input type="hidden" name="sourceTurnkeyDeliveryRub" value="'+safe(q.sourceTurnkeyDeliveryRub||0)+'">'+
-    '<label>Дата выпуска<input name="manufactureDate" type="date" value="'+safe(/^\d{4}-\d{2}-\d{2}$/.test(q.manufactureDate||'')?q.manufactureDate:'')+'"></label>'+
+    manufactureDatePickerHtml(q.manufactureDate||'',safe)+
     '<label>Объём двигателя, л<input name="engineLiters" type="number" min="0" step="0.001" value="'+safe(Number(q.engineCc)>0?Number(q.engineCc)/1000:'')+'"></label>'+
     '<label>Мощность двигателя, л.с.<input type="number" name="powerHp" min="0" step="0.01" value="'+safe(q.powerHp||0)+'"></label>'+
     '<input type="hidden" name="powerUnit" value="ps">'+

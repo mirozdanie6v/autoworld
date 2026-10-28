@@ -25,8 +25,17 @@ test('new US quote editor preserves customs inputs without exposing private mark
   assert.ok(!f.elements.legalization&&!f.elements.service);
   assert.match(f.textContent,/Таможня \+ утильсбор РФ/);
   assert.match(f.textContent,/Минеральные Воды/);
-  f.elements.manufactureDate.value='2024-01-15';
-  f.elements.manufactureDate.dispatchEvent(new dom.window.Event('change',{bubbles:true}));
+  // Manager picks year, month and day separately instead of navigating a
+  // native mobile date calendar. The backend still receives YYYY-MM-DD.
+  assert.equal(f.elements.manufactureDate.type,'hidden');
+  f.elements.manufactureYear.value='2024';
+  f.elements.manufactureYear.dispatchEvent(new dom.window.Event('change',{bubbles:true}));
+  f.elements.manufactureMonth.value='01';
+  f.elements.manufactureMonth.dispatchEvent(new dom.window.Event('change',{bubbles:true}));
+  f.elements.manufactureDay.value='15';
+  f.elements.manufactureDay.dispatchEvent(new dom.window.Event('change',{bubbles:true}));
+  assert.equal(f.elements.manufactureDate.value,'2024-01-15');
+  assert.equal(new dom.window.FormData(f).get('manufactureDate'),'2024-01-15');
   assert.equal(f.elements.ageCategory,undefined);
   f.elements.lot.value='10000';
   f.elements.cbrRubRate.value='90';

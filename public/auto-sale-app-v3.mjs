@@ -1,5 +1,6 @@
 import {orderPaymentBalance,usdMoney,usdCents,advancePercentForLead,advanceAmountFromPercent,validAdvancePercent} from './auto-sale-payment-balance.mjs';
-import {AWG_QUOTE_V2_SCHEMA,AWG_QUOTE_V2_TARIFF,AWG_US_SIMPLE_SCHEMA,AWG_US_SIMPLE_TARIFF,simpleUsQuote,v2Quote,modesV2,quoteV2Amounts,quoteV2Rate,quoteV2TotalRub,quoteV2RubToUsd,quoteV2Form} from './auto-sale-quote-v2.mjs';
+import {syncManufactureDatePicker} from './auto-sale-manufacture-date.mjs?v=20261028-date-three-part-v1';
+import {AWG_QUOTE_V2_SCHEMA,AWG_QUOTE_V2_TARIFF,AWG_US_SIMPLE_SCHEMA,AWG_US_SIMPLE_TARIFF,simpleUsQuote,v2Quote,modesV2,quoteV2Amounts,quoteV2Rate,quoteV2TotalRub,quoteV2RubToUsd,quoteV2Form} from './auto-sale-quote-v2.mjs?v=20261028-date-three-part-v1';
 import {awgTariff,awgCryptoFee,awgPendingItems,awgPackageUsd,AWG_TARIFF_VERSION,AWG_US_LOGISTICS} from './auto-sale-tariffs.mjs';
 import {quoteCostRows,quoteRowsTotal,ageCategoryForDate,ageCategoryForMonth,ageCategoryForYear,defaultRepairCountry,defaultPartsCountry,rubToUsd,TKS_CALCULATOR_URL,QUOTE_AUDIT_SCHEMA,tksParameters} from './auto-sale-quote-audit.mjs';
 import {quoteVehicleFields,quoteCostAuditFields,quoteCustomsFields} from './auto-sale-quote-form.mjs';
@@ -410,6 +411,16 @@ function refreshRuntimeFromServer(){
       if(!field||field.name!==name||field.disabled||field.readOnly)continue;
       if(field.tagName==='SELECT'&&![...field.options].some(option=>option.value===value&&!option.disabled))continue;
       field.value=value;
+    }
+    if(managerType==='quote'&&live.dataset.awgQuoteV2==='true'){
+      // Restore the three visible date parts after background data refreshes.
+      // The hidden ISO manufactureDate is the only value used for calculations.
+      syncManufactureDatePicker(live);
+      const dayValue=managerValues.manufactureDay;
+      if(dayValue&&[...live.elements.manufactureDay.options].some(option=>option.value===dayValue)){
+        live.elements.manufactureDay.value=dayValue;
+        syncManufactureDatePicker(live);
+      }
     }
     if(managerFocus&&live?.elements[managerFocus])live.elements[managerFocus].focus({preventScroll:true});
     if(managerType==='quote'&&live)updateQuotePreview(live);
@@ -927,7 +938,14 @@ root.addEventListener('click',event=>{
   try{picker.showPicker()}catch{/* Browser native picker may be unavailable inside host Mini App */}
 });
 root.addEventListener('click',async event=>{const t=event.target.closest('button,[data-modal-bg]');if(!t)return;if(t.dataset.verificationPhotoRemove!==undefined){await removeVerificationPhoto(t);return}if(t.dataset.catalogPhotoRemove){await removeCatalogPhoto(t);return}if(t.dataset.modalBg!==undefined&&event.target===t){state.modal=null;render();return}if(t.dataset.close!==undefined){state.modal=null;render();return}if(t.dataset.role){if(!hasAdminAccess&&t.dataset.role!=='client')return;state.role=t.dataset.role;sessionStorage.setItem(KEYS.role,state.role);state.route=nav[state.role][0][0];state.modal=null;render();if(state.role==='owner')void window.__AUTO_SALE_REFRESH_STATE__?.();return}if(t.dataset.purchaseOrigin){state.origin=t.dataset.purchaseOrigin;state.route='catalog';state.modal=null;render();return}if(t.dataset.go){state.route=t.dataset.go;state.modal=null;render();return}if(t.dataset.openRequest!==undefined){state.modal={type:'request',prefill:'',managerMode:false};render();return}if(t.dataset.managerNew!==undefined){state.modal={type:'request',prefill:'',managerMode:true};render();return}if(t.dataset.catalogAdd!==undefined){state.modal={type:'catalogCar',id:''};render();return}if(t.dataset.deleteLeadConfirm){await deleteLeadAndApplication(t.dataset.deleteLeadConfirm);return}if(t.dataset.deleteLead){state.modal={type:'deleteLead',id:t.dataset.deleteLead};render();return}if(t.dataset.catalogDelete){await deleteCatalogCar(t.dataset.catalogDelete);return}if(t.dataset.catalogEdit){state.modal={type:'catalogCar',id:t.dataset.catalogEdit};render();return}if(t.dataset.requestCar){const c=cars.find(x=>x.id===t.dataset.requestCar);if(!c||c.active===false)return;state.modal={type:'request',prefill:`${c.brand} ${c.model}`,origin:carOrigin(c),carId:c.id,managerMode:false};render();return}if(t.dataset.detail){state.modal={type:'detail',id:t.dataset.detail};render();return}if(t.dataset.lead){state.modal={type:'lead',id:t.dataset.lead};render();return}if(t.dataset.quote){state.modal={type:'quote',id:t.dataset.quote};render();return}if(t.dataset.order){state.modal={type:'order',id:t.dataset.order};render();return}if(t.dataset.newQuote!==undefined){const lead=leads.find(x=>!['Отказ','Сделка'].includes(x.status));state.modal={type:'quote',leadId:lead?.id||''};render();return}if(t.dataset.createQuote){const existing=quotes.filter(x=>x.leadId===t.dataset.createQuote).sort((a,b)=>b.version-a.version)[0];state.modal={type:'quote',id:existing?.id||'',leadId:t.dataset.createQuote};render();return}if(t.dataset.convertOrder){event.preventDefault();if(t.disabled||t.dataset.busy==='1')return;await convertLeadToOrder(t.dataset.convertOrder);return}if(t.dataset.quoteAction){await quoteAction(t.dataset.id,t.dataset.quoteAction);return}if(t.dataset.cloneQuote){await cloneQuote(t.dataset.cloneQuote);return}if(t.dataset.orderNext){event.preventDefault();if(t.disabled||t.dataset.busy==='1')return;const order=orders.find(x=>x.id===t.dataset.orderNext);if(!order)return;const form=root.querySelector('#orderForm'),next=nextOrderStage(order.stage);if(!form||form.elements.id?.value!==order.id)return;form.elements.stage.value=next;const data=Object.fromEntries(new FormData(form).entries()),errors=validateOrderUpdate(data,order.stage,[order.stage,next]);if(errors.length){showErrors(form,errors);return}t.dataset.busy='1';t.disabled=true;const label=t.textContent;t.textContent='Проверяем и сохраняем…';try{await submitOrder(form)}finally{if(t.isConnected){t.dataset.busy='0';t.disabled=false;t.textContent=label}}return}});
-root.addEventListener('change',async event=>{const t=event.target;if(t.name==='transportMode'&&t.closest('#requestForm')){t.closest('#requestForm').querySelector('#requestDeliveryCityField')?.classList.toggle('auto-conditional-hidden',t.value!=='Доставка под ключ');return;}if(t.closest?.('#quoteForm[data-awg-quote-v2="true"]')){
+root.addEventListener('change',async event=>{const t=event.target;
+  if(t.matches?.('[data-manufacture-part]')&&t.closest?.('#quoteForm[data-awg-quote-v2="true"]')){
+    const form=t.closest('#quoteForm');
+    syncManufactureDatePicker(form);
+    // Reuse the existing manufactureDate handler for age calculation.
+    form.elements.manufactureDate.dispatchEvent(new Event('change',{bubbles:true}));
+    return;
+  }if(t.name==='transportMode'&&t.closest('#requestForm')){t.closest('#requestForm').querySelector('#requestDeliveryCityField')?.classList.toggle('auto-conditional-hidden',t.value!=='Доставка под ключ');return;}if(t.closest?.('#quoteForm[data-awg-quote-v2="true"]')){
     const form=t.closest('#quoteForm');
     if(['leadId','origin'].includes(t.name)&&!form.elements.id.value){
       state.modal={type:'quote',leadId:t.name==='leadId'?t.value:form.elements.leadId.value,origin:t.name==='origin'?t.value:form.elements.origin.value};render();return;
@@ -1022,7 +1040,19 @@ async function submitLead(form){
 }
 async function submitQuote(form){
   try{
-  const data=Object.fromEntries(new FormData(form).entries()),lead=leads.find(x=>x.id===data.leadId);
+  const data=Object.fromEntries(new FormData(form).entries());
+  if(form.dataset.awgQuoteV2==='true'){
+    data.manufactureDate=syncManufactureDatePicker(form);
+    const started=Boolean(data.manufactureYear||data.manufactureMonth||data.manufactureDay);
+    if(started&&!data.manufactureDate){
+      showErrors(form,['Выберите год, месяц и день выпуска автомобиля.']);return;
+    }
+    // UI-only selectors are never persisted as extra quote fields.
+    delete data.manufactureYear;
+    delete data.manufactureMonth;
+    delete data.manufactureDay;
+  }
+  const lead=leads.find(x=>x.id===data.leadId);
   if(!lead){showErrors(form,['Выберите клиента для расчёта.']);return;}
   if(data.engineLiters!==undefined)data.engineCc=Math.round((Number(data.engineLiters)||0)*1000);
    const verification=simpleUsQuote(data)?{}:normalizeVehicleVerification(data);const existing=quotes.find(x=>x.id===data.id);

@@ -34,7 +34,10 @@ test('customs are only reference in RUB; repair is last client cost row',()=>{
 });
 test('the US calculation form has editable VIN, date and liters, but no dossier',()=>{
   const q=quote('Черновик'),html=quoteV2Form(q,[{id:'L-1',name:'Client',model:'Chevrolet'}],['Черновик','Отправлен'],String);
-  assert.match(html,/name="vin"/);assert.match(html,/name="manufactureDate" type="date"/);
+  assert.match(html,/name="vin"/);
+  for(const name of ['manufactureYear','manufactureMonth','manufactureDay'])assert.ok(html.includes('name="'+name+'"'));
+  assert.match(html,/type="hidden" name="manufactureDate"/);
+  assert.doesNotMatch(html,/name="manufactureDate" type="date"/);
   assert.match(html,/name="engineLiters"/);assert.match(html,/Город/);
   assert.doesNotMatch(html,/Досье проверки автомобиля США/);
   assert.doesNotMatch(html,/name="auction"/);
