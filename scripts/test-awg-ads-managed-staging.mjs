@@ -76,7 +76,7 @@ try{
     productionSessionId=fromBinary(CreateSessionResultSchema,op.result.value).sessionId;
     if(!productionSessionId)throw new Error('production_deny_session_missing');
     try{
-      for await(const part of productionTableClient.readTable({
+      for await(const part of productionTableClient.streamReadTable({
         sessionId:productionSessionId,
         path:new URL(prod).searchParams.get('database')+'/auto_sale_state',
         columns:['id'],rowLimit:1n
