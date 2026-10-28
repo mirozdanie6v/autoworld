@@ -81,6 +81,8 @@ jobs:
           node --input-type=module <<'NODE'
           import {Driver} from '@ydbjs/core';
           import {query} from '@ydbjs/query';
+          import {fromBinary} from '@bufbuild/protobuf';
+          import {TableServiceDefinition,CreateSessionResultSchema} from '@ydbjs/api/table';
           import {AccessTokenCredentialsProvider} from '@ydbjs/auth/access-token';
           import {inspectAdsStagingTables} from './scripts/awg-ads-schema-inspection.mjs';
           import {ADS_ATTRIBUTION_TABLES} from './server/ads-attribution-ydb.mjs';
@@ -101,6 +103,28 @@ jobs:
                 await probe('ads.scheme',()=>inspectAdsStagingTables(driver,new URL(connection).searchParams.get('database'),ADS_ATTRIBUTION_TABLES.concat('awg_ads_job_leases','awg_ads_job_audit')));
                 await probe('ads.original_select',async()=>{await sql`SELECT * FROM awg_ads_campaigns LIMIT 1`.isolation('snapshotReadOnly');});
                 await probe('ads.point_select',async()=>{await sql`SELECT token_hash FROM awg_ads_campaigns WHERE token_hash='diagnostic-nonexistent' LIMIT 1`.isolation('snapshotReadOnly');});
+              }
+              if(label==='crm'){
+                const native=driver.createClient(TableServiceDefinition);
+                for(const mode of ['onlineReadOnly','snapshotReadOnly']){
+                  for(const qualified of [false,true]){
+                    await probe('crm.native.'+mode+'.'+(qualified?'qualified':'relative'),async()=>{
+                      const opened=await native.createSession({});
+                      if(opened.operation?.status!==400000)throw new Error('session_'+opened.operation?.status);
+                      const sessionId=fromBinary(CreateSessionResultSchema,opened.operation.result.value).sessionId;
+                      try{
+                        const table=qualified?'`'+new URL(connection).searchParams.get('database')+'/auto_sale_state`':'auto_sale_state';
+                        const result=await native.executeDataQuery({sessionId,
+                          query:{query:{case:'yqlText',value:'SELECT id FROM '+table+' WHERE id=1ul;'}},
+                          txControl:{txSelector:{case:'beginTx',value:{txMode:{case:mode,value:{}}}},commitTx:true}
+                        },{signal:AbortSignal.timeout(25000)});
+                        const op=result.operation;
+                        if(op?.status!==400000)throw new Error('status_'+op?.status+' '+(op?.issues||[]).map(x=>x.message).join(';').slice(0,350));
+                      }finally{await native.deleteSession({sessionId}).catch(()=>{});}
+                    });
+                  }
+                }
+                await probe('crm.query.snapshot.relative',async()=>{await sql`SELECT id FROM auto_sale_state WHERE id=1ul`.isolation('snapshotReadOnly').timeout(20000);});
               }
             }finally{await driver.close();}
           }
