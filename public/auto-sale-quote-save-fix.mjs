@@ -23,7 +23,7 @@ function feedback(form,message,kind='warn'){
   if(!form?.isConnected)return;
   let box=form.querySelector('.auto-save-submit-feedback');
   if(!box){box=document.createElement('div');box.className='auto-save-submit-feedback full';form.querySelector('.auto-form-actions')?.insertAdjacentElement('beforebegin',box)}
-  box.dataset.kind=kind;box.textContent=message;box.scrollIntoView?.({block:'nearest',behavior:'smooth'});
+  box.dataset.kind=kind;box.textContent=message;if(kind==='error')box.scrollIntoView?.({block:'nearest',behavior:'smooth'});
 }
 function buttonFor(form){return form?.querySelector?.('button[type="submit"]')||null}
 function startSaving(form){const button=buttonFor(form);if(!button)return null;button.dataset.originalText=button.dataset.originalText||button.textContent||'';button.textContent='Сохраняем…';button.setAttribute('aria-busy','true');return button}
@@ -136,7 +136,7 @@ document.addEventListener('click',event=>{
 const observer=new MutationObserver(patchForms);observer.observe(document.documentElement,{childList:true,subtree:true});patchForms();
 
 window.addEventListener('auto-sale-entity-synced',()=>{
-  const form=document.querySelector('#leadEditForm,#quoteForm,#orderForm');if(!form)return;
+  const form=document.querySelector('#leadEditForm,#quoteForm,#orderForm');if(!form||buttonFor(form)?.getAttribute('aria-busy')!=='true')return;
   form.dataset.fallbackSaved='0';
   showSaved(form,form.id==='leadEditForm'?'Сохранить карточку':form.id==='quoteForm'?'Сохранить расчёт':'Сохранить заказ');
 });
@@ -147,11 +147,7 @@ window.addEventListener('auto-sale-entity-rejected',()=>{
 window.addEventListener('auto-sale-entity-conflict',()=>{
   const form=document.querySelector('#leadEditForm,#quoteForm,#orderForm');if(form){resetButton(buttonFor(form));feedback(form,'Карточка была изменена в другом окне или другим пользователем. Данные обновлены — повторите изменения.','warn')}
 });
-window.addEventListener('auto-sale-server-synced',()=>{
-  const form=document.querySelector('#leadEditForm,#quoteForm,#orderForm');if(!form)return;
-  form.dataset.fallbackSaved='0';
-  feedback(form,'Изменения сохранены.','success');
-});
+// Background refresh is not evidence of a successful form save.
 window.addEventListener('auto-sale-server-rejected',()=>{const form=document.querySelector('#leadEditForm,#quoteForm,#orderForm');if(!form)return;resetButton(buttonFor(form));feedback(form,'Не удалось сохранить изменения. Проверьте выделенные поля и повторите.','error')});
 window.addEventListener('auto-sale-server-conflict',()=>{const form=document.querySelector('#leadEditForm,#quoteForm,#orderForm');if(form){resetButton(buttonFor(form));feedback(form,'Карточка была изменена в другом окне или другим пользователем. Закройте её, откройте заново и повторите изменения.','warn')}});
 window.addEventListener('auto-sale-server-deferred',()=>{const form=document.querySelector('#leadEditForm,#quoteForm,#orderForm');if(form){resetButton(buttonFor(form));feedback(form,'Сейчас нет связи. Проверьте интернет-соединение и повторите сохранение.','warn')}});
