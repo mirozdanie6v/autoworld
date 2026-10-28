@@ -4,6 +4,8 @@ import assert from 'node:assert/strict';
 import {randomBytes,randomUUID} from 'node:crypto';
 import {spawn} from 'node:child_process';
 import {Driver} from '@ydbjs/core';
+import {fromBinary} from '@bufbuild/protobuf';
+import {TableServiceDefinition,CreateSessionResultSchema} from '@ydbjs/api/table';
 import {query} from '@ydbjs/query';
 import {AccessTokenCredentialsProvider} from '@ydbjs/auth/access-token';
 import {createYdbAdsAttributionRepository} from '../server/ads-attribution-ydb.mjs';
@@ -57,32 +59,42 @@ async function cli(kind){
 try{
   await driver.ready();
   const sql=query(driver);
-  // Auditor may connect and evaluate constants. Only an explicit authorization
-  // rejection for a real table read establishes the data-plane deny boundary.
-  // auto_sale_state has the application's singleton at id=1. Request only the
-  // non-sensitive primary key at Uint64 max; never select payload/customer data.
+  // Auditor can evaluate constants. Use TableService ReadTable so SQL
+  // compilation cannot mask the actual read authorization result.
+  // Request only the non-sensitive singleton key, never payload/customer data.
   const deniedDriver=new Driver(prod,{credentialsProvider:creds});
-  let denied=false;
+  let denied=false,productionTableClient,productionSessionId;
   try{
     await deniedDriver.ready();
-    const productionSql=query(deniedDriver);
-    await productionSql`SELECT 1 AS isolation_probe`.isolation('snapshotReadOnly').timeout(10000);
+    await query(deniedDriver)`SELECT 1 AS isolation_probe`.isolation('snapshotReadOnly').timeout(10000);
     report.productionConstantQueryAllowed=true;
+    productionTableClient=deniedDriver.createClient(TableServiceDefinition);
+    const response=await productionTableClient.createSession({}, {signal:AbortSignal.timeout(20000)});
+    const op=response?.operation;
+    if(op?.ready!==true||op.status!==400000||!op.result?.value)
+      throw new Error('production_deny_session_inconclusive_'+op?.status);
+    productionSessionId=fromBinary(CreateSessionResultSchema,op.result.value).sessionId;
+    if(!productionSessionId)throw new Error('production_deny_session_missing');
     try{
-      await productionSql`SELECT id FROM auto_sale_state WHERE id=18446744073709551615ul LIMIT 1`
-        .isolation('snapshotReadOnly').timeout(10000);
-    }catch(e){
-      denied=/UNAUTHORIZED|PERMISSION_DENIED|ACCESS_DENIED|permission denied|access denied/i.test(String(e?.message));
-      if(!denied){
-        console.log('AWG_PRODUCTION_DENY_PROBE_ERROR',JSON.stringify({
-          name:String(e?.name||''),code:typeof e?.code==='number'?e.code:null,
-          // This probe contains only a fixed table/key, no customer values.
-          message:String(e?.message||'').slice(0,600)
-        }));
-        throw new Error('production_table_deny_probe_inconclusive');
+      for await(const part of productionTableClient.readTable({
+        sessionId:productionSessionId,
+        path:new URL(prod).searchParams.get('database')+'/auto_sale_state',
+        columns:['id'],rowLimit:1n
+      },{signal:AbortSignal.timeout(20000)})){
+        if(part.status===400020){denied=true;break;}
+        if(part.status!==400000)throw new Error('production_table_deny_probe_inconclusive_'+part.status);
+        // A successful read response is a failed isolation check, even if empty.
+        throw new Error('production_table_read_unexpectedly_allowed');
       }
+    }catch(e){
+      if(e?.code===7&&/permission|access denied|unauthoriz/i.test(String(e?.message)))denied=true;
+      else throw e;
     }
-  }finally{await deniedDriver.close();}
+  }finally{
+    if(productionSessionId)await productionTableClient.deleteSession({sessionId:productionSessionId},
+      {signal:AbortSignal.timeout(10000)}).catch(()=>{});
+    await deniedDriver.close();
+  }
   assert.equal(denied,true,'staging SA must be explicitly denied production table reads');
   report.productionTableReadDenied=true;
   console.log('AWG_STAGING_ISOLATION_VERIFIED',JSON.stringify({
