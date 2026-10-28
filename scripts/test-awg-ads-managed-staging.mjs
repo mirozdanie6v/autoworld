@@ -81,9 +81,9 @@ async function prepareCrmStagingSchema(){
     // of truth; fail closed on any unsupported syntax/type or unexpected table.
     for(const file of ['server/ydb-state.mjs','server/ydb-domain-store.mjs']){
       const source=await readFile(file,'utf8');
-      for(const match of source.matchAll(/CREATE TABLE IF NOT EXISTS (auto_sale_\\w+) \\(([\\s\\S]*?)PRIMARY KEY \\(([^)]+)\\)\\s*\\)/g)){
+      for(const match of source.matchAll(/CREATE TABLE IF NOT EXISTS (auto_sale_\w+) \(([\s\S]*?)PRIMARY KEY \(([^)]+)\)\s*\)/g)){
         const columns=match[2].split(',').map(x=>x.trim()).filter(Boolean).map(text=>{
-          const m=text.match(/^(\\w+)\\s+(Utf8|Uint64|Bool|Double)( NOT NULL)?$/);
+          const m=text.match(/^(\w+)\s+(Utf8|Uint64|Bool|Double)( NOT NULL)?$/);
           if(!m)throw new Error('crm_schema_unsupported_column');
           const id=Type_PrimitiveTypeId[{Utf8:'UTF8',Uint64:'UINT64',Bool:'BOOL',Double:'DOUBLE'}[m[2]]];
           const primitive={type:{case:'typeId',value:id}};
