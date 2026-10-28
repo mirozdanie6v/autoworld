@@ -1,10 +1,12 @@
 release=direct-object-storage
-source=85b81f09ed9212e06d6226e3a83b90b4ed05d5fc
-reason=manager-required-deposit-amount-date-payment-method-pr104
+source=pr-105-awg-operation-feedback
+reason=unified-save-update-progress-and-photo-counters
 preserve_backend=true
 preserve_ydb=true
 preserve_telegram=true
 vk_auth=enabled
 vk_messaging=enabled
-verified_run=40657797312
+verification=verify-autoworld-required
 browser_rollback_gate=true
+rollback_workflow=rollback-awg-static-ui.yml
+rollback_snapshot=rollbacks/<deployment_commit_sha>/index.html
