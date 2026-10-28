@@ -147,7 +147,12 @@ window.addEventListener('auto-sale-entity-rejected',()=>{
 window.addEventListener('auto-sale-entity-conflict',()=>{
   const form=document.querySelector('#leadEditForm,#quoteForm,#orderForm');if(form){resetButton(buttonFor(form));feedback(form,'Карточка была изменена в другом окне или другим пользователем. Данные обновлены — повторите изменения.','warn')}
 });
-// Background refresh is not evidence of a successful form save.
+window.addEventListener('auto-sale-server-synced',()=>{
+  const form=document.querySelector('#leadEditForm,#quoteForm,#orderForm');if(!form)return;
+  if(buttonFor(form)?.getAttribute('aria-busy')==='true')return;
+  feedback(form,'Данные обновлены.','success');
+});
+// A refresh is not proof that the current form was saved.
 window.addEventListener('auto-sale-server-rejected',()=>{const form=document.querySelector('#leadEditForm,#quoteForm,#orderForm');if(!form)return;resetButton(buttonFor(form));feedback(form,'Не удалось сохранить изменения. Проверьте выделенные поля и повторите.','error')});
 window.addEventListener('auto-sale-server-conflict',()=>{const form=document.querySelector('#leadEditForm,#quoteForm,#orderForm');if(form){resetButton(buttonFor(form));feedback(form,'Карточка была изменена в другом окне или другим пользователем. Закройте её, откройте заново и повторите изменения.','warn')}});
 window.addEventListener('auto-sale-server-deferred',()=>{const form=document.querySelector('#leadEditForm,#quoteForm,#orderForm');if(form){resetButton(buttonFor(form));feedback(form,'Сейчас нет связи. Проверьте интернет-соединение и повторите сохранение.','warn')}});
