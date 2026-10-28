@@ -1,7 +1,21 @@
-# AWG Ads managed staging — verified state, 27 October 2026
+# AWG Ads managed staging — verified state, 28 October 2026
 
-Status: PARTIAL. Read-only SQL has recovered; historical compilation-timeout root cause remains unconfirmed. Full managed acceptance is blocked separately by an invalid constant-query deny assertion; see follow-up investigation below.
+Status: PARTIAL. Production table-read denial and one-time retention are verified. CRM staging SQL compilation blocks synthetic lead commits and reconciliation. Physical E2E/deployment rollback remain blocked; see 28 October acceptance evidence below.
 Production deployment, real customer records, production Telegram/VK configuration and paid advertising were not modified by this workstream.
+
+## Current acceptance summary
+| Check | Verified outcome |
+|---|---|
+| Dedicated SA production data boundary | Explicit native table-read denial PASS |
+| Ads schema / CRM staging schema | 9 Ads + 13 CRM tables verified |
+| Ads subject/event persistence | Synthetic old/current fixtures written and read back |
+| Application CRM lead commits / attribution across two DBs | BLOCKED before commit by CRM SQL compilation timeout |
+| One-time retention | PASS; expired fixture removed, fresh fixture preserved, audit read back |
+| One-time reconciliation | Invoked, FAILED on CRM reads; failure audit read back |
+| Worker lease cleanup | PASS; no remaining leases |
+| Physical Telegram/VK E2E | Not performed; dedicated test configuration/runtime missing and Telegram sign-in blocked by auto-review |
+| Deployment rollback | Not performed; no isolated Ads runtime revision deployed |
+
 
 ## Completed and independently verified
 - Cloud b1ggsmuiq7tb2d27f89q; actual folder b1g8u8vqkgehvtbj8n13. Corrected inventory workflows that previously used cloud ID as folderId.
@@ -38,7 +52,7 @@ Cloud Browser ACL tables verified:
 - ydb.editor directly on ads etnseoqfsf7ojn52813t only.
 - ydb.editor directly on CRM staging etnvd9hmimkt74vpuqa6 only.
 No folder/cloud-wide editor/admin role added.
-This is ACL evidence. The managed negative production SELECT 1 probe has NOT yet executed because schema preflight failed earlier.
+The initial SELECT 1 negative probe was invalid and has been replaced. Native TableService StreamReadTable of only auto_sale_state.id now receives explicit denial under the dedicated staging SA; see 28 October evidence. No production payload/customer columns or production writes are performed.
 
 ## Schema and acceptance
 The console root directory independently shows all nine ads tables owned by awg-ads-staging-ci:
@@ -154,3 +168,67 @@ At 16:29:59.091 UTC the same table query, same SA aje3j5aat66lel86cd5r and same 
 Please correlate the failed query with server-side KQP compilation traces and determine whether the wait occurred in compiler queue/admission, schema resolution/cache, metadata service availability, node recovery or another subsystem. Please confirm whether the restoration restrictions shown on the statusboard affected this database. We need the responsible component and corrective action, rather than a timeout increase.
 
 No IAM token, GitHub JWT, credentials, customer records or production data are included. This request is prepared for review only; it has not been submitted to support.
+
+## 28 October 2026 — executed acceptance and remaining blockers
+
+### Isolation — PASS
+- Replaced the invalid constant-query deny assertion in scripts/test-awg-ads-managed-staging.mjs.
+- Dedicated SA can evaluate SELECT 1; this is deliberately not considered evidence of row-data access.
+- Direct TableService StreamReadTable requests only auto_sale_state.id, rowLimit=1. It must return YDB UNAUTHORIZED (400020) or explicit gRPC PERMISSION_DENIED (7); any successful response, timeout, syntax error or unknown failure fails closed.
+- Multiple managed executions printed AWG_STAGING_ISOLATION_VERIFIED: productionTableReadDenied=true, productionWrites=0, customerColumnsRequested=0.
+- Evidence run https://github.com/mirozdanie6v/autoworld/actions/runs/40658827263 , job122716426336. No production roles were expanded; no static credentials created.
+
+### CRM staging schema — PASS; application writes — BLOCKED
+- Native TableService created only missing tables and independently described all 13 CRM staging tables, verifying exact columns, primitive/optional types and primary keys against existing application declarations.
+- Target fixed to etnvd9hmimkt74vpuqa6; no existing schema is dropped, altered or recreated.
+- Native StreamReadTable on auto_sale_state.id succeeds (AWG_CRM_STAGING_NATIVE_READ_OK).
+- TableService ExecuteDataQuery fails during compilation; ordinary application loadState retries 3 x 7 s and fails. No managed synthetic CRM lead commit has succeeded.
+- Read-only matrix https://github.com/mirozdanie6v/autoworld/actions/runs/40659308802 , job122718030356:
+  - Ads original SELECT: 205 ms PASS; Ads point SELECT: 198 ms PASS.
+  - CRM connection and constant query: PASS.
+  - CRM TableService onlineReadOnly / snapshotReadOnly, each with relative and fully qualified table path: all FAIL, status400090, Request timeout 10000ms exceeded; Cancelling after 10000ms during compilation.
+  - CRM QueryService snapshotReadOnly: client timeout after 20 s.
+- This rules out table-path qualification and read-isolation choice as sufficient fixes. Metadata and native row access work while SQL compilation fails. The exact internal compiler/service cause is still unconfirmed; do not claim an IAM leak, corrupt data or a proven global outage.
+
+### One-time jobs — physically invoked; retention PASS, reconciliation FAILED
+New isolated workflow .github/workflows/verify-awg-ads-maintenance-staging.yml and script scripts/test-awg-ads-maintenance-staging.mjs.
+Run https://github.com/mirozdanie6v/autoworld/actions/runs/40658475594 , job122715249693.
+- Persisted expired (120 days) and current synthetic Ads subject/event fixtures in Ads staging.
+- Invoked reconciliation once: exit1 due to CRM reads; durable audit status failed.
+- Invoked retention once: exit0, job_complete status ok.
+- Read back that expired subject and event were deleted, current subject and event were preserved.
+- Durable current-run audit confirmed retention=ok and reconciliation=failed.
+- Read back awg_ads_job_leases: empty; both workers released their leases.
+- No production connection in this independent maintenance run, no production writes, no Telegram/VK messages.
+- Cloud Console independently displays both audit records: retention at 2026-10-28T08:41:12.612Z, reconciliation at 2026-10-28T08:41:07.256Z.
+- The workflow remains red intentionally because reconciliation failed; retention success is not misreported as full acceptance.
+- Continuous schedules/maintenance flags are not enabled.
+
+### Physical E2E and revision rollback — BLOCKED, not claimed
+- GitHub repository secret metadata still contains only general bot/app/community secrets; no environment secrets or separately identified Ads staging credentials.
+- Cloud inventory has 4 containers: legacy auto-sale-staging, autoworld-awg-prod, autoworld-vk-web-staging, legacy autoworld-awg. No separate Ads E2E runtime was found or changed.
+- Lockbox metadata has VK staging API/session and VK web-session secrets, not an identified separate Ads test Telegram bot or VK test app/community.
+- Telegram Web is at QR sign-in. Secure browserAuth QR request was rejected by automatic security review (not by the user): test integration authorization was judged insufficient to authorize access to a personal Telegram session and its private correspondence.
+- No login workaround or manual-takeover bypass was attempted. A separate explicit authorization for that personal-account sign-in, or independently supplied dedicated bot/app test configuration, is required.
+- Production bot/webhook/community/containers, real CRM records and paid ads were not changed.
+- No physical platform E2E, deployment rollback or bridge flag smoke is counted as passed in this session.
+
+### Code validation
+Latest completed code checks at 8aec3e4: Stage B SUCCESS https://github.com/mirozdanie6v/autoworld/actions/runs/40660298940 ; AutoWorld SUCCESS https://github.com/mirozdanie6v/autoworld/actions/runs/40660298957 .
+Cloud script syntax checks passed. These green regressions do not override the runtime failures above.
+
+### Bounded CRM-only recovery
+Stopped and started only etnvd9hmimkt74vpuqa6 after all probes/jobs had finished. Verified Stopped -> Running; all 13 tables survived. Endpoint discovery briefly returned NOT_FOUND, then recovered in Cloud Console. No database deletion, IAM widening or quota increase was performed.
+Post-restart run https://github.com/mirozdanie6v/autoworld/actions/runs/40659110921 attempt2, job122720824550: explicit production table deny PASS, native CRM row read PASS, fully qualified CRM SQL still status400090.
+One final diagnostic explicitly requested a 65 s operation/cancellation budget, keeping application runtime read limits unchanged:
+https://github.com/mirozdanie6v/autoworld/actions/runs/40660292190 , job122721339216.
+At 08:55:50.724 UTC native CRM row access succeeded; at 08:56:01.004 UTC SQL again failed crm_qualified_native_sql_400090. The request still failed after about 10 s; an effective 65 s server budget was not demonstrated. Increasing a requested timeout is not counted as a repair.
+Both databases remain Running, no query/job remains active, all one-time maintenance leases were released, no continuous schedule was enabled.
+
+### Updated provider request — prepared, NOT SENT
+Please investigate CRM staging database etnvd9hmimkt74vpuqa6 in folder b1g8u8vqkgehvtbj8n13, cloud b1ggsmuiq7tb2d27f89q, on 28 October 2026 around 08:34–08:56 UTC.
+Native SchemeService and TableService Create/Describe work, all 13 table definitions are verified, and StreamReadTable(auto_sale_state, columns=[id], rowLimit=1) succeeds under owning SA aje3j5aat66lel86cd5r.
+However SELECT id FROM auto_sale_state WHERE id=1ul fails during compilation through TableService ExecuteDataQuery. Both relative and full table paths, onlineReadOnly and snapshotReadOnly produce status400090 with Request timeout 10000ms exceeded / Cancelling after 10000ms during compilation. QueryService also times out. SELECT 1 succeeds; the separate Ads staging database etnseoqfsf7ojn52813t executes table SQL in ~200 ms.
+Restarting only the CRM staging DB did not resolve the issue. Throttling10 RU/s, storage1 GB, provisioned0 were unchanged.
+Please identify the KQP/compiler/schema-resolution failure using server traces; explain why native row reads work while compilation waits, and whether a service-side recovery or supported configuration is needed.
+Evidence: run40659308802/job122718030356, post-restart run40659110921/job122720824550, final run40660292190/job122721339216. No credentials, customer rows or private Telegram data are included.
