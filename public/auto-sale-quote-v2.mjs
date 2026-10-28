@@ -1,4 +1,4 @@
-import {manufactureDatePickerHtml} from './auto-sale-manufacture-date.mjs';
+import {manufactureDatePickerHtml} from './auto-sale-manufacture-date.mjs?v=20261028-date-three-part-v1';
 // New quotes only: AutoWorld customer meeting 22.10.2026.
 // Do not reinterpret immutable historical Georgia / USA quote versions.
 export const AWG_QUOTE_V2_SCHEMA='awg-quote-2026-10-23';
