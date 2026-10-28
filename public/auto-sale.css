@@ -170,3 +170,10 @@
 input[type="number"] { appearance: textfield; -moz-appearance: textfield; }
 input[type="number"]::-webkit-inner-spin-button,
 input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+
+/* Manufacture date: year / month / day dropdowns in manager quotes. */
+.auto-manufacture-date-label{min-width:0}
+.auto-manufacture-date-parts{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr) minmax(0,.8fr);gap:6px;margin-top:6px;max-width:100%}
+.auto-manufacture-date-parts select{min-width:0;width:100%;max-width:100%;font-size:14px;padding-inline:8px}
+.auto-manufacture-date-parts select:disabled{opacity:.55;cursor:not-allowed}
+@media(max-width:390px){.auto-manufacture-date-parts{gap:4px}.auto-manufacture-date-parts select{font-size:13px;padding-inline:4px}}
