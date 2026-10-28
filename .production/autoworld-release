@@ -1,5 +1,5 @@
 AWG production release
-requested_at=2026-10-27
-source_sha=bf610a3a3ef815dc72827ed86b4f09810f255fa8
-reason=allow-canonical-catalog-price-reconcile-oidc-only-pr95
+requested_at=2026-10-28
+source_sha=7f3b1d1ffffeb9715cf1a424de13833cf097683e
+reason=manager-quote-manufacture-date-year-month-day-PR-103
 run_real_client_e2e=false
