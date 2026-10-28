@@ -198,11 +198,14 @@ async function handleCatalogPhotoUpload(input){
   const uploadLabel=input.closest('.catalog-photo-upload');
   const originalText=uploadLabel?.childNodes?.[0]?.textContent||'';
   if(uploadLabel?.childNodes?.[0])uploadLabel.childNodes[0].textContent='Загрузка…';
+  window.__AWG_OPERATION_UI__?.uploadStart('catalog-photos',files.length,'Загрузка фотографий автомобиля');
+  let uploadSucceeded=false;
   try{
     const uploaded=[];
     for(const file of files){
       const converted=await compressCatalogPhoto(file);
       uploaded.push(await uploadCatalogPhoto(converted,file,carId,kind));
+      window.__AWG_OPERATION_UI__?.uploadStep('catalog-photos');
     }
     if(kind==='main'){
       const previous=String(form.elements.image.value||'');
@@ -220,8 +223,10 @@ async function handleCatalogPhotoUpload(input){
       for(const url of rejected)deleteCatalogPhoto(url);
     }
     updateCatalogPhotoPreviews(form);
+    uploadSucceeded=true;
   }catch(error){showErrors(form,[error?.message||'Не удалось загрузить фото.'])}
   finally{
+    window.__AWG_OPERATION_UI__?.uploadEnd('catalog-photos',uploadSucceeded);
     input.value='';input.disabled=false;
     if(uploadLabel?.childNodes?.[0])uploadLabel.childNodes[0].textContent=originalText||'Загрузить фото';
   }
@@ -267,17 +272,24 @@ async function handleVerificationPhotoUpload(input){
   const form=input.closest('#quoteForm');if(!form)return;
   const files=[...(input.files||[])];if(!files.length)return;
   input.disabled=true;
+  const currentCount=parsePhotoList(form.elements.verificationPhotos?.value).length;
+  const allowedCount=Math.max(0,MAX_VERIFICATION_PHOTOS-currentCount);
+  const uploadCount=Math.min(files.length,allowedCount);
+  if(uploadCount)window.__AWG_OPERATION_UI__?.uploadStart('verification-photos',uploadCount,'Загрузка фото проверки');
+  let uploadSucceeded=false;
   try{
     const current=parsePhotoList(form.elements.verificationPhotos?.value),allowed=Math.max(0,MAX_VERIFICATION_PHOTOS-current.length),uploaded=[];
     const ref=String(form.elements.id?.value||form.elements.leadId?.value||'draft').replace(/[^A-Za-z0-9_-]/g,'_');
     for(const file of files.slice(0,allowed)){
       const converted=await compressCatalogPhoto(file);
       uploaded.push(await uploadCatalogPhoto(converted,file,`VERIFY-${ref}`,'verification'));
+      window.__AWG_OPERATION_UI__?.uploadStep('verification-photos');
     }
     form.elements.verificationPhotos.value=JSON.stringify([...current,...uploaded]);
     updateVerificationPhotoPreview(form);
+    uploadSucceeded=true;
   }catch(error){showErrors(form,[error?.message||'Не удалось загрузить фото проверки.'])}
-  finally{input.value='';input.disabled=false}
+  finally{window.__AWG_OPERATION_UI__?.uploadEnd('verification-photos',uploadSucceeded);input.value='';input.disabled=false}
 }
 async function removeVerificationPhoto(button){
   const form=button.closest('#quoteForm');if(!form)return;

@@ -1,0 +1,98 @@
+name: Rollback AWG Static UI
+on:
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: SHA of direct-static deployment to roll back
+        required: true
+        type: string
+concurrency:
+  group: awg-yandex-production-writer
+  cancel-in-progress: false
+permissions:
+  contents: read
+  id-token: write
+env:
+  YC_FOLDER_ID: ${{ vars.AWG_YC_FOLDER_ID || 'b1g8u8vqkgehvtbj8n13' }}
+  YC_DEPLOY_SA_ID: ${{ vars.AWG_YC_DEPLOY_SA_ID || 'aje775bcl6hgp40eu8of' }}
+  AWG_STATIC_BUCKET: ${{ vars.AWG_STATIC_BUCKET || 'viiversion-autoworld-awg-static-b1g8u8vqkgehvtbj8n13' }}
+  ROLLBACK_RELEASE_SHA: ${{ inputs.release_sha }}
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - name: Validate rollback target
+        run: |
+          set -euo pipefail
+          [[ "$ROLLBACK_RELEASE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          test "$AWG_STATIC_BUCKET" = "viiversion-autoworld-awg-static-b1g8u8vqkgehvtbj8n13"
+      - name: Request GitHub OIDC token
+        uses: actions/github-script@v7
+        id: oidc
+        with:
+          script: |
+            const token = await core.getIDToken('https://github.com/mirozdanie6v')
+            core.setSecret(token)
+            core.setOutput('token', token)
+      - name: Exchange OIDC token
+        env:
+          GITHUB_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        run: |
+          set -euo pipefail
+          RESPONSE=$(curl -fsS --connect-timeout 10 --max-time 45 \
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            --data-urlencode 'grant_type=urn:ietf:params:oauth:grant-type:token-exchange' \
+            --data-urlencode 'requested_token_type=urn:ietf:params:oauth:token-type:access_token' \
+            --data-urlencode "audience=${YC_DEPLOY_SA_ID}" \
+            --data-urlencode "subject_token=${GITHUB_OIDC_TOKEN}" \
+            --data-urlencode 'subject_token_type=urn:ietf:params:oauth:token-type:id_token' \
+            https://auth.yandex.cloud/oauth/token)
+          IAM_TOKEN=$(printf '%s' "$RESPONSE" | jq -er '.access_token')
+          echo "::add-mask::$IAM_TOKEN"
+          echo "YC_IAM_TOKEN=$IAM_TOKEN" >> "$GITHUB_ENV"
+      - name: Install Yandex Cloud CLI
+        run: |
+          set -euo pipefail
+          curl --connect-timeout 10 --max-time 120 --retry 3 -fsSL \
+            https://storage.yandexcloud.net/yandexcloud-yc/install.sh -o /tmp/yc-install.sh
+          bash /tmp/yc-install.sh -n
+          echo "$HOME/yandex-cloud/bin" >> "$GITHUB_PATH"
+          export PATH="$HOME/yandex-cloud/bin:$PATH"
+          yc config set endpoint api.cloud.yandex.net:443
+          yc config set token "$YC_IAM_TOKEN"
+          yc config set folder-id "$YC_FOLDER_ID"
+      - name: Restore saved index pointer and verify health
+        run: |
+          set -euo pipefail
+          CURRENT="$RUNNER_TEMP/current-index.html"
+          RESTORE="$RUNNER_TEMP/rollback-index.html"
+          yc storage s3 cp "s3://$AWG_STATIC_BUCKET/index.html" "$CURRENT" --only-show-errors
+          yc storage s3 cp "s3://$AWG_STATIC_BUCKET/rollbacks/$ROLLBACK_RELEASE_SHA/index.html" "$RESTORE" --only-show-errors
+          grep -Fq 'auto-sale-bootstrap.mjs' "$RESTORE"
+          grep -Fq '<html' "$RESTORE"
+          yc storage s3 cp "$CURRENT" "s3://$AWG_STATIC_BUCKET/manual-rollbacks/${GITHUB_RUN_ID}/index.html" \
+            --cache-control 'no-cache, no-store, must-revalidate' \
+            --content-type 'text/html; charset=utf-8' --only-show-errors
+          switched=0
+          restore_current() {
+            if [ "$switched" = 1 ]; then
+              yc storage s3 cp "$CURRENT" "s3://$AWG_STATIC_BUCKET/index.html" \
+                --cache-control 'no-cache, no-store, must-revalidate' \
+                --content-type 'text/html; charset=utf-8' --only-show-errors || true
+              echo "::error::Rollback verification failed; attempted restoration of the pre-rollback index."
+            fi
+          }
+          trap restore_current ERR
+          switched=1
+          yc storage s3 cp "$RESTORE" "s3://$AWG_STATIC_BUCKET/index.html" \
+            --cache-control 'no-cache, no-store, must-revalidate' \
+            --content-type 'text/html; charset=utf-8' --only-show-errors
+          curl --retry 5 --retry-delay 2 --retry-all-errors -fsS \
+            --connect-timeout 10 --max-time 30 https://awgcars.ru/ -o "$RUNNER_TEMP/rollback-public.html"
+          grep -Fq 'auto-sale-bootstrap.mjs' "$RUNNER_TEMP/rollback-public.html"
+          curl -fsS --connect-timeout 10 --max-time 30 https://awgcars.ru/api/health \
+            | jq -e '.ok == true and .vkAuth == "enabled" and .vkMessaging == "enabled"' >/dev/null
+          trap - ERR
+          echo "Restored AWG UI rollback snapshot for release $ROLLBACK_RELEASE_SHA; YDB/backend unchanged."

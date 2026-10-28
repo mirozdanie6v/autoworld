@@ -370,6 +370,7 @@ isolateBootstrapCache();
 const vkModule=await import('./auto-sale-vk.mjs?v=20261011-vk-notifications-v1');
 const vkShellPromise=vkLaunchParams()?vkModule.initVkMiniAppShell():Promise.resolve({ok:true,skipped:'not-vk'});
 const initialStatePromise=pullInitialState();
+await import('./auto-sale-operation-feedback.mjs?v=20261028-operation-feedback-v1');
 await import('./auto-sale-submit-bridge.mjs?v=20260921-live-values-1');
 await import('./auto-sale-app-v3.mjs?v=20261028-required-deposit-v1');
 await import('./auto-sale-calc-scroll-performance.mjs?v=20261010-scroll-v1');
