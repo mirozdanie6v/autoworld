@@ -73,7 +73,14 @@ try{
         .isolation('snapshotReadOnly').timeout(10000);
     }catch(e){
       denied=/UNAUTHORIZED|PERMISSION_DENIED|ACCESS_DENIED|permission denied|access denied/i.test(String(e?.message));
-      if(!denied)throw new Error('production_table_deny_probe_inconclusive');
+      if(!denied){
+        console.log('AWG_PRODUCTION_DENY_PROBE_ERROR',JSON.stringify({
+          name:String(e?.name||''),code:typeof e?.code==='number'?e.code:null,
+          // This probe contains only a fixed table/key, no customer values.
+          message:String(e?.message||'').slice(0,600)
+        }));
+        throw new Error('production_table_deny_probe_inconclusive');
+      }
     }
   }finally{await deniedDriver.close();}
   assert.equal(denied,true,'staging SA must be explicitly denied production table reads');
