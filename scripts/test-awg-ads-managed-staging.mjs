@@ -122,6 +122,14 @@ async function prepareCrmStagingSchema(){
       }
       console.log('AWG_CRM_STAGING_TABLE_VERIFIED',spec.name);
     }
+    let nativeParts=0;
+    for await(const part of client.streamReadTable({sessionId,path:path+'/auto_sale_state',columns:['id'],rowLimit:1n},
+      {signal:AbortSignal.timeout(20000)})){
+      if(part.status!==400000)throw new Error('crm_native_stream_'+part.status);
+      nativeParts++;
+    }
+    assert.ok(nativeParts>0,'CRM native stream must acknowledge read');
+    console.log('AWG_CRM_STAGING_NATIVE_READ_OK');
     const nativeRead=await client.executeDataQuery({
       sessionId,query:{query:{case:'yqlText',value:'SELECT id FROM auto_sale_state WHERE id=1ul;'}},
       txControl:{txSelector:{case:'beginTx',value:{txMode:{case:'onlineReadOnly',value:{}}}},commitTx:true}
@@ -133,6 +141,9 @@ async function prepareCrmStagingSchema(){
     await query(db)`SELECT revision,payload FROM auto_sale_state WHERE id=${new Uint64(1n)}`
       .isolation('onlineReadOnly',{allowInconsistentReads:false}).timeout(70000);
     console.log('AWG_CRM_STAGING_QUERY_SERVICE_OK');
+    await query(db)`UPSERT INTO auto_sale_schema_meta (component,version,updated_at)
+      VALUES (${'auto-sale-domain'},${new Uint64(1n)},${new Date().toISOString()})`;
+
   }finally{
     if(sessionId)await client.deleteSession({sessionId}).catch(()=>{});
     await db.close();
