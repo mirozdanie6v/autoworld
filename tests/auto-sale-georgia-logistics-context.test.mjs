@@ -35,5 +35,5 @@ test('client journey explains road delivery from Georgia without US port or sea 
 
 test('fresh bootstrap version is referenced by index and guard',()=>{
   assert.match(bootstrap,/auto-sale-ui-business-guard\.mjs\?v=20261027-order-advance50-v1/);
-  assert.match(html,/auto-sale-bootstrap\.mjs\?v=20261028-date-three-part-v1/);
+  assert.match(html,/auto-sale-bootstrap\.mjs\?v=20261028-required-deposit-v1/);
 });

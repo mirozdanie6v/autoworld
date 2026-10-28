@@ -177,3 +177,38 @@ input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; marg
 .auto-manufacture-date-parts select{min-width:0;width:100%;max-width:100%;font-size:14px;padding-inline:8px}
 .auto-manufacture-date-parts select:disabled{opacity:.55;cursor:not-allowed}
 @media(max-width:390px){.auto-manufacture-date-parts{gap:4px}.auto-manufacture-date-parts select{font-size:13px;padding-inline:4px}}
+
+/* Manager advance entry: required fields stay evident before and after focus. */
+#leadEditForm .auto-required-explainer{
+  grid-column:1/-1;
+  margin:6px 0 0;
+  font-size:12px;
+  color:var(--warn,#ffb347);
+  line-height:1.4;
+}
+#leadEditForm label.auto-required-field{
+  color:#f5d4a2;
+}
+#leadEditForm .auto-required-caption{
+  display:block;
+  line-height:1.35;
+}
+#leadEditForm .auto-required-caption b{
+  color:var(--warn,#ffb347);
+  font-weight:900;
+  margin-inline-start:3px;
+}
+#leadEditForm label.auto-required-field>input,
+#leadEditForm label.auto-required-field>select{
+  border-color:rgba(255,179,71,.55);
+  background-color:rgba(255,179,71,.045);
+}
+#leadEditForm label.auto-required-field:focus-within>input,
+#leadEditForm label.auto-required-field:focus-within>select{
+  border-color:var(--warn,#ffb347);
+  box-shadow:0 0 0 3px rgba(255,179,71,.12);
+}
+#leadEditForm label.auto-required-field>input:invalid,
+#leadEditForm label.auto-required-field>select:invalid{
+  border-color:rgba(255,107,107,.75);
+}
