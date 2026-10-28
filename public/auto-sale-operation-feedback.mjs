@@ -124,7 +124,7 @@ export function installOperationFeedback(win) {
   function uploadEnd(id,ok=true) {
     const item=uploads.get(id);if(!item)return;
     uploads.delete(id);
-    notify(ok?'Фотографии загружены':'Ошибка загрузки. Уже загруженные файлы сохранены.',ok?'success':'error',ok?2200:5500);
+    notify(ok?'Фотографии загружены':'Ошибка загрузки. Проверьте файлы и повторите загрузку.',ok?'success':'error',ok?2200:5500);
   }
   const controller={uploadStart,uploadStep,uploadEnd,describeOperation};
   win.__AWG_OPERATION_UI__=controller;
