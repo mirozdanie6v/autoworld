@@ -112,7 +112,12 @@ async function prepareCrmStagingSchema(){
       for(const column of spec.columns){
         const actual=described.columns.find(x=>x.name===column.name);
         assert.ok(actual,'missing CRM column '+column.name);
-        assert.deepEqual(actual.type.type,column.type.type,'CRM column type '+column.name);
+        const signature=type=>{
+          if(type?.type?.case==='typeId')return ['primitive',type.type.value];
+          if(type?.type?.case==='optionalType')return ['optional',signature(type.type.value.item)];
+          throw new Error('crm_schema_unsupported_type');
+        };
+        assert.deepEqual(signature(actual.type),signature(column.type),'CRM column type '+column.name);
       }
       console.log('AWG_CRM_STAGING_TABLE_VERIFIED',spec.name);
     }
