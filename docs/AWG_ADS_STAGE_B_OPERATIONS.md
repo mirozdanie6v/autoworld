@@ -1,10 +1,14 @@
 # AutoWorld Ads B — staging / operations / acceptance log (27.10.2026)
 
-## Current verified state — supersedes the historical status below
+## Current verified state — 28 October 2026; supersedes historical status below
 
-OIDC -> IAM exchange and read-only inventory are now SUCCESS. Two physically separate managed staging YDBs, dedicated SA/federation and scoped grants are created and verified. All nine advertising schema tables are visible with the dedicated SA as owner. Full code CI is green.
+OIDC/IAM and inventory PASS. Dedicated native TableService production table-read deny PASS. Nine Ads tables and 13 CRM staging tables verified. No production data writes or grants were changed.
 
-Managed runtime acceptance is BLOCKED: three cloud attempts failed with server Query compilation timed out. Independent Cloud Console SELECT 1 succeeds, but SELECT from awg_ads_campaigns fails with gRPC Deadline Exceeded. A bounded Stop/Start of only the new ads database returned it to Running and preserved all nine tables, but did not resolve the failure. The inspect-only managed recheck (run 40525334539 attempt 2, job 122267015794) again failed with Query compilation timed out after OIDC HTTP 200 and successful inventory of both staging databases. Repeated ads DDL was removed from the acceptance workflow. The exact data-plane root cause is not yet established. Controlled maintenance jobs were not reached, physical Telegram/VK E2E has no separate staging credentials/runtime, and deployment rollback is not verified. Maintenance flags remain disabled; this workstream did not change production.
+One-time maintenance run40658475594 physically invoked both workers: retention PASS (expired synthetic subject/event deleted, current fixture preserved, durable ok audit and lease release verified); reconciliation FAILED on CRM reads, with durable failed audit and lease release verified. Cloud Console independently shows both statuses.
+
+Synthetic application CRM commits remain BLOCKED by SQL compilation on etnvd9hmimkt74vpuqa6. Native metadata and row reads work; SQL through both TableService and QueryService fails. Full/relative paths, read modes and bounded CRM-only restart did not resolve it. Final run40660292190 remains failed; do not claim dual-DB lead acceptance.
+
+Physical Telegram/VK E2E and deployment rollback are NOT VERIFIED. Dedicated Ads test integration credentials/runtime were not found. Telegram QR sign-in was rejected by automatic security review because personal-session/private-correspondence access needs separate explicit user authorization; no workaround was attempted. Continuous schedules remain disabled; this workstream did not change production. Code regression CI is green, which does not override cloud failures.
 
 Authoritative current IDs, ACL read-back, run evidence and continuation:
 [Managed staging inventory](AWG_ADS_STAGING_INVENTORY_2026-10-27.md).
