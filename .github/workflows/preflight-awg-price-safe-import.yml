@@ -1,0 +1,99 @@
+name: Preflight AWG source price reconciliation (READ ONLY)
+on:
+  pull_request:
+    paths:
+      - scripts/prepare-awg-price-safe-import.mjs
+      - .github/workflows/sync-awg-catalog.yml
+      - .github/workflows/preflight-awg-price-safe-import.yml
+      - tests/awg-price-safe-import.test.mjs
+      - package.json
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: none
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Unit tests for VIN-safe price updates
+        run: node --test tests/awg-price-safe-import.test.mjs
+      - name: Install read-only scraper
+        run: python -m pip install --disable-pip-version-check requests beautifulsoup4
+      - name: Download production catalog snapshot (GET only)
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/awg-price-safe
+          curl --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 10 --max-time 40 -fsS \
+            https://awgcars.ru/api/auto-sale/state \
+            | jq '[.catalog[]? | select(.source == "AutoWorld_Georgia")]' \
+            > /tmp/awg-price-safe/live.json
+          test "$(jq length /tmp/awg-price-safe/live.json)" -ge 150
+      - name: Scrape freshest Telegram captions (no uploads)
+        env:
+          OUT_DIR: /tmp/awg-price-safe
+          MAX_PAGES: '20'
+          REQUEST_DELAY: '0.30'
+          UPLOAD_MISSING_PHOTOS: 'false'
+          MERGE_EXISTING: 'false'
+        run: python scripts/scrape-autoworld-georgia.py
+      - name: Normalize photos-backed NEW cars (dry run only)
+        env:
+          SOURCE_PATH: /tmp/awg-price-safe/cars.json
+          OUTPUT_PATH: /tmp/awg-price-safe/normalized.json
+          AUDIT_PATH: /tmp/awg-price-safe/normalize-report.json
+          DRY_RUN: 'true'
+        run: node scripts/import-autoworld-catalog.mjs
+      - name: Prepare sparse catalog update plan (no writes)
+        env:
+          SOURCE_PATH: /tmp/awg-price-safe/cars.json
+          LIVE_PATH: /tmp/awg-price-safe/live.json
+          NORMALIZED_PATH: /tmp/awg-price-safe/normalized.json
+          OUTPUT_PATH: /tmp/awg-price-safe/items.json
+          REPORT_PATH: /tmp/awg-price-safe/price-sync-report.json
+        run: node scripts/prepare-awg-price-safe-import.mjs
+      - name: Assert four source price corrections and VIN identity safety
+        run: |
+          node --input-type=module <<'JS'
+          import {readFileSync} from 'node:fs';
+          const report=JSON.parse(readFileSync('/tmp/awg-price-safe/price-sync-report.json','utf8'));
+          const current=JSON.parse(readFileSync('/tmp/awg-price-safe/live.json','utf8'));
+          const items=JSON.parse(readFileSync('/tmp/awg-price-safe/items.json','utf8'));
+          const checks=[
+            ['KL4CJASMXNB525640',1330000,0],
+            ['JF2GUADC8RH222878',1980000,2150000],
+            ['JF2GUADC7R8267214',2020000,2150000],
+            ['KMHLP4DG3RU744930',1920000,2050000]
+          ];
+          for(const [vin,price,turnkey] of checks){
+            const existing=current.find(x=>String(x.vin||'').toUpperCase()===vin);
+            if(!existing)throw Error('target_missing_'+vin);
+            const patch=items.find(x=>x.id===existing.id);
+            const actual=patch?Number(patch.priceRub??existing.priceRub):Number(existing.priceRub);
+            const actualTurnkey=patch?Number(patch.russiaTurnkeyRub??existing.russiaTurnkeyRub||0):Number(existing.russiaTurnkeyRub||0);
+            if(actual!==price||(turnkey>0&&actualTurnkey!==turnkey))
+              throw Error('source_price_target_not_reconciled_'+vin);
+            if(patch)for(const forbidden of ['vin','sourcePostId','photos','image','otherPhotos','active','status'])
+              if(Object.hasOwn(patch,forbidden))throw Error('immutable_field_in_patch_'+vin+'_'+forbidden);
+          }
+          if(report.pricePatches>60)throw Error('patch_limit_exceeded');
+          console.log('AWG_PRICE_PREFLIGHT_OK',JSON.stringify({targets:checks.length,
+            pricePatches:report.pricePatches,newCars:report.newCars,
+            unresolved:report.unresolved.length}));
+          JS
+      - name: Upload inspectable READ-ONLY preflight
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: awg-price-safe-preflight
+          path: |
+            /tmp/awg-price-safe/price-sync-report.json
+            /tmp/awg-price-safe/normalize-report.json
+          if-no-files-found: ignore
