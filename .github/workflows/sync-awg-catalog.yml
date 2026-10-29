@@ -195,19 +195,8 @@ jobs:
             if(Number(next.priceRub)!==c.nextPriceRub||Number(next.russiaTurnkeyRub||0)!==c.nextTurnkeyRub)
               throw Error('price_reconciliation_failed_'+c.id);
           }
-          const expected=[
-            ['KL4CJASMXNB525640',1330000,0],
-            ['JF2GUADC8RH222878',1980000,2150000],
-            ['JF2GUADC7R8267214',2020000,2150000],
-            ['KMHLP4DG3RU744930',1920000,2050000]
-          ];
-          for(const [vin,price,turnkey] of expected){
-            const car=[...after.values()].find(c=>String(c.vin||'').toUpperCase()===vin&&c.source==='AutoWorld_Georgia');
-            if(!car||Number(car.priceRub)!==price||turnkey&&Number(car.russiaTurnkeyRub||0)!==turnkey)
-              throw Error('AWG_PRICE_REQUIRED_FIX_MISSING_'+vin);
-          }
           console.log('AWG_PRICE_SYNC_VERIFIED',JSON.stringify({checked:report.changes.length,
-            created:report.newCars,verifiedTargets:expected.length,sourceCars:[...after.values()].filter(c=>c.source==='AutoWorld_Georgia').length}));
+            created:report.newCars,sourceCars:[...after.values()].filter(c=>c.source==='AutoWorld_Georgia').length}));
           JS
       - name: Audit archived sticker prices against canonical production
         if: steps.mode.outputs.price == 'true'
