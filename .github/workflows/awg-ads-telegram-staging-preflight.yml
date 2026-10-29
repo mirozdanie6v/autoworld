@@ -1,4 +1,4 @@
-name: AWG Ads Telegram staging image
+name: AWG Ads Telegram staging deploy
 on:
   push:
     branches: [feature/awg-ads-stage-b-integration]
@@ -77,9 +77,24 @@ jobs:
           echo "### Dedicated staging image published" >> "$GITHUB_STEP_SUMMARY"
           echo "$STAGING_IMAGE" >> "$GITHUB_STEP_SUMMARY"
           cat staging-image-digests.json >> "$GITHUB_STEP_SUMMARY"
-          echo 'No revision deployment or webhook change. Runtime HMAC and dedicated API-key storage awaiting separate confirmation.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Image publication complete; guarded staging deployment follows.' >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         with:
           name: awg-ads-staging-image-identity
           path: staging-image-digests.json
           retention-days: 7
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      - name: Deploy approved staging baseline and connect dedicated bot
+        env:
+          AWG_ADS_STAGING_DEPLOY_APPROVED: dedicated-telegram-staging-only
+          AWG_ADS_STAGING_TELEGRAM_BOT_TOKEN: ${{ secrets.AWG_ADS_STAGING_TELEGRAM_BOT_TOKEN }}
+          AWG_ADS_STAGE_B_SUBJECT_SECRET: ${{ secrets.AWG_ADS_STAGE_B_SUBJECT_SECRET }}
+          AWG_ADS_STAGING_API_KEY: ${{ secrets.AWG_ADS_STAGING_API_KEY }}
+        run: |
+          set -euo pipefail
+          export STAGING_IMAGE_DIGEST="$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync("staging-image-digests.json","utf8"))[0])')"
+          node --check scripts/deploy-awg-ads-telegram-staging.mjs
+          node scripts/deploy-awg-ads-telegram-staging.mjs
+          echo 'Dedicated staging baseline deployed; bot webhook and menu readied. Physical user E2E and Ads activation remain separate acceptance.' >> "$GITHUB_STEP_SUMMARY"
