@@ -29,3 +29,23 @@ Physical user E2E and revision rollback remain unverified.
 ## Cloud Shell fallback
 Sources cloned to /tmp/awg-ads-staging-20261029, exact commit d91c03d851ff88e202f4cf36457081680a0dba20. Home filesystem rejected git chmod.
 Docker is absent. Attempted apt install was blocked by a pre-existing interrupted dpkg state; configuration progressed but Docker install still reports unmet dependencies. No Docker daemon/image build was claimed. Prefer GitHub runner deployment after scoped access approval rather than repairing unrelated Cloud Shell packages.
+
+## 30 October 2026 — approved IAM applied; image published
+User explicitly approved the four staged grants. Owner Cloud Shell applied and read back exactly:
+- container bba5hanjiq9ngu77i8p9: serverless-containers.editor to serviceAccount:aje3j5aat66lel86cd5r, containerInvoker to system:allUsers.
+- registry crpkirscqc5gt6dgeujr: container-registry.images.pusher to serviceAccount:aje3j5aat66lel86cd5r.
+- service account aje3j5aat66lel86cd5r itself: iam.serviceAccounts.user to the same serviceAccount.
+No folder/cloud-level grants or production principal changed.
+
+Image workflow PASS: https://github.com/mirozdanie6v/autoworld/actions/runs/40936554651 , job123668504337.
+Dedicated bot reverified; exact staging container and registry API reads now HTTP200.
+Locked Dockerfile.timeweb build and runtime module/default-OFF check passed.
+Published image:
+cr.yandex/crpkirscqc5gt6dgeujr/autoworld-ads-staging@sha256:2dae11b0b6e4dfeeca7bf1afde2fc955363ce7bc1299838370c8b8695fa004aa
+Source commit: 2f052672dd3787c718ca9741083f21aee111a98d.
+
+Guarded deploy script: scripts/deploy-awg-ads-telegram-staging.mjs, syntax checked; NOT EXECUTED.
+It requires explicit deployment marker, exact repo/ref/image registry, dedicated Telegram identity, stable HMAC secret and dedicated API key. It deploys baseline Ads OFF, then verifies health, unsigned webhook denial, anonymous write denial, static app and exact webhook readback before reporting connected. It does not claim a physical Telegram user E2E.
+
+Automatic approval review REJECTED generating/submitting AWG_ADS_STAGE_B_SUBJECT_SECRET to GitHub because the IAM/deployment approval did not explicitly authorize that new persistent sensitive secret storage. No workaround was attempted. Runtime also requires a separate AUTO_SALE_API_KEY when public demo writes are false; no reuse of production or bot credentials is proposed.
+Pending explicit user approval: generate two independent private random keys, store as repository secrets AWG_ADS_STAGE_B_SUBJECT_SECRET and AWG_ADS_STAGING_API_KEY, and pass them only into this isolated Yandex revision. Neither secret has been submitted. No app revision or bot webhook was deployed.
