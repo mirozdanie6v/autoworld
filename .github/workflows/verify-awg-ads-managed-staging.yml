@@ -87,4 +87,6 @@ jobs:
         run: node scripts/test-awg-ads-managed-staging.mjs
       - name: Record acceptance boundary
         run: |
+          echo "Verified code commit: $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+          echo 'Integrated AutoWorld main baseline: 6ece88ced344b6789921f3a3a120a3c641ae36d2' >> "$GITHUB_STEP_SUMMARY"
           echo 'Managed staging data-plane acceptance passed. No physical Telegram/VK messages or deployment rollback were exercised.' >> "$GITHUB_STEP_SUMMARY"
