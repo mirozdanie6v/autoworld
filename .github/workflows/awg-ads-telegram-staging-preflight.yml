@@ -1,4 +1,4 @@
-name: AWG Ads Telegram staging preflight
+name: AWG Ads Telegram staging image
 on:
   push:
     branches: [feature/awg-ads-stage-b-integration]
@@ -14,8 +14,9 @@ jobs:
   inspect:
     runs-on: ubuntu-24.04
     environment: awg-ads-staging
-    timeout-minutes: 4
+    timeout-minutes: 20
     steps:
+      - uses: actions/checkout@v5
       - name: Verify dedicated bot and inspect staging deployment access
         uses: actions/github-script@v7
         env:
@@ -41,15 +42,44 @@ jobs:
             if(c.sub!=='repo:mirozdanie6v@49186663/autoworld@1398349654:environment:awg-ads-staging')throw Error('unexpected OIDC subject');
             const r=await fetch('https://auth.yandex.cloud/oauth/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({grant_type:'urn:ietf:params:oauth:grant-type:token-exchange',requested_token_type:'urn:ietf:params:oauth:token-type:access_token',audience:'aje3j5aat66lel86cd5r',subject_token:jwt,subject_token_type:'urn:ietf:params:oauth:token-type:id_token'}),signal:AbortSignal.timeout(25000)});
             if(!r.ok)throw Error('staging IAM HTTP '+r.status);
-            const iam=(await r.json()).access_token;if(!iam)throw Error('missing IAM');core.setSecret(iam);
+            const iam=(await r.json()).access_token;if(!iam)throw Error('missing IAM');core.setSecret(iam);core.exportVariable('YC_IAM_TOKEN',iam);
             for(const [label,url] of [
-              ['containers','https://serverless-containers.api.cloud.yandex.net/containers/v1/containers?folderId=b1g8u8vqkgehvtbj8n13'],
-              ['registry','https://container-registry.api.cloud.yandex.net/container-registry/v1/registries/crptu0l7jn0iui8b8laa']]){
+              ['container','https://serverless-containers.api.cloud.yandex.net/containers/v1/containers/bba5hanjiq9ngu77i8p9'],
+              ['registry','https://container-registry.api.cloud.yandex.net/container-registry/v1/registries/crpkirscqc5gt6dgeujr']]){
               const probe=await fetch(url,{headers:{Authorization:'Bearer '+iam},signal:AbortSignal.timeout(25000)});
               core.info('Staging read-only '+label+' inventory HTTP '+probe.status);
-              if(probe.ok&&label==='containers'){
-                const j=await probe.json();
-                core.info('Ads staging container exists='+Boolean(j.containers?.some(x=>x.name==='autoworld-ads-telegram-staging')));
-              }
+              if(!probe.ok)throw Error('staging '+label+' access denied');
+              const j=await probe.json();
+              if(j.folderId!=='b1g8u8vqkgehvtbj8n13'||(label==='container'&&j.name!=='autoworld-ads-telegram-staging'))throw Error('staging target mismatch');
             }
             await core.summary.addHeading('Dedicated Telegram bot preflight').addRaw('Bot identity verified. No webhook, messages, IAM permissions, production or CRM records were changed.').write();
+      - name: Build locked isolated staging image
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_NAME" = feature/awg-ads-stage-b-integration
+          IMAGE="cr.yandex/crpkirscqc5gt6dgeujr/autoworld-ads-staging:$GITHUB_SHA"
+          docker build -f Dockerfile.timeweb -t "$IMAGE" .
+          docker run --rm --entrypoint node "$IMAGE" --input-type=module -e '
+            import assert from "node:assert/strict";
+            import {adsStageBConfiguration} from "./server/ads-stage-b-runtime.mjs";
+            import {createTelegramService} from "./server/telegram-bot.mjs";
+            assert.deepEqual(adsStageBConfiguration({}),{enabled:false});
+            assert.equal(typeof createTelegramService,"function");
+            console.log("ISOLATED_STAGING_IMAGE_PASS");
+          '
+          echo "STAGING_IMAGE=$IMAGE" >> "$GITHUB_ENV"
+      - name: Publish only to dedicated staging registry
+        run: |
+          set -euo pipefail
+          printf '%s' "$YC_IAM_TOKEN" | docker login --username iam --password-stdin cr.yandex
+          docker push "$STAGING_IMAGE"
+          docker image inspect "$STAGING_IMAGE" --format '{{json .RepoDigests}}' > staging-image-digests.json
+          echo "### Dedicated staging image published" >> "$GITHUB_STEP_SUMMARY"
+          echo "$STAGING_IMAGE" >> "$GITHUB_STEP_SUMMARY"
+          cat staging-image-digests.json >> "$GITHUB_STEP_SUMMARY"
+          echo 'No revision deployment or webhook change. Runtime HMAC and dedicated API-key storage awaiting separate confirmation.' >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: awg-ads-staging-image-identity
+          path: staging-image-digests.json
+          retention-days: 7
