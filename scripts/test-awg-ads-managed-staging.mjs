@@ -207,6 +207,23 @@ try{
   domainStore=await createYdbDomainStore({connectionString:crm,credentialsProvider:creds,ensureSchema:false});
   console.log('AWG_CRM_STAGING_STORES_OPEN');
 
+  // Each acceptance run uses a fresh ephemeral HMAC secret. Retained QA leads
+  // from an older run must not be replayed under a different secret, which
+  // correctly produces an immutable event/subject collision. Remove only the
+  // exact synthetic fixtures owned by this acceptance, using normal CRM CAS.
+  const priorQa=(await domainStore.loadState()).leads.filter(lead=>
+    /^L-ADS-(QA|REPLAY)-[a-f0-9]{32}$/.test(String(lead.id))
+    &&lead.name==='Synthetic ads staging QA'&&lead.contact==='@synthetic'
+    &&lead.clientProvider==='telegram'&&/^999[0-9]{10}$/.test(String(lead.clientProviderUserId)));
+  assert.ok(priorQa.length<=50,'unexpected QA fixture volume');
+  for(const lead of priorQa){
+    const baseRowVersion=await domainStore.entityRowVersion('lead',lead.id);
+    const removed=await mutateAutoSaleEntityBatch({legacyStore,domainStore,
+      operations:[{resource:'lead',operation:'delete',id:lead.id,baseRowVersion}],
+      prepareNotifications:null});
+    assert.equal(removed.status,200,'prior synthetic fixture cleanup: '+String(removed.data?.error||''));
+  }
+  console.log('AWG_PRIOR_SYNTHETIC_FIXTURES_REMOVED',priorQa.length);
   const original=await legacyStore.loadState();
   // Bootstrap once; subsequent acceptance runs must preserve prior staging fixtures.
   const existing=await domainStore.loadState();
