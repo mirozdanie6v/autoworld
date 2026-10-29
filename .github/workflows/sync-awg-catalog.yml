@@ -9,6 +9,7 @@ on:
     paths:
       - .sync-awg-catalog
       - .sync-awg-catalog-price-reconcile
+      - scripts/prepare-awg-price-safe-import.mjs
 
 permissions:
   contents: read
@@ -94,6 +95,7 @@ jobs:
             | jq '[.catalog[]? | select(.source == "AutoWorld_Georgia")]' \
             > /tmp/awg-import/cars.json
           test "$(jq 'length' /tmp/awg-import/cars.json)" -ge 100
+          cp /tmp/awg-import/cars.json /tmp/awg-import/live-catalog.json
 
       - name: Scrape recent AutoWorld Georgia posts
         if: steps.mode.outputs.price != 'true'
@@ -110,10 +112,20 @@ jobs:
         if: steps.mode.outputs.price != 'true'
         env:
           SOURCE_PATH: /tmp/awg-import/cars.json
-          OUTPUT_PATH: /tmp/awg-catalog-import.json
+          OUTPUT_PATH: /tmp/awg-catalog-normalized.json
           AUDIT_PATH: /tmp/awg-catalog-import-audit.json
           DRY_RUN: 'true'
         run: node scripts/import-autoworld-catalog.mjs
+
+      - name: Reconcile all fresh source prices without replacing existing VINs or media
+        if: steps.mode.outputs.price != 'true'
+        env:
+          SOURCE_PATH: /tmp/awg-import/cars.json
+          LIVE_PATH: /tmp/awg-import/live-catalog.json
+          NORMALIZED_PATH: /tmp/awg-catalog-normalized.json
+          OUTPUT_PATH: /tmp/awg-catalog-import.json
+          REPORT_PATH: /tmp/awg-import/price-sync-report.json
+        run: node scripts/prepare-awg-price-safe-import.mjs
 
       - name: Upsert recent catalog entities
         if: steps.mode.outputs.price != 'true'
@@ -121,7 +133,11 @@ jobs:
           AUTO_SALE_CATALOG_IMPORT_URL: https://awgcars.ru/api/auto-sale/admin/catalog-import
           SOURCE_PATH: /tmp/awg-catalog-import.json
           REPLACE_SOURCE_ALL: 'false'
-        run: node scripts/sync-autoworld-catalog.mjs
+        run: |
+          if [ "$(jq length /tmp/awg-catalog-import.json)" -eq 0 ]; then
+            echo 'AWG_CATALOG_NO_CHANGES'; exit 0
+          fi
+          node scripts/sync-autoworld-catalog.mjs
 
       - name: Verify public RU catalog
         if: steps.mode.outputs.price != 'true'
@@ -154,6 +170,45 @@ jobs:
             echo "- Source: @AutoWorld_Georgia"
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Verify corrected pricing, immutable catalog IDs and preserved source photos
+        if: steps.mode.outputs.price != 'true'
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'JS'
+          import {readFileSync} from 'node:fs';
+          const before=JSON.parse(readFileSync('/tmp/awg-import/live-catalog.json','utf8'));
+          const state=JSON.parse(readFileSync('/tmp/awg-state.json','utf8'));
+          const report=JSON.parse(readFileSync('/tmp/awg-import/price-sync-report.json','utf8'));
+          const older=new Map(before.map(c=>[String(c.id),c]));
+          const after=new Map((state.catalog||[]).map(c=>[String(c.id),c]));
+          for(const c of report.changes){
+            const previous=older.get(c.id),next=after.get(c.id);
+            if(!previous||!next)throw Error('catalog_id_missing_'+c.id);
+            for(const k of ['id','sourcePostId','vin']){
+              if(String(previous[k]??'')!==String(next[k]??''))throw Error('catalog_identity_changed_'+c.id+'_'+k);
+            }
+            if(previous.active===false&&next.active!==false)throw Error('hidden_car_reactivated_'+c.id);
+            for(const k of ['image','otherPhotos','photos']){
+              if(JSON.stringify(previous[k]??null)!==JSON.stringify(next[k]??null))
+                throw Error('source_media_changed_'+c.id+'_'+k);
+            }
+            if(Number(next.priceRub)!==c.nextPriceRub||Number(next.russiaTurnkeyRub||0)!==c.nextTurnkeyRub)
+              throw Error('price_reconciliation_failed_'+c.id);
+          }
+          const expected=[
+            ['KL4CJASMXNB525640',1330000,0],
+            ['JF2GUADC8RH222878',1980000,2150000],
+            ['JF2GUADC7R8267214',2020000,2150000],
+            ['KMHLP4DG3RU744930',1920000,2050000]
+          ];
+          for(const [vin,price,turnkey] of expected){
+            const car=[...after.values()].find(c=>String(c.vin||'').toUpperCase()===vin&&c.source==='AutoWorld_Georgia');
+            if(!car||Number(car.priceRub)!==price||turnkey&&Number(car.russiaTurnkeyRub||0)!==turnkey)
+              throw Error('AWG_PRICE_REQUIRED_FIX_MISSING_'+vin);
+          }
+          console.log('AWG_PRICE_SYNC_VERIFIED',JSON.stringify({checked:report.changes.length,
+            created:report.newCars,verifiedTargets:expected.length,sourceCars:[...after.values()].filter(c=>c.source==='AutoWorld_Georgia').length}));
+          JS
       - name: Audit archived sticker prices against canonical production
         if: steps.mode.outputs.price == 'true'
         env:
@@ -228,4 +283,5 @@ jobs:
           path: |
             /tmp/awg-catalog-import-audit.json
             /tmp/awg-import/report.json
+            /tmp/awg-import/price-sync-report.json
           if-no-files-found: ignore
