@@ -1,0 +1,55 @@
+name: AWG Ads Telegram staging preflight
+on:
+  push:
+    branches: [feature/awg-ads-stage-b-integration]
+    paths: [.github/workflows/awg-ads-telegram-staging-preflight.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: awg-ads-telegram-staging-preflight
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    environment: awg-ads-staging
+    timeout-minutes: 4
+    steps:
+      - name: Verify dedicated bot and inspect staging deployment access
+        uses: actions/github-script@v7
+        env:
+          BOT_TOKEN: ${{ secrets.AWG_ADS_STAGING_TELEGRAM_BOT_TOKEN }}
+        with:
+          script: |
+            if(context.repo.owner!=='mirozdanie6v'||context.repo.repo!=='autoworld'||context.ref!=='refs/heads/feature/awg-ads-stage-b-integration')throw Error('unapproved repository/ref');
+            const token=process.env.BOT_TOKEN;
+            if(!token)throw Error('missing dedicated staging bot secret');
+            core.setSecret(token);
+            async function telegram(method){
+              let r;try{r=await fetch('https://api.telegram.org/bot'+token+'/'+method,{method:'POST',signal:AbortSignal.timeout(25000)});}catch{throw Error('Telegram '+method+' transport unavailable');}
+              if(!r.ok)throw Error('Telegram '+method+' HTTP '+r.status);
+              const j=await r.json();if(!j.ok)throw Error('Telegram '+method+' rejected');return j.result;
+            }
+            const me=await telegram('getMe');
+            if(me.id!==8824530254||me.username!=='auto_sale_usa_bot'||!me.is_bot)throw Error('dedicated bot identity mismatch');
+            core.info('Dedicated Telegram bot identity verified: @'+me.username+' ID '+me.id);
+            const hook=await telegram('getWebhookInfo');
+            core.info('Existing staging webhook configured='+Boolean(hook.url)+'; pending updates='+hook.pending_update_count);
+            const jwt=await core.getIDToken('https://github.com/mirozdanie6v');core.setSecret(jwt);
+            const c=JSON.parse(Buffer.from(jwt.split('.')[1],'base64url'));
+            if(c.sub!=='repo:mirozdanie6v@49186663/autoworld@1398349654:environment:awg-ads-staging')throw Error('unexpected OIDC subject');
+            const r=await fetch('https://auth.yandex.cloud/oauth/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({grant_type:'urn:ietf:params:oauth:grant-type:token-exchange',requested_token_type:'urn:ietf:params:oauth:token-type:access_token',audience:'aje3j5aat66lel86cd5r',subject_token:jwt,subject_token_type:'urn:ietf:params:oauth:token-type:id_token'}),signal:AbortSignal.timeout(25000)});
+            if(!r.ok)throw Error('staging IAM HTTP '+r.status);
+            const iam=(await r.json()).access_token;if(!iam)throw Error('missing IAM');core.setSecret(iam);
+            for(const [label,url] of [
+              ['containers','https://serverless-containers.api.cloud.yandex.net/containers/v1/containers?folderId=b1g8u8vqkgehvtbj8n13'],
+              ['registry','https://container-registry.api.cloud.yandex.net/container-registry/v1/registries/crptu0l7jn0iui8b8laa']]){
+              const probe=await fetch(url,{headers:{Authorization:'Bearer '+iam},signal:AbortSignal.timeout(25000)});
+              core.info('Staging read-only '+label+' inventory HTTP '+probe.status);
+              if(probe.ok&&label==='containers'){
+                const j=await probe.json();
+                core.info('Ads staging container exists='+Boolean(j.containers?.some(x=>x.name==='autoworld-ads-telegram-staging')));
+              }
+            }
+            await core.summary.addHeading('Dedicated Telegram bot preflight').addRaw('Bot identity verified. No webhook, messages, IAM permissions, production or CRM records were changed.').write();
