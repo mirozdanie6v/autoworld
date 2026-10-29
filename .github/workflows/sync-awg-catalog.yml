@@ -273,4 +273,5 @@ jobs:
             /tmp/awg-catalog-import-audit.json
             /tmp/awg-import/report.json
             /tmp/awg-import/price-sync-report.json
+            /tmp/awg-import/live-catalog.json
           if-no-files-found: ignore
