@@ -1,0 +1,85 @@
+name: Package AWG Ads staging release (no deployment)
+on:
+  push:
+    branches: [release/awg-ads-staging-20261029]
+    paths:
+      - .github/workflows/verify-awg-ads-release.yml
+      - Dockerfile.timeweb
+      - package.json
+      - package-lock.json
+      - server/**
+      - public/**
+      - shared/**
+      - scripts/build-autoworld.mjs
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: awg-ads-release-package
+  cancel-in-progress: false
+jobs:
+  package:
+    if: github.ref == 'refs/heads/release/awg-ads-staging-20261029'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Guard integrated source and untouched production release marker
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = mirozdanie6v/autoworld
+          test "$GITHUB_REF_NAME" = release/awg-ads-staging-20261029
+          git merge-base --is-ancestor 6ece88ced344b6789921f3a3a120a3c641ae36d2 HEAD
+          git merge-base --is-ancestor 4c978df33701496da3ec6ee52f7a28344af6e4b7 HEAD
+          test -z "$(git diff --name-only 6ece88ced344b6789921f3a3a120a3c641ae36d2 HEAD -- .production/autoworld-release .github/workflows/deploy-awg-production.yml)"
+      - name: Build locked portable staging image
+        run: docker build -f Dockerfile.timeweb -t "autoworld-ads-staging:$GITHUB_SHA" .
+      - name: Verify packaged Ads modules and disabled default
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm --entrypoint node "autoworld-ads-staging:$GITHUB_SHA" --input-type=module -e '
+            import assert from "node:assert/strict";
+            import {access} from "node:fs/promises";
+            import {adsStageBConfiguration,createAdsStageBServerBridge} from "./server/ads-stage-b-runtime.mjs";
+            import {createAdsAttributionService} from "./server/ads-attribution-core.mjs";
+            assert.deepEqual(adsStageBConfiguration({}),{enabled:false});
+            assert.equal((await createAdsStageBServerBridge({env:{}})).enabled,false);
+            assert.equal(typeof createAdsAttributionService,"function");
+            await access("./dist/auto-sale-ads-director.mjs");
+            await access("./dist/auto-sale-ads-telemetry.mjs");
+            console.log("AWG_ADS_RELEASE_IMAGE_DEFAULT_OFF_PASS");
+          '
+      - name: Export immutable package and manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-package
+          docker save "autoworld-ads-staging:$GITHUB_SHA" | gzip -1 > release-package/autoworld-ads-staging-image.tar.gz
+          sha256sum release-package/autoworld-ads-staging-image.tar.gz > release-package/SHA256SUMS
+          docker image inspect "autoworld-ads-staging:$GITHUB_SHA" --format '{{.Id}}' > release-package/IMAGE_ID
+          node --input-type=module <<'NODE'
+          import {readFile,writeFile} from 'node:fs/promises';
+          const manifest={
+            sourceCommit:process.env.GITHUB_SHA,
+            integratedMain:'6ece88ced344b6789921f3a3a120a3c641ae36d2',
+            adsSource:'4c978df33701496da3ec6ee52f7a28344af6e4b7',
+            targetEnvironment:'staging-only',
+            imageId:(await readFile('release-package/IMAGE_ID','utf8')).trim(),
+            imageArchiveSha256:(await readFile('release-package/SHA256SUMS','utf8')).split(' ')[0],
+            adsEnabledByDefault:false,deployed:false,physicalTelegramVkVerified:false,deploymentRollbackVerified:false
+          };
+          await writeFile('release-package/manifest.json',JSON.stringify(manifest,null,2)+'\n');
+          NODE
+          cp docs/AWG_ADS_STAGE_B_OPERATIONS.md release-package/OPERATIONS.md
+          echo "Staging package prepared from $GITHUB_SHA. No image push, deployment or webhook change." >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: awg-ads-staging-release-${{ github.sha }}
+          path: release-package/
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
