@@ -59,7 +59,7 @@ jobs:
           set -euo pipefail
           mkdir -p release-package
           docker save "autoworld-ads-staging:$GITHUB_SHA" | gzip -1 > release-package/autoworld-ads-staging-image.tar.gz
-          sha256sum release-package/autoworld-ads-staging-image.tar.gz > release-package/SHA256SUMS
+          (cd release-package && sha256sum autoworld-ads-staging-image.tar.gz > SHA256SUMS)
           docker image inspect "autoworld-ads-staging:$GITHUB_SHA" --format '{{.Id}}' > release-package/IMAGE_ID
           node --input-type=module <<'NODE'
           import {readFile,writeFile} from 'node:fs/promises';
