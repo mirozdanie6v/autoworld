@@ -7,6 +7,7 @@ on:
       - scripts/scrape-autoworld-georgia.py
       - scripts/import-autoworld-catalog.mjs
       - scripts/audit-awg-catalog-price-reconciliation.mjs
+      - scripts/audit-awg-current-price-drift.mjs
       - tests/auto-sale-catalog-source-prices.test.mjs
       - .github/workflows/reconcile-awg-catalog-prices.yml
 
@@ -48,6 +49,24 @@ jobs:
           node scripts/audit-awg-catalog-price-reconciliation.mjs
           jq -r '"PRICE_RECONCILE candidates=\(.candidates) unresolved=\(.unresolvedCount) currently_unpriced=\(.liveUnpriced)"' \
             /tmp/awg-price-audit/report.json
+      - name: Install read-only Telegram source scraper
+        run: python -m pip install --disable-pip-version-check requests beautifulsoup4
+      - name: Scrape recent Telegram source posts without media upload
+        env:
+          OUT_DIR: /tmp/awg-price-audit/recent
+          MAX_PAGES: '20'
+          REQUEST_DELAY: '0.30'
+          UPLOAD_MISSING_PHOTOS: 'false'
+          MERGE_EXISTING: 'false'
+        run: python scripts/scrape-autoworld-georgia.py
+      - name: Compare archive and fresh Telegram listing prices against live catalog (read only)
+        env:
+          ARCHIVE_PATH: data/autoworld-georgia/cars.json
+          RECENT_PATH: /tmp/awg-price-audit/recent/cars.json
+          LIVE_PATH: /tmp/awg-price-audit/live-catalog.json
+          REPORT_PATH: /tmp/awg-price-audit/live-price-drift.json
+          CSV_PATH: /tmp/awg-price-audit/live-price-drift.csv
+        run: node scripts/audit-awg-current-price-drift.mjs
       - name: Upload inspectable catalog pricing audit
         if: always()
         uses: actions/upload-artifact@v4
@@ -56,4 +75,6 @@ jobs:
           path: |
             /tmp/awg-price-audit/report.json
             /tmp/awg-price-audit/corrections.json
+            /tmp/awg-price-audit/live-price-drift.json
+            /tmp/awg-price-audit/live-price-drift.csv
           if-no-files-found: ignore
