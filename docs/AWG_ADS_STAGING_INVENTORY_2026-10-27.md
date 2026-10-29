@@ -1,21 +1,44 @@
-# AWG Ads managed staging — verified state, 28 October 2026
+# AWG Ads managed staging — verified state, 29 October 2026
 
-Status: PARTIAL. Production table-read denial and one-time retention are verified. CRM staging SQL compilation blocks synthetic lead commits and reconciliation. Physical E2E/deployment rollback remain blocked; see 28 October acceptance evidence below.
+Status: managed dual-YDB data-plane acceptance PASS. Physical Telegram/VK E2E and deployment rollback remain NOT VERIFIED.
 Production deployment, real customer records, production Telegram/VK configuration and paid advertising were not modified by this workstream.
 
 ## Current acceptance summary
 | Check | Verified outcome |
 |---|---|
 | Dedicated SA production data boundary | Explicit native table-read denial PASS |
-| Ads schema / CRM staging schema | 9 Ads + 13 CRM tables verified |
-| Ads subject/event persistence | Synthetic old/current fixtures written and read back |
-| Application CRM lead commits / attribution across two DBs | BLOCKED before commit by CRM SQL compilation timeout |
-| One-time retention | PASS; expired fixture removed, fresh fixture preserved, audit read back |
-| One-time reconciliation | Invoked, FAILED on CRM reads; failure audit read back |
-| Worker lease cleanup | PASS; no remaining leases |
-| Physical Telegram/VK E2E | Not performed; dedicated test configuration/runtime missing and Telegram sign-in blocked by auto-review |
+| Ads schema / CRM staging schema | 9 Ads + 13 CRM application tables verified; 2 additional CRM diagnostic canaries |
+| Attribution and normalized CRM persistence across two DBs | PASS, real synthetic CRM commit + Ads receipt readback |
+| Attribution correctness | PASS, forged client attribution stripped, immutable campaign, idempotent receipts, VK excluded |
+| One-time reconciliation | PASS, missing committed-lead receipt recovered; durable success audit |
+| One-time retention | PASS, expired synthetic subject/event deleted, current CRM lead preserved |
+| Worker lease exclusion / cleanup | PASS, competing owner rejected and no remaining leases |
+| Feature flag rollback smoke | PASS, bridge off/on boundary only |
+| Physical Telegram/VK E2E | Not performed; dedicated test configuration/runtime missing and personal Telegram sign-in not authorized |
 | Deployment rollback | Not performed; no isolated Ads runtime revision deployed |
 
+## Recovery and acceptance — 29 October 2026
+
+User decision: resolve within our staging workstream without contacting Yandex support. No support message was sent.
+
+The historical SQL timeout is no longer reproducible. Do not claim that an application change fixed its internal cause: the existing CRM tables, IAM grants, runtime timeouts and database settings were unchanged before their successful reads. The diagnostic native canary table was created before existing-table SQL probes; its creation is not proven to be the recovery trigger.
+
+Diagnostic run [40856450291](https://github.com/mirozdanie6v/autoworld/actions/runs/40856450291), job 123388662829, completed SUCCESS. CRM native SQL auto_sale_state 197 ms, auto_sale_leads 188 ms; QueryService synthetic UPSERT 529 ms and readback 513 ms. Native schema and YQL schema creation both passed. Added only two synthetic diagnostic tables in CRM staging: awg_qa_compile_canary_20261029 (one synthetic row) and awg_qa_compile_yql_20261029. Existing application tables were not altered or recreated. Cloud Console independently completed SELECT id FROM auto_sale_state WHERE id=1ul.
+
+Two separate acceptance-harness defects became visible after SQL recovered:
+- Replay fixture changed the command id but retained the original input.id. The real CRM correctly returned HTTP 400 (entity_id_locked). Commit e318d3c synchronizes both IDs.
+- Every acceptance run generates a new ephemeral HMAC key while earlier synthetic CRM leads remained durable. Reconciliation under the new key correctly rejected immutable event/subject collisions from old runs. Commit 5c88a50 removes only exact prior fixtures owned by this test before creating new ones: strict L-ADS-(QA|REPLAY)-32hex ID, exact synthetic name/contact, telegram provider and 999-prefixed synthetic identity. Cleanup uses normal CRM version checks and rejects dependencies. Event collision protections are unchanged; old Ads receipts remain available for audit/normal retention. No production records are targets.
+
+Managed acceptance [40857056369](https://github.com/mirozdanie6v/autoworld/actions/runs/40857056369), attempt 1 job123390546864: SUCCESS at 10:24 UTC / 17:24 Asia/Saigon. Three exact prior synthetic CRM fixtures were removed using CAS. Two new fixtures persisted; reconciliation scanned 2, errors 0, completed and restored the deliberately missed receipt. Retention completed in one batch. Both durable current-run success audits and empty lease table were asserted.
+
+AWG_MANAGED_STAGING_ACCEPTANCE_PASS:
+managedDatabases=true, productionTableReadDenied=true, realCrmCommit=true, idempotentReceipts=true, immutableCampaign=true, vkExcluded=true, managedLeaseExclusion=true, reconciliationRecoveredReceipt=true, retentionRemovedExpiredFixture=true, jobAuditReadback=true, jobLeasesReleased=true, managedJobs=true, featureFlagRollbackSmoke=true; physicalTelegramVk=false, deploymentRollback=false.
+
+Code regression CI for commit5c88a50: Stage B [40857066775](https://github.com/mirozdanie6v/autoworld/actions/runs/40857066775) SUCCESS and AutoWorld [40857066583](https://github.com/mirozdanie6v/autoworld/actions/runs/40857066583) SUCCESS.
+
+The existing 28 October support draft below is historical and is not an active next step. Repeated acceptance is being checked separately to validate fixture isolation across fresh HMAC keys. Continuous schedules remain disabled.
+
+## Historical inventory and investigation
 
 ## Completed and independently verified
 - Cloud b1ggsmuiq7tb2d27f89q; actual folder b1g8u8vqkgehvtbj8n13. Corrected inventory workflows that previously used cloud ID as folderId.
