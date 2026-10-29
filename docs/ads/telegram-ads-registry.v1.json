@@ -1,0 +1,246 @@
+{
+  "schemaVersion": 1,
+  "preparedAt": "2026-10-29",
+  "project": "AutoWorld",
+  "status": "prepared_off_platform",
+  "launchAuthorized": false,
+  "paymentAuthorized": false,
+  "reseller": "eLama",
+  "accountId": null,
+  "platformAccountVerified": false,
+  "botUsername": "AutoWorld_Georgia_bot",
+  "plannedTotalCapRub": 30000,
+  "allocatedBudgetRub": 0,
+  "autoTopup": false,
+  "attributionContract": {
+    "reviewedBranch": "feature/awg-ads-stage-b-integration",
+    "module": "server/ads-attribution-core.mjs",
+    "tokenPattern": "^[A-Za-z0-9_-]{24,64}$",
+    "issuedTokenLength": 32,
+    "provisioningMethod": "issueCampaign({campaignId,adId,creativeId})",
+    "rawTokensInGit": false,
+    "format": "https://t.me/AutoWorld_Georgia_bot?start=<issued_token>",
+    "contractReview": "compatible_with_reviewed_code",
+    "runtimeRegistration": "pending",
+    "integrationAcceptance": "pending",
+    "platformIds": "separate from internal IDs; populate after draft creation"
+  },
+  "campaigns": [
+    {
+      "campaignId": "awg-tg-ru-georgia-v1",
+      "name": "AWG | TG | RU | Авто из Грузии | v1",
+      "language": "ru",
+      "market": "RU",
+      "targetingMode": "channel_context_proposed",
+      "audienceHypothesis": "Автомобили в Грузии; подбор и импорт в РФ",
+      "platformCampaignId": null,
+      "status": "off_platform_draft",
+      "allocatedBudgetRub": 0,
+      "plannedSharePercent": 40,
+      "placementsStatus": "candidate_only_not_platform_validated",
+      "ads": [
+        {
+          "adId": "awg-tg-ru-georgia-a1-v1",
+          "creativeId": "awg-tg-georgia-text1-v1",
+          "text": "Автомобили из Грузии в AutoWorld. Выберите модель в каталоге и отправьте заявку на расчёт стоимости автомобиля и доставки.",
+          "characterCount": 122,
+          "platformAdId": null,
+          "destinationUrl": null,
+          "tokenHash": null,
+          "linkStatus": "awaiting_runtime_provisioning",
+          "status": "off_platform_draft",
+          "enabled": false,
+          "allocatedBudgetRub": 0
+        },
+        {
+          "adId": "awg-tg-ru-georgia-a2-v1",
+          "creativeId": "awg-tg-georgia-text2-v1",
+          "text": "Планируете купить автомобиль из Грузии? Сравните варианты в каталоге AutoWorld и запросите расчёт у менеджера.",
+          "characterCount": 110,
+          "platformAdId": null,
+          "destinationUrl": null,
+          "tokenHash": null,
+          "linkStatus": "awaiting_runtime_provisioning",
+          "status": "off_platform_draft",
+          "enabled": false,
+          "allocatedBudgetRub": 0
+        }
+      ]
+    },
+    {
+      "campaignId": "awg-tg-ru-usa-v1",
+      "name": "AWG | TG | RU | Аукционы США | v1",
+      "language": "ru",
+      "market": "RU",
+      "targetingMode": "channel_context_proposed",
+      "audienceHypothesis": "Авто из США; аукционы; импорт в РФ",
+      "platformCampaignId": null,
+      "status": "off_platform_draft",
+      "allocatedBudgetRub": 0,
+      "plannedSharePercent": 30,
+      "placementsStatus": "candidate_only_not_platform_validated",
+      "ads": [
+        {
+          "adId": "awg-tg-ru-usa-a1-v1",
+          "creativeId": "awg-tg-usa-text1-v1",
+          "text": "Автомобили с аукционов США в AutoWorld. Откройте каталог, выберите автомобиль и отправьте заявку на расчёт покупки и доставки.",
+          "characterCount": 126,
+          "platformAdId": null,
+          "destinationUrl": null,
+          "tokenHash": null,
+          "linkStatus": "awaiting_runtime_provisioning",
+          "status": "off_platform_draft",
+          "enabled": false,
+          "allocatedBudgetRub": 0
+        },
+        {
+          "adId": "awg-tg-ru-usa-a2-v1",
+          "creativeId": "awg-tg-usa-text2-v1",
+          "text": "Рассматриваете автомобиль из США? Посмотрите варианты в AutoWorld и обсудите с менеджером стоимость покупки и доставки.",
+          "characterCount": 119,
+          "platformAdId": null,
+          "destinationUrl": null,
+          "tokenHash": null,
+          "linkStatus": "awaiting_runtime_provisioning",
+          "status": "off_platform_draft",
+          "enabled": false,
+          "allocatedBudgetRub": 0
+        }
+      ]
+    },
+    {
+      "campaignId": "awg-tg-ru-budget-v1",
+      "name": "AWG | TG | RU | Выбор по бюджету | v1",
+      "language": "ru",
+      "market": "RU",
+      "targetingMode": "channel_context_proposed",
+      "audienceHypothesis": "Покупка автомобиля; обзоры; сравнения моделей",
+      "platformCampaignId": null,
+      "status": "off_platform_draft",
+      "allocatedBudgetRub": 0,
+      "plannedSharePercent": 20,
+      "placementsStatus": "candidate_only_not_platform_validated",
+      "ads": [
+        {
+          "adId": "awg-tg-ru-budget-a1-v1",
+          "creativeId": "awg-tg-budget-text1-v1",
+          "text": "Подбираете автомобиль под свой бюджет? Откройте каталог AutoWorld, сравните варианты и запросите расчёт по выбранной машине.",
+          "characterCount": 124,
+          "platformAdId": null,
+          "destinationUrl": null,
+          "tokenHash": null,
+          "linkStatus": "awaiting_runtime_provisioning",
+          "status": "off_platform_draft",
+          "enabled": false,
+          "allocatedBudgetRub": 0
+        },
+        {
+          "adId": "awg-tg-ru-budget-a2-v1",
+          "creativeId": "awg-tg-budget-text2-v1",
+          "text": "От выбора автомобиля к расчёту покупки. В AutoWorld можно посмотреть каталог и передать заявку менеджеру прямо в Telegram.",
+          "characterCount": 122,
+          "platformAdId": null,
+          "destinationUrl": null,
+          "tokenHash": null,
+          "linkStatus": "awaiting_runtime_provisioning",
+          "status": "off_platform_draft",
+          "enabled": false,
+          "allocatedBudgetRub": 0
+        }
+      ]
+    },
+    {
+      "campaignId": "awg-tg-ru-auto-media-v1",
+      "name": "AWG | TG | RU | Автомобильные каналы | v1",
+      "language": "ru",
+      "market": "RU",
+      "targetingMode": "channel_context_proposed",
+      "audienceHypothesis": "Широкий автомобильный интерес; отдельная контрольная группа",
+      "platformCampaignId": null,
+      "status": "off_platform_draft",
+      "allocatedBudgetRub": 0,
+      "plannedSharePercent": 10,
+      "placementsStatus": "candidate_only_not_platform_validated",
+      "ads": [
+        {
+          "adId": "awg-tg-ru-auto-media-a1-v1",
+          "creativeId": "awg-tg-auto-media-text1-v1",
+          "text": "Автомобиль из США или Грузии? Посмотрите каталог AutoWorld и отправьте заявку на расчёт по понравившемуся варианту.",
+          "characterCount": 115,
+          "platformAdId": null,
+          "destinationUrl": null,
+          "tokenHash": null,
+          "linkStatus": "awaiting_runtime_provisioning",
+          "status": "off_platform_draft",
+          "enabled": false,
+          "allocatedBudgetRub": 0
+        },
+        {
+          "adId": "awg-tg-ru-auto-media-a2-v1",
+          "creativeId": "awg-tg-auto-media-text2-v1",
+          "text": "Выбирайте автомобиль в Telegram: каталог AutoWorld, характеристики и заявка на расчёт. Откройте бота и посмотрите варианты.",
+          "characterCount": 123,
+          "platformAdId": null,
+          "destinationUrl": null,
+          "tokenHash": null,
+          "linkStatus": "awaiting_runtime_provisioning",
+          "status": "off_platform_draft",
+          "enabled": false,
+          "allocatedBudgetRub": 0
+        }
+      ]
+    }
+  ],
+  "placementCandidates": [
+    {
+      "url": "https://t.me/drom",
+      "group": "auto-media",
+      "evidence": "https://t.me/drom",
+      "availability": "not_checked_in_ads_account"
+    },
+    {
+      "url": "https://t.me/autoruonline",
+      "group": "auto-media",
+      "evidence": "https://t.me/s/autoruonline",
+      "availability": "not_checked_in_ads_account"
+    }
+  ],
+  "reporting": {
+    "dimensions": [
+      "campaignId",
+      "adId",
+      "creativeId",
+      "platformAccountId",
+      "platformAdId",
+      "reportDate",
+      "currency"
+    ],
+    "funnel": [
+      "bot_start",
+      "miniapp_open",
+      "vehicle_view",
+      "lead_submit",
+      "manager_contact"
+    ],
+    "paidMetrics": [
+      "impressions",
+      "clicks",
+      "spend"
+    ],
+    "missingPaidMetrics": null,
+    "botStartIsClick": false,
+    "cplRequires": "verified spend and deduplicated leads over aligned reporting window"
+  },
+  "blockers": [
+    "eLama authentication/account ownership unverified",
+    "Advertiser legal entity and account requisites not supplied/verified",
+    "Placement availability and RU targeting not verified in account",
+    "Runtime token provisioning and end-to-end attribution acceptance pending",
+    "CPM and reseller all-in quote pending; no budget increase authorized",
+    "Physical Telegram/VK E2E and deployment rollback not verified by integration workstream"
+  ],
+  "sources": [
+    "https://help.elama.ru/article/47816",
+    "https://ads.telegram.org/guidelines"
+  ]
+}
