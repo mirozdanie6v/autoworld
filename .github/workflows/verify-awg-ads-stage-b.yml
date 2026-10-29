@@ -1,0 +1,87 @@
+name: Verify AWG Ads Stage B (isolated; no deployment)
+on:
+  push:
+    branches: [feature/awg-ads-stage-b-integration]
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server/ads-*'
+      - 'server/telegram-bot.mjs'
+      - 'server/yandex-server.mjs'
+      - 'server/auto-sale-access.mjs'
+      - 'public/auto-sale-bootstrap.mjs'
+      - 'public/auto-sale-ads-telemetry.mjs'
+      - 'public/auto-sale-ads-director.mjs'
+      - 'tests/ads-*'
+      - 'tests/awg-ads-*'
+      - '.github/workflows/verify-awg-ads-stage-b.yml'
+      - '.github/workflows/audit-awg-ads-managed-staging.yml'
+      - '.github/workflows/run-awg-ads-staging-maintenance.yml'
+      - 'scripts/run-awg-ads-staging-operations.mjs'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-stage-b:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: awg_runtime_test
+          POSTGRES_USER: awg_test
+          POSTGRES_PASSWORD: ci-test-only-password
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U awg_test -d awg_runtime_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      AWG_TEST_DATABASE_URL: postgresql://awg_test:ci-test-only-password@localhost:5432/awg_runtime_test
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - name: Verify locked dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Verify Stage B runtime, bot, and tests syntax
+        run: |
+          node --check server/ads-attribution-stage-b.mjs
+          node --check server/ads-stage-b-runtime.mjs
+          node --check server/ads-stage-b-reconciliation.mjs
+          node --check server/ads-stage-b-cross-store-erasure.mjs
+          node --check server/ads-stage-b-scheduled-jobs.mjs
+          node --check scripts/prepare-awg-ads-stage-b-staging.mjs
+          node --check public/auto-sale-ads-telemetry.mjs
+          node --check public/auto-sale-ads-director.mjs
+          node --check server/ads-stage-b-director.mjs
+          node --check server/telegram-bot.mjs
+          node --check server/yandex-server.mjs
+          node --check tests/awg-ads-stage-b.test.mjs
+          node --check tests/awg-ads-stage-b-reconcile.test.mjs
+          node --check scripts/test-awg-ads-stage-b-local-ydb.mjs
+          node --check scripts/run-awg-ads-staging-operations.mjs
+      - name: Stage A and Stage B isolated tests
+        run: |
+          node --test tests/ads-attribution*.test.mjs tests/awg-ads-*.test.mjs tests/auto-sale-ads-telegram-hook.test.mjs
+      - name: Full app, Telegram relay and frontend regressions
+        run: npm run check
+      - name: Ensure no production configuration or deploy changed
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          git diff --name-only origin/main...HEAD | while IFS= read -r file; do
+            case "$file" in
+              server/ads-*|server/telegram-bot.mjs|server/yandex-server.mjs|server/auto-sale-access.mjs|public/auto-sale-bootstrap.mjs|public/auto-sale-ads-telemetry.mjs|public/auto-sale-ads-director.mjs|tests/ads-*|tests/awg-ads-*|scripts/test-awg-ads-local-ydb.mjs|scripts/test-awg-ads-stage-b-local-ydb.mjs|scripts/test-awg-ads-managed-staging.mjs|scripts/test-awg-ads-maintenance-staging.mjs|scripts/prepare-awg-ads-stage-b-staging.mjs|scripts/awg-ads-schema-inspection.mjs|package.json|package-lock.json|docs/AWG_ADS_ATTRIBUTION_STAGE_A.md|docs/AWG_ADS_STAGE_B.md|docs/AWG_ADS_STAGE_B_OPERATIONS.md|docs/AWG_ADS_STAGING_INVENTORY_2026-10-27.md|.github/workflows/verify-awg-ads-*.yml|.github/workflows/diagnose-awg-ads-query-staging.yml|.github/workflows/audit-awg-ads-managed-staging.yml|.github/workflows/audit-awg-ads-yandex-staging-readonly.yml|.github/workflows/run-awg-ads-staging-maintenance.yml|scripts/run-awg-ads-staging-operations.mjs) ;;
+              *) echo "::error::Unexpected production-sensitive diff: $file"; exit 1;;
+            esac
+          done
+          echo "No deploy workflow, frontend entrypoint, main or production config modified."

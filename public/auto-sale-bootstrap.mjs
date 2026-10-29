@@ -392,5 +392,21 @@ const appRoot=document.querySelector('#app');
 if(appRoot)new MutationObserver(()=>queueMicrotask(normalizeSettledPaymentField)).observe(appRoot,{childList:true,subtree:true});
 document.addEventListener('input',event=>{if(event.target?.closest?.('#orderForm'))queueMicrotask(normalizeSettledPaymentField)},true);
 void vkShellPromise;
-void initialStatePromise;
+// The server allows event collection only for a verified Telegram session
+// and an explicitly enabled isolated Stage B feature. VK never loads it.
+void initialStatePromise.then(async state=>{
+  if(state?._adsTrackingEnabled&&telegramInitData()){
+    const telemetry=await import('./auto-sale-ads-telemetry.mjs');
+    telemetry.startAdsTelemetry({
+      authHeaders,fetchImpl:window.fetch.bind(window),root:document
+    });
+  }
+  if(state?._adsDirectorEnabled&&telegramInitData()){
+    const module=await import('./auto-sale-ads-director.mjs');
+    module.mountAdsDirectorReport({
+      root:document.querySelector('#app'),documentObj:document,
+      authHeaders,fetchImpl:window.fetch.bind(window)
+    });
+  }
+}).catch(()=>{});
 scheduleNonCriticalScripts();

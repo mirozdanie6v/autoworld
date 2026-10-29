@@ -1,0 +1,117 @@
+name: AWG Ads managed staging jobs (gated, NO production)
+on:
+  push:
+    branches: [feature/awg-ads-stage-b-integration]
+    paths:
+      - .github/workflows/run-awg-ads-staging-maintenance.yml
+      - scripts/run-awg-ads-staging-operations.mjs
+  workflow_dispatch:
+    inputs:
+      kind:
+        description: Isolated staging maintenance job
+        required: true
+        type: choice
+        options: [reconciliation, retention]
+  # These schedules are inactive until this reviewed workflow is merged
+  # into the default branch and explicitly enabled via staging variables.
+  schedule:
+    - cron: '*/15 * * * *'
+    - cron: '17 3 * * *'
+
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: awg-ads-staging-maintenance
+  cancel-in-progress: false
+
+jobs:
+  syntax-only:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      - name: Verify staging CLI syntax (no cloud credentials or resources)
+        run: |
+          set -euo pipefail
+          node --check scripts/run-awg-ads-staging-operations.mjs
+          echo 'STAGING_SCHEDULER_SYNTAX_OK'
+  managed-staging:
+    if: github.event_name != 'push' && vars.AWG_ADS_STAGING_MAINTENANCE_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    environment: awg-ads-staging
+    timeout-minutes: 15
+    env:
+      AWG_ADS_MANAGED_STAGING_ENABLED: 'true'
+      AWG_ADS_STAGE_B_MODE: isolated-staging
+      AWG_ADS_STAGING_IAM_VERIFIED: ${{ vars.AWG_ADS_STAGING_IAM_VERIFIED || 'false' }}
+      AWG_ADS_STAGING_YDB_CONNECTION_STRING: ${{ secrets.AWG_ADS_STAGING_YDB_CONNECTION_STRING }}
+      AWG_ADS_STAGING_CRM_YDB_CONNECTION_STRING: ${{ secrets.AWG_ADS_STAGING_CRM_YDB_CONNECTION_STRING }}
+      AWG_ADS_PRODUCTION_DB_PATH: ${{ vars.AWG_ADS_PRODUCTION_DB_PATH }}
+      AWG_ADS_STAGING_APPROVED_DATABASE_PATHS: ${{ vars.AWG_ADS_STAGING_APPROVED_DATABASE_PATHS }}
+      AWG_ADS_STAGING_SCHEDULER_PRINCIPAL: ${{ vars.AWG_ADS_STAGING_SCHEDULER_PRINCIPAL }}
+      AWG_ADS_STAGING_RETENTION_APPROVED: ${{ vars.AWG_ADS_STAGING_RETENTION_APPROVED || 'false' }}
+      AWG_ADS_STAGE_B_SUBJECT_SECRET: ${{ secrets.AWG_ADS_STAGE_B_SUBJECT_SECRET }}
+      YC_STAGING_SA_ID: ${{ vars.AWG_ADS_STAGING_SA_ID }}
+      JOB_INPUT: ${{ inputs.kind || 'reconciliation' }}
+      EVENT_CRON: ${{ github.event.schedule }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Enforce dedicated staging identity and reviewed database inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = 'mirozdanie6v/autoworld'
+          test -n "$YC_STAGING_SA_ID"
+          test "$AWG_ADS_STAGING_IAM_VERIFIED" = true
+          test -n "$AWG_ADS_STAGING_YDB_CONNECTION_STRING"
+          test -n "$AWG_ADS_STAGING_CRM_YDB_CONNECTION_STRING"
+          test -n "$AWG_ADS_PRODUCTION_DB_PATH"
+          test -n "$AWG_ADS_STAGING_APPROVED_DATABASE_PATHS"
+          test -n "$AWG_ADS_STAGE_B_SUBJECT_SECRET"
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Obtain short-lived GitHub OIDC token for dedicated staging SA
+        uses: actions/github-script@v7
+        id: oidc
+        with:
+          script: |
+            const token=await core.getIDToken('https://github.com/mirozdanie6v')
+            core.setSecret(token)
+            core.setOutput('token',token)
+      - name: Exchange OIDC with Yandex IAM (staging identity only)
+        shell: bash
+        env:
+          GITHUB_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        run: |
+          set -euo pipefail
+          RESPONSE=$(curl -sS --connect-timeout 10 --max-time 30 -w '\n%{http_code}' \
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            --data-urlencode 'grant_type=urn:ietf:params:oauth:grant-type:token-exchange' \
+            --data-urlencode 'requested_token_type=urn:ietf:params:oauth:token-type:access_token' \
+            --data-urlencode "audience=$YC_STAGING_SA_ID" \
+            --data-urlencode "subject_token=$GITHUB_OIDC_TOKEN" \
+            --data-urlencode 'subject_token_type=urn:ietf:params:oauth:token-type:id_token' \
+            https://auth.yandex.cloud/oauth/token)
+          STATUS=$(printf '%s' "$RESPONSE" | tail -n1)
+          test "$STATUS" = 200 || { echo "::error::Dedicated staging Yandex federation failed (HTTP $STATUS)"; exit 1; }
+          TOKEN=$(printf '%s' "$RESPONSE" | sed '$d' | jq -er '.access_token')
+          echo "::add-mask::$TOKEN"
+          echo "YDB_ACCESS_TOKEN_CREDENTIALS=$TOKEN" >> "$GITHUB_ENV"
+      - name: Run authorized scheduled job on explicitly allowlisted staging YDBs
+        shell: bash
+        run: |
+          set -euo pipefail
+          KIND="$JOB_INPUT"
+          if [ "$EVENT_CRON" = '17 3 * * *' ]; then KIND=retention; fi
+          case "$KIND" in reconciliation|retention) ;; *) exit 2 ;; esac
+          node scripts/run-awg-ads-staging-operations.mjs "$KIND"
+          echo "Managed isolated staging $KIND completed successfully." >> "$GITHUB_STEP_SUMMARY"
