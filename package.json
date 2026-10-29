@@ -9,7 +9,7 @@
   "scripts": {
     "clean": "rm -rf dist",
     "build": "node scripts/build-autoworld.mjs",
-    "test": "node --test tests/auto-sale*.test.mjs tests/ydb*.test.mjs tests/yandex-state-sync.test.mjs tests/object-storage.test.mjs tests/migration-backup.test.mjs tests/postgres-runtime.test.mjs tests/s3-storage.test.mjs tests/timeweb-provision.test.mjs",
+    "test": "node --test tests/auto-sale*.test.mjs tests/ydb*.test.mjs tests/yandex-state-sync.test.mjs tests/object-storage.test.mjs tests/migration-backup.test.mjs tests/postgres-runtime.test.mjs tests/s3-storage.test.mjs tests/timeweb-provision.test.mjs tests/awg-price-safe-import.test.mjs",
     "test:relay": "npm --prefix cloudflare/telegram-relay test",
     "check": "npm run check:browser-syntax && npm run clean && npm run build && npm test && npm run test:relay",
     "start:yandex": "node server/yandex-server.mjs",
