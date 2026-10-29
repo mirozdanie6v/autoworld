@@ -47,7 +47,7 @@ const currentByVin=new Map();
 for(const c of liveByPost.values()){const v=id(c.vin).toUpperCase();if(v)currentByVin.set(v,c);}
 for(const s of recent){
   const v=id(s.vin).toUpperCase(),actual=v?currentByVin.get(v):null;
-  if(!actual||id(actual.sourcePostId)===id(s.sourcePostId))continue;
+  if(!actual||Number(s.sourcePostId)<=Number(actual.sourcePostId))continue;
   const p=extractSourcePrices(s.rawText||'');
   if(!p.priceRub||!n(actual.priceRub)||p.priceRub===n(actual.priceRub))continue;
   reposts.push({vin:v,appPostId:id(actual.sourcePostId),newPostId:id(s.sourcePostId),
