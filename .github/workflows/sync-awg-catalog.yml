@@ -31,6 +31,8 @@ jobs:
     steps:
       - name: Checkout canonical AutoWorld
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 2 # required to diff HEAD against parent, not entire shallow tree
 
       - uses: actions/setup-node@v5
         with:
@@ -49,6 +51,7 @@ jobs:
           # Only the checked-out HEAD commit can select a destructive
           # price-reconcile operation; webhook file arrays may be stale or
           # include other commits. Fail closed on missing commit paths.
+          subprocess.check_output(['git','rev-parse','HEAD^'],text=True)
           commit_files=subprocess.check_output(
               ['git','show','--pretty=format:','--name-only','HEAD'],text=True
           ).splitlines()
