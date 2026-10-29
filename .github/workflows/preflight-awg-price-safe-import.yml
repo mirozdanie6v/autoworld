@@ -36,6 +36,7 @@ jobs:
             | jq '[.catalog[]? | select(.source == "AutoWorld_Georgia")]' \
             > /tmp/awg-price-safe/live.json
           test "$(jq length /tmp/awg-price-safe/live.json)" -ge 150
+          cp /tmp/awg-price-safe/live.json /tmp/awg-price-safe/cars.json
       - name: Scrape freshest Telegram captions (no uploads)
         env:
           OUT_DIR: /tmp/awg-price-safe
