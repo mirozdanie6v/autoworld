@@ -1,3 +1,4 @@
 canonical RU import cutover
 verify production OIDC import after deploy
 source-price-vin-safe-release=2026-10-30
+run-price-fix=2026-10-30-v2
