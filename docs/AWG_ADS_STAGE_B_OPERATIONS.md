@@ -1,5 +1,54 @@
 # AutoWorld Ads B — staging / operations / acceptance log
 
+## Integrated staging release candidate — 29 October 2026
+
+User scope: combine Ads with current AutoWorld and prepare release; prioritize Telegram and create a separate test bot. Existing VK may be used as a test integration. Production/main, existing production Telegram webhook and real lead writes remain outside this release preparation.
+
+- Main baseline: 6ece88ced344b6789921f3a3a120a3c641ae36d2.
+- Ads source: 4c978df33701496da3ec6ee52f7a28344af6e4b7.
+- Integration commit: 8d58c9b1962d80e225ba52816f1db5e0c1ac0535, exact two parents above.
+- Release branch: release/awg-ads-staging-20261029; [draft PR107](https://github.com/mirozdanie6v/autoworld/pull/107).
+- Original feature branch was fast-forwarded to the integrated source; no history rewrite and no main update. Both branches retain all current-main work.
+- verify-awg-ads-release.yml builds the lockfile-based Dockerfile.timeweb portable image, verifies Ads server/frontend modules and default-OFF, then saves the image archive + SHA256 + source manifest as a GitHub Actions artifact for 7 days. It has contents:read only; no credentials, registry push, IAM token or deployment step.
+- Existing Yandex/portable image builds and full current-main regressions are checked separately by Verify AutoWorld. Managed dual-YDB acceptance is repeated from the already authorized feature environment; no IAM/branch access expansion.
+
+### Telegram staging configuration and acceptance
+
+Create a separate bot via BotFather: display name AutoWorld QA, candidate username AutoWorld_Ads_QA_bot (availability not established). No bot has been created yet. Telegram Web access was rejected by automatic security review because opening it can expose a personal session/private chats; explicit permission for that personal-account login is still required. Do not bypass this gate.
+
+Persist its token only in a dedicated secret, e.g. AWG_ADS_STAGING_TELEGRAM_BOT_TOKEN. Map it to runtime AUTO_SALE_TELEGRAM_BOT_TOKEN. Never reuse AWG_TELEGRAM_BOT_TOKEN or commit token values. Runtime webhook verification is already derived from the bot token by createTelegramService; do not invent a second incompatible verification mechanism.
+
+The new Ads staging runtime must use:
+- YDB_CONNECTION_STRING: CRM etnvd9hmimkt74vpuqa6.
+- AWG_ADS_STAGE_B_YDB_CONNECTION_STRING: Ads etnseoqfsf7ojn52813t.
+- AWG_ADS_STAGE_B_MODE=isolated-staging and explicitly enabled AWG_ADS_STAGE_B_ENABLED for the candidate only.
+- A persistent dedicated AWG_ADS_STAGE_B_SUBJECT_SECRET, at least32 characters; never a new per-process/per-run key for durable runtime data.
+- AUTO_SALE_YDB_READ_MODE=normalized; AUTO_SALE_YDB_DUAL_WRITE=false; AUTO_SALE_LEGACY_STATE_WRITE=false.
+- AUTO_SALE_PUBLIC_DEMO_WRITE=false, explicit verified test staff identities and a separate AWG_ADS_DIRECTOR_TELEGRAM_IDS allowlist.
+- AUTO_SALE_TELEGRAM_APP_URL must be the verified Ads staging origin, not awgcars.ru. Test manager destinations only. Do not silently inherit production relay/routing/config.
+
+Register a webhook only for the new bot after runtime target, schema, health and recipients are verified. Test two campaign tokens, signed /start and Mini App initData, real lead commit + manager action, director-only report, retries and secondary Ads failure. Advertising account preparation happens in another workstream; campaign registry/link contracts must be shared via GitHub/Linear.
+
+### Existing VK — user-approved as test integration, live routing still to verify
+
+Existing repository workflows identify:
+- container autoworld-vk-web-staging / bbag75c5g7vup8sfbmop;
+- separate VK staging database etnhujtu1t6f89tdtohs;
+- origin https://vk-test.awgcars.ru.
+These are source configuration evidence, not a fresh live-revision read-back. Before any VK write, verify the active revision still points to that staging DB and approved test recipients. User approval to treat VK as test does not redirect Telegram production or authorize production CRM writes.
+
+### Concrete staged rollback sequence — prepared, NOT executed
+
+1. Capture exact current staging revision, image digest, gateway routing and secret references in the release record without printing secret values.
+2. For a newly created Ads runtime, first establish a verified baseline revision with Ads OFF and the same staging CRM/test bot. No prior Ads revision currently exists.
+3. Deploy the candidate image by immutable identity; only this candidate enables Ads. Record its revision, manifest SHA and baseline revision before testing.
+4. Roll back by redeploying the recorded baseline image/config/secret references and switching only the staging route. A new revision ID is expected; image/config must match the recorded baseline.
+5. Verify health, test-bot /start, ordinary CRM submit, VK isolation, director-report denial when Ads is OFF and absence of new Ads writes. Retain additive tables/data for audit; no DROP/reset/schema rollback or production route change.
+6. Re-enable the candidate only after baseline recovery and test data checks pass.
+
+Release package creation is not production readiness. Physical E2E, actual deployment rollback, sustained scheduler/alerts and cloud cross-store erasure remain separate acceptance gates.
+
+
 ## Current verified state — 29 October 2026; supersedes historical status below
 
 Managed dual-YDB data-plane acceptance PASS: [run40857056369](https://github.com/mirozdanie6v/autoworld/actions/runs/40857056369), job123390546864. OIDC/IAM, production table-read deny, synthetic CRM commit + Ads attribution, immutable campaign, idempotent receipts, reconciliation replay, retention, durable success audits, lease exclusion/release and feature-off/on smoke passed. No production writes or grants changed.
