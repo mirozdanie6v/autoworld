@@ -47,7 +47,14 @@ export function publicState(state){
 export function clientState(state,userIdentity){
   const identity=identityFrom(userIdentity);
   const key=identity?.key||'';
-  const leads=(Array.isArray(state?.leads)?state.leads:[]).filter(item=>leadIdentity(item)?.key===key);
+  // Advertising campaign identifiers belong to the operator's internal analytics.
+  // Do not send them to a Telegram/VK client through /state or entity reads.
+  const leads=(Array.isArray(state?.leads)?state.leads:[])
+    .filter(item=>leadIdentity(item)?.key===key)
+    .map(item=>{
+      const {adsAttribution,adsAttributionStatus,...visible}=item;
+      return visible;
+    });
   const leadIds=new Set(leads.map(item=>clean(item.id)));
   return{
     ...state,
@@ -283,12 +290,20 @@ export function applyManagerLeadClaims(state,operations,access,{now=()=>new Date
 }
 
 export function sanitizeAdminOperations(operations,{apiKey=false}={}){
-  if(apiKey)return Array.isArray(operations)?operations:[];
+  // Advertising provenance is reserved for the internal signed attribution
+  // bridge, not even an ordinary authenticated admin/API-key lead mutation.
+  // The staging reconciler uses a separate server-owned CAS write path.
+  if(apiKey)return (Array.isArray(operations)?operations:[]).map(raw=>{
+    if(raw?.resource!=='lead'||!raw.input||typeof raw.input!=='object')return raw;
+    const {adsAttribution,adsAttributionStatus,...input}=raw.input;
+    return {...raw,input};
+  });
   return (Array.isArray(operations)?operations:[]).map(raw=>{
     if(!raw?.input||typeof raw.input!=='object')return raw;
     const input={...raw.input};
     if(clean(raw.resource)==='lead'){
-      for(const key of ['firstManagerActionAt','acquisitionChannel','clientSubmittedAt'])delete input[key];
+      for(const key of ['firstManagerActionAt','acquisitionChannel','clientSubmittedAt',
+        'adsAttribution','adsAttributionStatus'])delete input[key];
       return{...raw,input};
     }
     if(clean(raw.resource)!=='team')return raw;

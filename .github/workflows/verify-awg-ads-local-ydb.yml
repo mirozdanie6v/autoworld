@@ -1,0 +1,50 @@
+name: Verify AWG Ads (real local YDB, isolated)
+on:
+  push:
+    branches: [feature/awg-ads-attribution]
+    paths:
+      - server/ads-attribution-core.mjs
+      - server/ads-attribution-ydb.mjs
+      - server/ads-attribution-report.mjs
+      - server/ads-attribution-privacy.mjs
+      - scripts/test-awg-ads-local-ydb.mjs
+      - .github/workflows/verify-awg-ads-local-ydb.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-local-ydb:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      AWG_ADS_LOCAL_YDB_TEST: 'yes'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Run an entirely local YDB server
+        run: |
+          set -euo pipefail
+          docker run -d --rm --name awg-ads-local-ydb --hostname localhost \
+            --platform linux/amd64 -p 127.0.0.1:2136:2136 \
+            -e GRPC_PORT=2136 \
+            -e YDB_USE_IN_MEMORY_PDISKS=true \
+            ydbplatform/local-ydb:latest
+          timeout 180 bash -c 'until (echo > /dev/tcp/127.0.0.1/2136) >/dev/null 2>&1; do sleep 3; done'
+          sleep 8
+      - name: Test schema, transactions, concurrency and SQL queries
+        run: node scripts/test-awg-ads-local-ydb.mjs run
+      - name: Restart only the application process and verify saved rows
+        run: node scripts/test-awg-ads-local-ydb.mjs reconnect
+      - name: Verify authorized erasure and retention against real YDB
+        run: node scripts/test-awg-ads-local-ydb.mjs privacy
+      - name: Exercise same-user contention and large (>1000) erasure on real YDB
+        run: node scripts/test-awg-ads-local-ydb.mjs load
+      - name: Stop local database
+        if: always()
+        run: docker rm -f awg-ads-local-ydb || true
