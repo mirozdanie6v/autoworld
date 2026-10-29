@@ -77,7 +77,7 @@ jobs:
             if(!existing)throw Error('target_missing_'+vin);
             const patch=items.find(x=>x.id===existing.id);
             const actual=patch?Number(patch.priceRub??existing.priceRub):Number(existing.priceRub);
-            const actualTurnkey=patch?Number(patch.russiaTurnkeyRub??existing.russiaTurnkeyRub||0):Number(existing.russiaTurnkeyRub||0);
+            const actualTurnkey=patch?Number(patch.russiaTurnkeyRub??existing.russiaTurnkeyRub??0):Number(existing.russiaTurnkeyRub||0);
             if(actual!==price||(turnkey>0&&actualTurnkey!==turnkey))
               throw Error('source_price_target_not_reconciled_'+vin);
             if(patch)for(const forbidden of ['vin','sourcePostId','photos','image','otherPhotos','active','status'])
