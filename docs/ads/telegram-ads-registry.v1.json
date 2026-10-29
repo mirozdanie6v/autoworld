@@ -2,12 +2,12 @@
   "schemaVersion": 1,
   "preparedAt": "2026-10-29",
   "project": "AutoWorld",
-  "status": "prepared_off_platform",
+  "status": "partially_created_paused",
   "launchAuthorized": false,
   "paymentAuthorized": false,
   "reseller": "eLama",
-  "accountId": null,
-  "platformAccountVerified": false,
+  "accountId": "elama-828927",
+  "platformAccountVerified": true,
   "botUsername": "AutoWorld_Georgia_bot",
   "plannedTotalCapRub": 30000,
   "allocatedBudgetRub": 0,
@@ -156,24 +156,36 @@
       "market": "RU",
       "targetingMode": "channel_context_proposed",
       "audienceHypothesis": "Широкий автомобильный интерес; отдельная контрольная группа",
-      "platformCampaignId": null,
-      "status": "off_platform_draft",
+      "platformCampaignId": "3429d682-b9c5-4b6f-8257-c25854e04e26",
+      "status": "partially_created",
       "allocatedBudgetRub": 0,
       "plannedSharePercent": 10,
-      "placementsStatus": "candidate_only_not_platform_validated",
+      "placementsStatus": "drom_resolved_in_elama",
       "ads": [
         {
           "adId": "awg-tg-ru-auto-media-a1-v1",
           "creativeId": "awg-tg-auto-media-text1-v1",
           "text": "Автомобиль из США или Грузии? Посмотрите каталог AutoWorld и отправьте заявку на расчёт по понравившемуся варианту.",
           "characterCount": 115,
-          "platformAdId": null,
-          "destinationUrl": null,
+          "platformAdId": "1",
+          "destinationUrl": "https://t.me/AutoWorld_Georgia_bot",
           "tokenHash": null,
-          "linkStatus": "awaiting_runtime_provisioning",
-          "status": "off_platform_draft",
+          "linkStatus": "temporary_base_link_requires_attribution_replacement_before_launch",
+          "status": "created_no_budget",
           "enabled": false,
-          "allocatedBudgetRub": 0
+          "allocatedBudgetRub": 0,
+          "elamaAdUuid": "c0882c0d-fe75-4787-ac05-0288e52f5bb9",
+          "pausedVerified": true,
+          "cpmEur": 1.5,
+          "dailyBudgetEur": 0,
+          "initialBudgetEur": 0,
+          "frequencyPerUserPerDay": 1,
+          "targeting": {
+            "type": "channels",
+            "channels": [
+              "https://t.me/drom"
+            ]
+          }
         },
         {
           "adId": "awg-tg-ru-auto-media-a2-v1",
@@ -188,7 +200,8 @@
           "enabled": false,
           "allocatedBudgetRub": 0
         }
-      ]
+      ],
+      "platformCampaignIdType": "elama_group_uuid"
     }
   ],
   "placementCandidates": [
@@ -232,15 +245,17 @@
     "cplRequires": "verified spend and deduplicated leads over aligned reporting window"
   },
   "blockers": [
-    "eLama authentication/account ownership unverified",
     "Advertiser legal entity and account requisites not supplied/verified",
     "Placement availability and RU targeting not verified in account",
     "Runtime token provisioning and end-to-end attribution acceptance pending",
     "CPM and reseller all-in quote pending; no budget increase authorized",
-    "Physical Telegram/VK E2E and deployment rollback not verified by integration workstream"
+    "Physical Telegram/VK E2E and deployment rollback not verified by integration workstream",
+    "Explicit ad-level terms confirmation requested after automatic review rejection; 7 ads not created"
   ],
   "sources": [
     "https://help.elama.ru/article/47816",
     "https://ads.telegram.org/guidelines"
-  ]
+  ],
+  "accountStatus": "issued",
+  "accountBalanceEur": 0
 }
