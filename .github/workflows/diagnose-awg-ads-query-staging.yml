@@ -1,4 +1,4 @@
-name: Diagnose AWG Ads query service (read-only staging)
+name: Diagnose AWG CRM schema and SQL (synthetic staging only)
 on:
   push:
     branches: [feature/awg-ads-stage-b-integration]
@@ -74,60 +74,75 @@ jobs:
             }
       - name: Install locked dependencies
         run: npm ci --ignore-scripts --no-audit --no-fund
-      - name: Compare QueryService with SchemeService without writes
-        timeout-minutes: 3
+      - name: Probe native-created CRM schema against isolated synthetic canaries
+        timeout-minutes: 4
         shell: bash
         run: |
           node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
           import {Driver} from '@ydbjs/core';
           import {query} from '@ydbjs/query';
           import {fromBinary} from '@bufbuild/protobuf';
-          import {TableServiceDefinition,CreateSessionResultSchema} from '@ydbjs/api/table';
+          import {TableServiceDefinition,CreateSessionResultSchema,DescribeTableResultSchema} from '@ydbjs/api/table';
+          import {Type_PrimitiveTypeId as P} from '@ydbjs/api/value';
           import {AccessTokenCredentialsProvider} from '@ydbjs/auth/access-token';
-          import {inspectAdsStagingTables} from './scripts/awg-ads-schema-inspection.mjs';
-          import {ADS_ATTRIBUTION_TABLES} from './server/ads-attribution-ydb.mjs';
+          const connection=process.env.YDB_CONNECTION_STRING;
+          const path='/ru-central1/b1ggsmuiq7tb2d27f89q/etnvd9hmimkt74vpuqa6';
+          assert.equal(new URL(connection).searchParams.get('database'),path);
           const credentialsProvider=new AccessTokenCredentialsProvider({token:process.env.YDB_ACCESS_TOKEN_CREDENTIALS});
-          let failures=0;
+          const driver=new Driver(connection,{credentialsProvider});
+          let failures=0,client,sessionId;
+          function status(response,label){
+           const op=response.operation;
+           if(op?.status!==400000)throw new Error(label+' '+op?.status+' '+JSON.stringify(op?.issues));
+           return op;
+          }
           async function probe(name,fn){
-            const start=Date.now();
-            try{await fn();console.log(JSON.stringify({probe:name,result:'PASS',elapsedMs:Date.now()-start}));}
-            catch(e){failures++;console.log(JSON.stringify({probe:name,result:'FAIL',elapsedMs:Date.now()-start,code:e.code??null,error:String(e.message).slice(0,500)}));}
+           const start=Date.now();
+           try{const details=await fn();console.log(JSON.stringify({probe:name,result:'PASS',elapsedMs:Date.now()-start,details}));return true;}
+           catch(e){failures++;console.log(JSON.stringify({probe:name,result:'FAIL',elapsedMs:Date.now()-start,error:String(e.message).slice(0,1200)}));return false;}
           }
-          for(const [label,connection] of [['ads',process.env.AWG_ADS_STAGE_B_YDB_CONNECTION_STRING],['crm',process.env.YDB_CONNECTION_STRING]]){
-            const driver=new Driver(connection,{credentialsProvider});
-            try{
-              await probe(label+'.discovery',()=>driver.ready());
-              const sql=query(driver);
-              await probe(label+'.constant',async()=>{const [rows]=await sql`SELECT 1 AS health`.isolation('snapshotReadOnly');if(Number(rows[0]?.health)!==1)throw new Error('unexpected_health');});
-              if(label==='ads'){
-                await probe('ads.scheme',()=>inspectAdsStagingTables(driver,new URL(connection).searchParams.get('database'),ADS_ATTRIBUTION_TABLES.concat('awg_ads_job_leases','awg_ads_job_audit')));
-                await probe('ads.original_select',async()=>{await sql`SELECT * FROM awg_ads_campaigns LIMIT 1`.isolation('snapshotReadOnly');});
-                await probe('ads.point_select',async()=>{await sql`SELECT token_hash FROM awg_ads_campaigns WHERE token_hash='diagnostic-nonexistent' LIMIT 1`.isolation('snapshotReadOnly');});
-              }
-              if(label==='crm'){
-                const native=driver.createClient(TableServiceDefinition);
-                for(const mode of ['onlineReadOnly','snapshotReadOnly']){
-                  for(const qualified of [false,true]){
-                    await probe('crm.native.'+mode+'.'+(qualified?'qualified':'relative'),async()=>{
-                      const opened=await native.createSession({});
-                      if(opened.operation?.status!==400000)throw new Error('session_'+opened.operation?.status);
-                      const sessionId=fromBinary(CreateSessionResultSchema,opened.operation.result.value).sessionId;
-                      try{
-                        const table=qualified?'`'+new URL(connection).searchParams.get('database')+'/auto_sale_state`':'auto_sale_state';
-                        const result=await native.executeDataQuery({sessionId,
-                          query:{query:{case:'yqlText',value:'SELECT id FROM '+table+' WHERE id=1ul;'}},
-                          txControl:{txSelector:{case:'beginTx',value:{txMode:{case:mode,value:{}}}},commitTx:true}
-                        },{signal:AbortSignal.timeout(25000)});
-                        const op=result.operation;
-                        if(op?.status!==400000)throw new Error('status_'+op?.status+' '+(op?.issues||[]).map(x=>x.message).join(';').slice(0,350));
-                      }finally{await native.deleteSession({sessionId}).catch(()=>{});}
-                    });
-                  }
-                }
-                await probe('crm.query.snapshot.relative',async()=>{await sql`SELECT id FROM auto_sale_state WHERE id=1ul`.isolation('snapshotReadOnly').timeout(20000);});
-              }
-            }finally{await driver.close();}
+          try{
+           await driver.ready();
+           client=driver.createClient(TableServiceDefinition);
+           sessionId=fromBinary(CreateSessionResultSchema,status(await client.createSession({}),'session').result.value).sessionId;
+           const full=path+'/awg_qa_compile_canary_20261029';
+           const primitive=id=>({type:{case:'typeId',value:id}});
+           await probe('canary.create.native',async()=>{
+            try{status(await client.describeTable({sessionId,path:full}),'exists');}
+            catch(e){
+             if(!/400070|SCHEME_ERROR|does not exist|not exist|Path does not exist/i.test(e.message))throw e;
+             status(await client.createTable({sessionId,path:full,primaryKey:['id'],columns:[
+              {name:'id',type:primitive(P.UINT64),notNull:true},
+              {name:'value',type:{type:{case:'optionalType',value:{item:primitive(P.UTF8)}}}}
+             ]},{signal:AbortSignal.timeout(25000)}),'create');
+            }
+           });
+           for(const table of ['awg_qa_compile_canary_20261029','auto_sale_state','auto_sale_leads']){
+            await probe(table+'.describe',async()=>{
+             const r=fromBinary(DescribeTableResultSchema,status(await client.describeTable({sessionId,path:path+'/'+table}),'describe').result.value);
+             return {primaryKey:r.primaryKey,columns:r.columns.map(c=>({name:c.name,notNull:c.notNull,type:c.type}))};
+            });
+            await probe(table+'.native.read',async()=>{
+             let parts=0;for await(const part of client.streamReadTable({sessionId,path:path+'/'+table,columns:['id'],rowLimit:1n},{signal:AbortSignal.timeout(15000)})){
+              if(part.status!==400000)throw new Error('stream '+part.status);parts++;
+             }assert.ok(parts);return {acknowledged:true};
+            });
+            await probe(table+'.sql.native',async()=>{
+             status(await client.executeDataQuery({sessionId,query:{query:{case:'yqlText',value:'SELECT id FROM `'+path+'/'+table+'` LIMIT 1;'}},
+              operationParams:{operationTimeout:{seconds:20n},cancelAfter:{seconds:20n}},
+              txControl:{txSelector:{case:'beginTx',value:{txMode:{case:'serializableReadWrite',value:{}}}},commitTx:true}
+             },{signal:AbortSignal.timeout(25000)}),'sql');
+            });
+           }
+           await probe('canary.sql.ddl',async()=>{await query(driver)`CREATE TABLE IF NOT EXISTS awg_qa_compile_yql_20261029 (id Uint64 NOT NULL, value Utf8, PRIMARY KEY(id))`.timeout(25000);});
+           await probe('canary.sql.read',async()=>{await query(driver)`SELECT id FROM awg_qa_compile_canary_20261029 LIMIT 1`.timeout(25000);});
+           await probe('canary.sql.write',async()=>{await query(driver)`UPSERT INTO awg_qa_compile_canary_20261029 (id,value) VALUES (1ul,'synthetic-compile-probe')`.timeout(25000);});
+           await probe('canary.sql.readback',async()=>{const [rows]=await query(driver)`SELECT value FROM awg_qa_compile_canary_20261029 WHERE id=1ul`.timeout(25000);assert.equal(String(rows[0]?.value),'synthetic-compile-probe');});
+           console.log('CRM_CANARY_DIAG_COMPLETE',JSON.stringify({failures,productionConnections:0,productionWrites:0,writeTargets:['awg_qa_compile_canary_20261029','awg_qa_compile_yql_20261029']}));
+          }finally{
+           if(sessionId)await client.deleteSession({sessionId}).catch(()=>{});
+           await driver.close();
           }
-          console.log('READ_ONLY_STAGING_DIAG_COMPLETE',JSON.stringify({failures,productionConnections:0,writes:0}));
           process.exitCode=failures?1:0;
-          NODE
+                    NODE
