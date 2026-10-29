@@ -1,20 +1,20 @@
-# AutoWorld Ads B — staging / operations / acceptance log (27.10.2026)
+# AutoWorld Ads B — staging / operations / acceptance log
 
-## Current verified state — 28 October 2026; supersedes historical status below
+## Current verified state — 29 October 2026; supersedes historical status below
 
-OIDC/IAM and inventory PASS. Dedicated native TableService production table-read deny PASS. Nine Ads tables and 13 CRM staging tables verified. No production data writes or grants were changed.
+Managed dual-YDB data-plane acceptance PASS: [run40857056369](https://github.com/mirozdanie6v/autoworld/actions/runs/40857056369), job123390546864. OIDC/IAM, production table-read deny, synthetic CRM commit + Ads attribution, immutable campaign, idempotent receipts, reconciliation replay, retention, durable success audits, lease exclusion/release and feature-off/on smoke passed. No production writes or grants changed.
 
-One-time maintenance run40658475594 physically invoked both workers: retention PASS (expired synthetic subject/event deleted, current fixture preserved, durable ok audit and lease release verified); reconciliation FAILED on CRM reads, with durable failed audit and lease release verified. Cloud Console independently shows both statuses.
+CRM SQL now works in native TableService, QueryService and owner Cloud Console. The historical compilation timeout is no longer reproducible; its internal cause is not proven. Existing CRM schema, IAM and database settings were unchanged before recovery. Do not attribute recovery to an unproven fix.
 
-Synthetic application CRM commits remain BLOCKED by SQL compilation on etnvd9hmimkt74vpuqa6. Native metadata and row reads work; SQL through both TableService and QueryService fails. Full/relative paths, read modes and bounded CRM-only restart did not resolve it. Final run40660292190 remains failed; do not claim dual-DB lead acceptance.
+Fixed two acceptance-harness bugs: inconsistent replay command/input IDs (e318d3c) and old persistent QA fixtures replayed under a new per-run HMAC key (5c88a50). Only strictly identified synthetic CRM fixtures are removed before new acceptance. Collision protections remain enabled. Two diagnostic canary tables exist only in CRM staging.
 
-Physical Telegram/VK E2E and deployment rollback are NOT VERIFIED. Dedicated Ads test integration credentials/runtime were not found. Telegram QR sign-in was rejected by automatic security review because personal-session/private-correspondence access needs separate explicit user authorization; no workaround was attempted. Continuous schedules remain disabled; this workstream did not change production. Code regression CI is green, which does not override cloud failures.
+Physical Telegram/VK E2E and deployment rollback remain NOT VERIFIED. Dedicated Ads test integration/runtime is still missing; personal Telegram sign-in has not been authorized. No support request was sent; user requested resolution without contacting Yandex. Continuous schedules remain disabled and PR #83 remains draft.
 
-Authoritative current IDs, ACL read-back, run evidence and continuation:
+Code regression CI for5c88a50: Stage B40857066775 and AutoWorld40857066583 SUCCESS.
+Authoritative inventory, exact IDs, evidence and historical investigation:
 [Managed staging inventory](AWG_ADS_STAGING_INVENTORY_2026-10-27.md).
 
-The remaining sections retain earlier implementation history and pre-recovery findings; their 401/no-resource statements are historical.
-
+## Historical implementation and pre-recovery findings
 
 ## Decision
 **PARTIAL technical PASS / NO-GO managed staging and production.**
