@@ -248,6 +248,7 @@ try{
   const vkOps=await bridge.enrichLeadOperations(sanitized.operations,{...access,authType:'vk'});
   assert.strictEqual(vkOps,sanitized.operations);
   report.realCrmCommit=true;report.idempotentReceipts=true;report.immutableCampaign=true;report.vkExcluded=true;
+  console.log('AWG_DUAL_DB_PERSISTENCE_VERIFIED',JSON.stringify({realCrmCommit:true,idempotentReceipts:true,immutableCampaign:true,vkExcluded:true}));
 
   const leases=createAdsJobLeaseStore(sql);
   const kind='reconciliation';
@@ -258,8 +259,9 @@ try{
   report.managedLeaseExclusion=true;
   // Simulate a committed CRM lead whose conversion receipt was missed.
   const replayId='L-ADS-REPLAY-'+suffix;
-  const replayOps=operations.map(op=>({...op,id:replayId,input:{...op.input}}));
-  assert.equal((await mutateAutoSaleEntityBatch({legacyStore,domainStore,operations:replayOps,prepareNotifications:null})).status,200);
+  const replayOps=operations.map(op=>({...op,id:replayId,input:{...op.input,id:replayId}}));
+  const replayCommit=await mutateAutoSaleEntityBatch({legacyStore,domainStore,operations:replayOps,prepareNotifications:null});
+  assert.equal(replayCommit.status,200,'replay fixture commit: '+String(replayCommit.data?.error||''));
   const beforeReplay=(await repository.listEvents({limit:1000})).events
     .filter(x=>x.campaignId===campaignA&&x.eventType==='lead_submit').length;
   assert.equal(beforeReplay,1);
