@@ -36,7 +36,7 @@ managedDatabases=true, productionTableReadDenied=true, realCrmCommit=true, idemp
 
 Code regression CI for commit5c88a50: Stage B [40857066775](https://github.com/mirozdanie6v/autoworld/actions/runs/40857066775) SUCCESS and AutoWorld [40857066583](https://github.com/mirozdanie6v/autoworld/actions/runs/40857066583) SUCCESS.
 
-The existing 28 October support draft below is historical and is not an active next step. Repeated acceptance is being checked separately to validate fixture isolation across fresh HMAC keys. Continuous schedules remain disabled.
+The existing 28 October support draft below is historical and is not an active next step. Repeated acceptance of the same code also passed: attempt 2 / job123391596398 completed SUCCESS at 10:26 UTC / 17:26 Asia/Saigon, removed exactly the two fixtures from attempt 1, committed two new fixtures and passed every acceptance assertion under a fresh HMAC key. Both reconciliation and retention again returned ok, with durable current-run audits and released leases. Continuous schedules remain disabled.
 
 ## Historical inventory and investigation
 
