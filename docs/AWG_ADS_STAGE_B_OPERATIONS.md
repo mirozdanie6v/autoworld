@@ -1,5 +1,24 @@
 # AutoWorld Ads B — staging / operations / acceptance log
 
+## Staff self-service attribution correction — 31 October 2026
+
+Root cause: the entities/batch endpoint used the authenticated staff/admin role for a customer-form create. sanitizeAdminOperations intentionally stripped attribution but did not bind the submitting Telegram identity; the Ads bridge correctly excluded admin mutations. Existing physical QA rows with clientCreated=true consequently had neither verified identity nor campaign.
+
+Correction:
+- Added server-only clientSubmissionAccess: only an authenticated signed Telegram admin submitting exactly one self-service lead (clientCreated=true) plus notes bound to that same lead is scoped to client validation for this command batch.
+- Normal employee-created leads (clientCreated=false), mixed/staff mutations, API keys, VK and anonymous access are unchanged.
+- sanitizeClientOperations now supplies the submitting identity/server timestamp; existing Ads lookup/immutable receipt logic uses that same effective client access. Campaign IDs and identity from browser fields remain untrusted.
+- No old user lead was backfilled: records without saved identity are insufficient evidence for historical attribution.
+
+Validation:
+- Four targeted regression tests PASS, including recorded-campaign attribution/receipt and no-campaign/no-touch behavior.
+- Exact source `f31c27314d93bb6b74dbe5dd7f8c513abcee16cd`: Verify AutoWorld41104625794 SUCCESS; isolated StageB41104625673 and41104611798 SUCCESS.
+- [Staging deploy and managed acceptance41104611945](https://github.com/mirozdanie6v/autoworld/actions/runs/41104611945), job124230712136 SUCCESS; active revision `bbamdv0bejfmljnv4b2r`, separate CRM/Ads persistence and counters PASS. The managed acceptance remains signed synthetic, not a completed physical staff customer-form submission.
+- Telegram preflight verified the dedicated bot identity and webhook pending_update_count=0. Cloud Console Ads table contained no QA-TELEGRAM physical campaign event before the new retest; do not claim the old user flow recorded a campaign.
+- A fresh registered QA start link is available from this acceptance for a controlled user retest. Close the previous Mini App, open the exact QA link, press Start, then submit one new test request.
+- Production, advertising links, paused status and zero budgets are unchanged. Physical director authorization/rollback and8 production link registrations remain separate.
+
+
 ## Physical submission investigation — 31 October 2026
 
 User reported that a submitted test request was followed by a generic save-failed notice.
