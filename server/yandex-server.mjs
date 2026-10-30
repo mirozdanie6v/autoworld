@@ -1,3 +1,4 @@
+import {clientSubmissionAccess} from './ads-client-submission-context.mjs';
 import http from 'node:http';
 import path from 'node:path';
 import {randomUUID,timingSafeEqual} from 'node:crypto';
@@ -590,10 +591,11 @@ const server=http.createServer(async(req,res)=>{
 
     if(url.pathname==='/api/auto-sale/entities/batch'&&req.method==='POST'){
       const input=await parseJson(req);
-      const {state:accessState,access}=await requestAccess(req);
-      if(access.authType==='vk-web'&&!vkWeb.isTrustedWrite(req)){json(res,{error:'origin_forbidden'},403);return}
-      if(access.role==='public'){json(res,{error:'telegram_auth_required'},401);return}
+      const {state:accessState,access:authenticatedAccess}=await requestAccess(req);
+      if(authenticatedAccess.authType==='vk-web'&&!vkWeb.isTrustedWrite(req)){json(res,{error:'origin_forbidden'},403);return}
+      if(authenticatedAccess.role==='public'){json(res,{error:'telegram_auth_required'},401);return}
       let operations=Array.isArray(input?.operations)?input.operations:[];
+      const access=clientSubmissionAccess(operations,authenticatedAccess);
       if(access.role==='client'){
         const sanitized=sanitizeClientOperations(accessState,operations,access.user,access.identity);
         if(!sanitized.ok){json(res,{error:sanitized.error},sanitized.status);return}
