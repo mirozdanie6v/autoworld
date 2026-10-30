@@ -2,7 +2,11 @@ name: AWG Ads Telegram staging deploy
 on:
   push:
     branches: [feature/awg-ads-stage-b-integration]
-    paths: [.github/workflows/awg-ads-telegram-staging-preflight.yml]
+    paths:
+      - .github/workflows/awg-ads-telegram-staging-preflight.yml
+      - scripts/deploy-awg-ads-telegram-staging.mjs
+      - server/telegram-bot.mjs
+      - tests/awg-ads-stage-b.test.mjs
   workflow_dispatch:
 permissions:
   contents: read
