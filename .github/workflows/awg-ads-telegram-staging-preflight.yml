@@ -6,6 +6,9 @@ on:
       - .github/workflows/awg-ads-telegram-staging-preflight.yml
       - scripts/deploy-awg-ads-telegram-staging.mjs
       - server/telegram-bot.mjs
+      - server/yandex-server.mjs
+      - server/ads-client-submission-context.mjs
+      - tests/awg-ads-client-submission-context.test.mjs
       - tests/awg-ads-stage-b.test.mjs
   workflow_dispatch:
 permissions:
