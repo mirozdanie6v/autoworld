@@ -1,5 +1,18 @@
 # AutoWorld Ads B — staging / operations / acceptance log
 
+## Physical submission investigation — 31 October 2026
+
+User reported that a submitted test request was followed by a generic save-failed notice.
+
+Verified independently through the owner Cloud Console (dedicated CRM staging table) and authenticated read-only HTTP state:
+- Two user-created test requests are durably present, status New, created30Oct17:42:40.984Z and17:45:49.425Z. An additional generic test request exists at17:44:43.137Z.
+- These three records do not contain Telegram identity binding or adsAttribution. They resemble the staff/admin create path; this is evidence of missing acceptance, not a proved explanation for the UI error.
+- Two isolated synthetic lead+note HTTP batch probes each returned200 and persisted successfully. The timed repeat returned ok=true in714ms. Only the probes were removed afterwards using their exact IDs/current row versions; user test requests were retained.
+- The original user-visible failure was not reproduced. No save-error fix is claimed. Capture the exact on-form error or browser diagnostics before choosing a frontend/backend correction.
+- The prior managed acceptance deliberately did not test HTTP client lead submission. This observed user request is not accepted as a successful advertising-attribution E2E.
+- Added privacy-filtered read-only staging diagnostic workflow. GitHub Actions run41101243136 was queued with no runner while investigation used Cloud Console instead. No production data/configuration changed.
+
+
 ## Current runtime acceptance — 31 October 2026, Asia/Saigon
 
 Supersedes older statements below that the dedicated bot/runtime are missing.
