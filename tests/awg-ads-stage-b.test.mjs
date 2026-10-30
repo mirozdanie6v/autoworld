@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {createHmac} from 'node:crypto';
 import assert from 'node:assert/strict';
 import {createAdsStageBBridge,verifiedAdsTelegramIdentity} from '../server/ads-attribution-stage-b.mjs';
 import {adsStageBConfiguration} from '../server/ads-stage-b-runtime.mjs';
@@ -174,5 +175,24 @@ test('manager and API-key callers cannot inject or rewrite internal ads attribut
     assert.equal(clean.input.status,'В работе');
     assert.equal('adsAttribution' in clean.input,false);
     assert.equal('adsAttributionStatus' in clean.input,false);
+  }
+});
+
+test('Telegram attribution auth rejects malformed signature suffixes and changed hashes',()=>{
+  const token='123456:isolated-ci-token';
+  const bot=createTelegramService({token});
+  const p=new URLSearchParams({auth_date:String(Math.floor(Date.now()/1000)),user:JSON.stringify({id:10050,first_name:'QA'})});
+  const check=[...p].sort(([a],[b])=>a.localeCompare(b)).map(([k,v])=>k+'='+v).join('\n');
+  const signing=createHmac('sha256','WebAppData').update(token).digest();
+  const hash=createHmac('sha256',signing).update(check).digest('hex');
+  p.set('hash',hash);
+  assert.equal(bot.validateInitData(p.toString()).ok,true);
+  assert.equal(bot.isWebhookSecretToken(bot.webhookSecretToken),true);
+  for(const bad of [hash+'x',hash+'0',hash+'00','z'+hash,hash.slice(1),(hash[0]==='0'?'1':'0')+hash.slice(1)]){
+    p.set('hash',bad);
+    assert.equal(bot.validateInitData(p.toString()).ok,false);
+  }
+  for(const suffix of ['x','0','00']){
+    assert.equal(bot.isWebhookSecretToken(bot.webhookSecretToken+suffix),false);
   }
 });
