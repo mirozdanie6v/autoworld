@@ -9,6 +9,8 @@ const money=value=>'$'+new Intl.NumberFormat('en-US',{maximumFractionDigits:0}).
 const unique=list=>[...new Set(list.map(clean).filter(Boolean))];
 
 function safeEqualHex(a,b){
+  // Buffer hex decoding silently discards malformed suffixes and odd nibbles.
+  if(!/^[a-fA-F0-9]{64}$/.test(String(a||''))||!/^[a-fA-F0-9]{64}$/.test(String(b||'')))return false;
   try{
     const left=Buffer.from(String(a||''),'hex'),right=Buffer.from(String(b||''),'hex');
     return left.length===right.length&&left.length>0&&timingSafeEqual(left,right);
