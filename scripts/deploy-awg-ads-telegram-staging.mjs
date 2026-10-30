@@ -64,7 +64,7 @@ assert.ok(revision,'staging revision not ACTIVE');
 assert.equal(revision.serviceAccountId,sa);
 assert.equal(revision.image.environment.YDB_CONNECTION_STRING,crm);
 assert.equal(revision.image.environment.AUTO_SALE_PUBLIC_DEMO_WRITE,'false');
-console.log('STAGING_BASELINE_REVISION_ACTIVE',revision.id);
+console.log('STAGING_REVISION_ACTIVE',revision.id);
 const health=await fetch(origin+'/api/health',{signal:AbortSignal.timeout(70000)});
 assert.equal(health.status,200);const h=await health.json();
 assert.equal(h.ok,true);assert.equal(h.publicDemoWrite,false);assert.equal(h.buildSha,e.GITHUB_SHA);
@@ -152,11 +152,11 @@ if(adsEnabled){
     let catalog=(state.data.catalog||[]).filter(x=>x.active!==false);
     if(!catalog.length){
       const car={id:'QA-STAGING-CAR',brand:'AutoWorld QA',model:'Тестовый автомобиль',
-        origin:'США',year:'2022',mileage:'10000',engine:'Бензин',drive:'Передний',
-        price:10000,active:true,source:'Synthetic staging QA',tag:'Тестовый автомобиль'};
+        origin:'usa',year:'2022',mileage:'10000',engine:'Бензин',drive:'Передний',
+        price:10000,image:origin+'/assets/auto-mir-hero-desktop-v3.webp',active:true,source:'Synthetic staging QA',tag:'Тестовый автомобиль'};
       const seeded=await mutateAutoSaleEntityBatch({legacyStore,domainStore,
         operations:[{resource:'catalog',operation:'create',id:car.id,input:car}],prepareNotifications:null});
-      assert.equal(seeded.status,200,'staging synthetic catalog seed');
+      assert.equal(seeded.status,200,'staging synthetic catalog seed: '+String(seeded.data?.error||''));
       catalog=[car];
     }
     const car=catalog[0];
