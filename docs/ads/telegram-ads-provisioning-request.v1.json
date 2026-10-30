@@ -1,0 +1,112 @@
+{
+  "schemaVersion": 1,
+  "requestedAt": "2026-10-31",
+  "accountId": "elama-828927",
+  "marketingIssue": "VII-193",
+  "technicalIssue": "VII-184",
+  "status": "awaiting_verified_target_runtime_registration",
+  "target": {
+    "botUsername": "AutoWorld_Georgia_bot",
+    "environment": "production",
+    "runtimeVerified": false
+  },
+  "staging": {
+    "botUsername": "auto_sale_usa_bot",
+    "containerId": "bba5hanjiq9ngu77i8p9",
+    "crmDatabaseId": "etnvd9hmimkt74vpuqa6",
+    "adsDatabaseId": "etnseoqfsf7ojn52813t",
+    "useStagingLinksInAds": false
+  },
+  "constraints": {
+    "launchAuthorized": false,
+    "paymentAuthorized": false,
+    "keepPaused": true,
+    "initialBudgetEur": 0,
+    "dailyBudgetEur": 0,
+    "rawTokensInPublicGit": false
+  },
+  "registrationMethod": "issueCampaign({campaignId,adId,creativeId})",
+  "items": [
+    {
+      "campaignId": "awg-tg-ru-georgia-v1",
+      "adId": "awg-tg-ru-georgia-a1-v1",
+      "creativeId": "awg-tg-georgia-text1-v1",
+      "platformAdId": "3",
+      "elamaAdUuid": "a1c3fab4-7a76-4e4b-9b9f-80796ab18632",
+      "tokenHash": null,
+      "registrationEvidence": null
+    },
+    {
+      "campaignId": "awg-tg-ru-georgia-v1",
+      "adId": "awg-tg-ru-georgia-a2-v1",
+      "creativeId": "awg-tg-georgia-text2-v1",
+      "platformAdId": "4",
+      "elamaAdUuid": "6da43a4c-cc61-4d4c-a036-cbc0e358e332",
+      "tokenHash": null,
+      "registrationEvidence": null
+    },
+    {
+      "campaignId": "awg-tg-ru-usa-v1",
+      "adId": "awg-tg-ru-usa-a1-v1",
+      "creativeId": "awg-tg-usa-text1-v1",
+      "platformAdId": "5",
+      "elamaAdUuid": "1ae201cc-0b65-47df-9c5c-8c98a1f85fe4",
+      "tokenHash": null,
+      "registrationEvidence": null
+    },
+    {
+      "campaignId": "awg-tg-ru-usa-v1",
+      "adId": "awg-tg-ru-usa-a2-v1",
+      "creativeId": "awg-tg-usa-text2-v1",
+      "platformAdId": "6",
+      "elamaAdUuid": "55d764d8-640b-41a3-84a5-d6f1906e05eb",
+      "tokenHash": null,
+      "registrationEvidence": null
+    },
+    {
+      "campaignId": "awg-tg-ru-budget-v1",
+      "adId": "awg-tg-ru-budget-a1-v1",
+      "creativeId": "awg-tg-budget-text1-v1",
+      "platformAdId": "7",
+      "elamaAdUuid": "8a770f64-2258-4ac8-b16d-9e897cce29bb",
+      "tokenHash": null,
+      "registrationEvidence": null
+    },
+    {
+      "campaignId": "awg-tg-ru-budget-v1",
+      "adId": "awg-tg-ru-budget-a2-v1",
+      "creativeId": "awg-tg-budget-text2-v1",
+      "platformAdId": "8",
+      "elamaAdUuid": "8c468363-32ee-41d1-80ab-837f266bb075",
+      "tokenHash": null,
+      "registrationEvidence": null
+    },
+    {
+      "campaignId": "awg-tg-ru-auto-media-v1",
+      "adId": "awg-tg-ru-auto-media-a1-v1",
+      "creativeId": "awg-tg-auto-media-text1-v1",
+      "platformAdId": "1",
+      "elamaAdUuid": "c0882c0d-fe75-4787-ac05-0288e52f5bb9",
+      "tokenHash": null,
+      "registrationEvidence": null
+    },
+    {
+      "campaignId": "awg-tg-ru-auto-media-v1",
+      "adId": "awg-tg-ru-auto-media-a2-v1",
+      "creativeId": "awg-tg-auto-media-text2-v1",
+      "platformAdId": "2",
+      "elamaAdUuid": "8a5036d9-5c78-43e4-897b-e67751a95737",
+      "tokenHash": null,
+      "registrationEvidence": null
+    }
+  ],
+  "requiredReceipt": [
+    "target bot identity and deployed source/revision",
+    "persistent registration readback for all 8 hashes",
+    "restricted delivery of per-ad URLs; no raw tokens in public Git",
+    "two-campaign signed user path with immutable lead attribution",
+    "authorized director HTTP report and negative access tests",
+    "rollback evidence"
+  ],
+  "replacementRule": "Replace links only after matching returned IDs/hashes and verified target bot; retain pause and zero budget. Staging links cannot satisfy production registration."
+}
