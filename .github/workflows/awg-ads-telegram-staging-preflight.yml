@@ -72,7 +72,18 @@ jobs:
         run: |
           set -euo pipefail
           printf '%s' "$YC_IAM_TOKEN" | docker login --username iam --password-stdin cr.yandex
-          docker push "$STAGING_IMAGE"
+          for attempt in 1 2 3; do
+            if docker push "$STAGING_IMAGE" > staging-push.log 2>&1; then
+              cat staging-push.log
+              break
+            fi
+            cat staging-push.log
+            if [ "$attempt" = 3 ] || ! grep -Eqi '503 Service Unavailable|502 Bad Gateway|504 Gateway Timeout' staging-push.log; then
+              exit 1
+            fi
+            echo "Registry temporarily unavailable; retry $attempt of 3."
+            sleep "$((attempt * 5))"
+          done
           docker image inspect "$STAGING_IMAGE" --format '{{json .RepoDigests}}' > staging-image-digests.json
           echo "### Dedicated staging image published" >> "$GITHUB_STEP_SUMMARY"
           echo "$STAGING_IMAGE" >> "$GITHUB_STEP_SUMMARY"
