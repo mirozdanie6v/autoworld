@@ -97,9 +97,17 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: '22'
-      - name: Deploy approved staging baseline and connect dedicated bot
+      - name: Install locked dependencies for isolated acceptance
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Verify isolated attribution and AutoWorld regressions before deployment
+        run: |
+          node --check scripts/deploy-awg-ads-telegram-staging.mjs
+          node --test tests/ads-attribution*.test.mjs tests/awg-ads-*.test.mjs tests/auto-sale-ads-telegram-hook.test.mjs
+          npm run check
+      - name: Deploy approved staging Ads candidate and verify isolated persistence
         env:
           AWG_ADS_STAGING_DEPLOY_APPROVED: dedicated-telegram-staging-only
+          AWG_ADS_STAGING_ATTRIBUTION_APPROVED: isolated-telegram-ads-only
           AWG_ADS_STAGING_TELEGRAM_BOT_TOKEN: ${{ secrets.AWG_ADS_STAGING_TELEGRAM_BOT_TOKEN }}
           AWG_ADS_STAGE_B_SUBJECT_SECRET: ${{ secrets.AWG_ADS_STAGE_B_SUBJECT_SECRET }}
           AWG_ADS_STAGING_API_KEY: ${{ secrets.AWG_ADS_STAGING_API_KEY }}
@@ -108,4 +116,10 @@ jobs:
           export STAGING_IMAGE_DIGEST="$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync("staging-image-digests.json","utf8"))[0])')"
           node --check scripts/deploy-awg-ads-telegram-staging.mjs
           node scripts/deploy-awg-ads-telegram-staging.mjs
-          echo 'Dedicated staging baseline deployed; bot webhook and menu readied. Physical user E2E and Ads activation remain separate acceptance.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Dedicated Ads staging candidate deployed and synthetic signed HTTP/dual database acceptance passed. Physical Telegram user E2E remains separate acceptance.' >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: awg-ads-staging-attribution-acceptance
+          path: staging-attribution-acceptance.json
+          if-no-files-found: error
+          retention-days: 7
