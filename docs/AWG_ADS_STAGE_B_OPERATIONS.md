@@ -1,5 +1,26 @@
 # AutoWorld Ads B — staging / operations / acceptance log
 
+## Current runtime acceptance — 31 October 2026, Asia/Saigon
+
+Supersedes older statements below that the dedicated bot/runtime are missing.
+
+- Dedicated test bot `@auto_sale_usa_bot` connected to container `bba5hanjiq9ngu77i8p9`; no production bot/webhook or real customer data changed.
+- Candidate commit `1858f02c0ed5cc0bd4270fb521d611bda1cb947e`, active revision `bbafeqkdoka73701vrng`, digest `sha256:d640dd71bcc24790f31361b1f2a0d31ce148cfb524032f8d22e7c5178672e113`.
+- [Deployment and managed acceptance41099063901](https://github.com/mirozdanie6v/autoworld/actions/runs/41099063901) SUCCESS. Full app593 PASS /1 skipped, Relay10 PASS, isolated Ads tests PASS.
+- Cloud Console independently confirms ACTIVE. Separate CRM `etnvd9hmimkt74vpuqa6` and Ads `etnseoqfsf7ojn52813t`; publicDemoWrite=false, normalized mode.
+- Verified by signed synthetic HTTP + actual managed database readback: miniapp_open and vehicle_detail_click, duplicate suppression, denied unsigned/malformed signatures, normalized CRM lead commit with immutable campaign, separate Ads receipt, client-hidden attribution, report aggregate counters; client/API-key access to director report denied. Current synthetic lead was cleaned through normal row-version checks.
+- The synthetic /start handler and CRM lead commit in this acceptance are invoked in-process against managed persistence. They are **not** proof of an actual Telegram user /start, HTTP client lead submission, or positive authorization of a real director.
+- Fixed malformed SHA256 acceptance caused by Buffer.from(hex) truncation; regression433f428, validation5bfa536, reviewed isolation allowlistf371d35.
+- Raw test start URL is deliberately omitted from this public document. A registered staging QA link is available from the acceptance result for the authorized operator; do not use it in actual ads.
+
+### Still unverified
+
+Physical user Telegram/Mini App flow, HTTP client lead POST, positive director HTTP report, two-campaign physical comparison, actual baseline/candidate/revision rollback. Direct t.me access in this browser returned Site Unavailable on31Oct after one reload; this does not prove Telegram or the bot is down.
+
+Eight real advertisements remain paused at0 EUR and use the production bot's temporary base URL. Production runtime registration for all8 combinations is a separate gate. The precise batch and expected receipt are in PR106 `docs/ads/telegram-ads-provisioning-request.v1.json`. Never substitute staging URLs for working production ad links.
+
+
+
 ## Integrated staging release candidate — 29 October 2026
 
 User scope: combine Ads with current AutoWorld and prepare release; prioritize Telegram and create a separate test bot. Existing VK may be used as a test integration. Production/main, existing production Telegram webhook and real lead writes remain outside this release preparation.
