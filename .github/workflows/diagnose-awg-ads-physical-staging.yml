@@ -1,0 +1,49 @@
+name: Diagnose AWG Ads physical staging (read only)
+on:
+  push:
+    branches: [feature/awg-ads-stage-b-integration]
+    paths: [.github/workflows/diagnose-awg-ads-physical-staging.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    environment: awg-ads-staging
+    timeout-minutes: 5
+    steps:
+      - uses: actions/github-script@v7
+        env:
+          STAGING_API_KEY: ${{ secrets.AWG_ADS_STAGING_API_KEY }}
+        with:
+          script: |
+            const {createHash}=require('node:crypto');
+            if(context.repo.owner!=='mirozdanie6v'||context.repo.repo!=='autoworld'||context.ref!=='refs/heads/feature/awg-ads-stage-b-integration')throw Error('unapproved context');
+            const key=process.env.STAGING_API_KEY;if(!key)throw Error('missing staging configuration');core.setSecret(key);
+            const origin='https://bba5hanjiq9ngu77i8p9.containers.yandexcloud.net';
+            async function get(path){
+              const r=await fetch(origin+path,{headers:{'x-auto-sale-key':key},signal:AbortSignal.timeout(60000)});
+              if(!r.ok)throw Error('staging read HTTP '+r.status);return r.json();
+            }
+            const health=await get('/api/health');
+            if(health.publicDemoWrite!==false)throw Error('unexpected staging configuration');
+            const state=await get('/api/auto-sale/state');
+            const leads=state.leads||[];
+            const summary={
+              buildSha:health.buildSha,normalized:health.normalizedAuthoritative,
+              totalLeads:leads.length,
+              testLeads:leads.filter(l=>/тест|test/i.test(String(l.name||''))).length,
+              leads:leads.map(l=>({
+                idHash:createHash('sha256').update(String(l.id)).digest('hex').slice(0,16),
+                requestedTest:/тест.*реклам/i.test(String(l.name||'')),
+                synthetic:/^L-ADS-HTTP-/.test(String(l.id)),
+                createdAt:l.createdAt,status:l.status,
+                hasVehicle:Boolean(l.carId),hasAttribution:Boolean(l.adsAttribution),
+                campaignId:l.adsAttribution?.lastTouch?.campaignId||null,
+                clientBuildSha:l.clientBuildSha||null
+              })),
+              catalogCount:(state.catalog||[]).length,
+              notificationCounts:(state.notificationOutbox||[]).reduce((a,n)=>(a[n.status||'pending']=(a[n.status||'pending']||0)+1,a),{})
+            };
+            core.info('STAGING_READBACK '+JSON.stringify(summary));
+            await core.summary.addHeading('Staging lead readback').addCodeBlock(JSON.stringify(summary,null,2),'json').write();

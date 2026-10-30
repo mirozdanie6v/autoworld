@@ -9,6 +9,10 @@ const money=value=>'$'+new Intl.NumberFormat('en-US',{maximumFractionDigits:0}).
 const unique=list=>[...new Set(list.map(clean).filter(Boolean))];
 
 function safeEqualHex(a,b){
+  // Buffer.from(hex) silently truncates malformed suffixes; validate before decoding.
+  if(typeof a!=='string'||typeof b!=='string'||!/^[a-f0-9]{64}$/i.test(a)||!/^[a-f0-9]{64}$/i.test(b))return false;
+  // Buffer hex decoding silently discards malformed suffixes and odd nibbles.
+  if(!/^[a-fA-F0-9]{64}$/.test(String(a||''))||!/^[a-fA-F0-9]{64}$/.test(String(b||'')))return false;
   try{
     const left=Buffer.from(String(a||''),'hex'),right=Buffer.from(String(b||''),'hex');
     return left.length===right.length&&left.length>0&&timingSafeEqual(left,right);
@@ -96,6 +100,7 @@ export function createTelegramService({
   relaySecret=process.env.AUTOWORLD_RELAY_SECRET||'',
   now=()=>Date.now(),
   adsStartRecorder=null,
+  adsStartStrict=false,
   maxInitDataAgeSec=86400
 }={}){
   if(adsStartRecorder!==null&&typeof adsStartRecorder!=='function')throw new Error('ads_start_recorder_invalid');
@@ -346,6 +351,7 @@ export function createTelegramService({
         }catch(error){
           // Failed attribution must never block the existing bot welcome path.
           console.warn('AUTO SALE ad start record failed',clean(error?.code)||'ads_record_failed');
+          if(adsStartStrict){error.statusCode=503;throw error;}
         }
       }
     }

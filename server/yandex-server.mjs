@@ -1,3 +1,4 @@
+import {clientSubmissionAccess} from './ads-client-submission-context.mjs';
 import http from 'node:http';
 import path from 'node:path';
 import {randomUUID,timingSafeEqual} from 'node:crypto';
@@ -9,6 +10,10 @@ import {readAutoSaleState} from './ydb-read-mode.mjs';
 import {syncYdbState} from './ydb-sync.mjs';
 import {createObjectStorage} from './object-storage.mjs';
 import {createTelegramService} from './telegram-bot.mjs';
+import {createAdsStageBServerBridge} from './ads-stage-b-runtime.mjs';
+import {verifiedAdsTelegramIdentity} from './ads-attribution-stage-b.mjs';
+import {isAdsDirector} from './ads-stage-b-director.mjs';
+import {createAdsLeadReconciliationJob,createPersistedLeadPageReader} from './ads-stage-b-reconciliation.mjs';
 import {createVkService} from './vk.mjs';
 import {notificationsEnabled,notificationsSuppressed,collectSaleNotifications,deliverSaleNotifications} from './auto-sale-notifications.mjs';
 import {createVkWebAuth} from './vk-web-auth.mjs';
@@ -104,9 +109,71 @@ async function getApiState(){
 const mediaProvider=String(process.env.AUTO_SALE_MEDIA_PROVIDER||'yandex');
 if(!['yandex','s3'].includes(mediaProvider))throw new Error('unsupported_media_provider');
 const media=mediaProvider==='s3'?(await import('./s3-storage.mjs')).createS3Storage({bucket:mediaBucket}):createObjectStorage({bucket:mediaBucket});
-const telegram=createTelegramService();
+// Feature OFF by default. Even when ON, separate staging YDB is required;
+// no production schema migration, Telegram webhook change or paid ad traffic.
+const adsStageB=await createAdsStageBServerBridge({
+  onFailure:async failure=>console.warn('AWG ADS Stage B receipt deferred',failure.code)
+});
+const telegram=createTelegramService({
+  adsStartRecorder:adsStageB.enabled?adsStageB.recordBotStart:null,
+  adsStartStrict:adsStageB.enabled
+});
 const vk=createVkService();
 const vkWeb=createVkWebAuth();
+// Optional staging-only background recovery of conversion receipts from the
+// authoritative CRM. Explicit second flag prevents work on standard startup.
+if(adsStageB.enabled&&process.env.AWG_ADS_STAGE_B_RECONCILE_ENABLED==='true'){
+  const job=createAdsLeadReconciliationJob({
+    listCommittedLeads:createPersistedLeadPageReader({
+      readAuthoritativeState:async()=> (await getApiState()).state
+    }),
+    bridge:adsStageB,
+    persistRecoveredSnapshot:async(prior,snapshot)=>{
+      // Internal staging-only conditional mutation, never exposed as a route.
+      // Protect immutable campaign provenance against lost updates.
+      const stores=await getEntityStores();
+      const state=await stores.domainStore.loadState();
+      const current=(state.leads||[]).find(lead=>String(lead.id)===String(prior.id));
+      if(!current||current.clientProvider!=='telegram'
+        ||current.clientProviderUserId!==prior.clientProviderUserId
+        ||current.clientSubmittedAt!==prior.clientSubmittedAt)return {ok:false};
+      if(current.adsAttribution?.source==='Telegram Ads'){
+        return {ok:JSON.stringify(current.adsAttribution)===JSON.stringify(snapshot)};
+      }
+      if(current.adsAttributionStatus!=='lookup_unavailable')return {ok:false};
+      const version=await stores.domainStore.entityRowVersion('lead',String(prior.id));
+      if(version===null)return {ok:false};
+      const patch=await mutateAutoSaleEntityBatch({
+        ...stores,operations:[{resource:'lead',operation:'patch',
+          id:String(prior.id),baseRowVersion:version,
+          input:{adsAttribution:snapshot,adsAttributionStatus:'recovered'}}],
+        prepareNotifications:null
+      });
+      return {ok:patch.status===200};
+    },
+    onAudit:async stats=>console.info('AWG ADS staging reconciler',JSON.stringify({
+      scanned:stats.scanned,recorded:stats.recorded,duplicates:stats.duplicates,
+      errors:stats.errors,complete:stats.complete
+    })),
+    onAlert:async event=>console.warn('AWG ADS staging reconciliation alert',event.code)
+  });
+  let running=false,cursor='';
+  const reconcile=async()=>{
+    if(running)return;
+    running=true;
+    try{
+      const result=await job.run({authorized:true,cursor});
+      // Any failed receipt must be revisited on the next cycle;
+      // successful receipts are idempotent and safe to replay.
+      cursor=result.errors>0?'':(result.nextCursor||'');
+    }catch(error){
+      // Do not log lead payloads, client identities or stack traces.
+      console.warn('AWG ADS staging reconciliation failed','retry_next_cycle');
+    }finally{running=false;}
+  };
+  const timer=setInterval(()=>{void reconcile()},15*60*1000);
+  timer.unref?.();
+}
 async function getStore(){
   if(postgresEnabled)return(await getPostgresStores()).legacyStore;
   if(store)return store;
@@ -524,10 +591,11 @@ const server=http.createServer(async(req,res)=>{
 
     if(url.pathname==='/api/auto-sale/entities/batch'&&req.method==='POST'){
       const input=await parseJson(req);
-      const {state:accessState,access}=await requestAccess(req);
-      if(access.authType==='vk-web'&&!vkWeb.isTrustedWrite(req)){json(res,{error:'origin_forbidden'},403);return}
-      if(access.role==='public'){json(res,{error:'telegram_auth_required'},401);return}
+      const {state:accessState,access:authenticatedAccess}=await requestAccess(req);
+      if(authenticatedAccess.authType==='vk-web'&&!vkWeb.isTrustedWrite(req)){json(res,{error:'origin_forbidden'},403);return}
+      if(authenticatedAccess.role==='public'){json(res,{error:'telegram_auth_required'},401);return}
       let operations=Array.isArray(input?.operations)?input.operations:[];
+      const access=clientSubmissionAccess(operations,authenticatedAccess);
       if(access.role==='client'){
         const sanitized=sanitizeClientOperations(accessState,operations,access.user,access.identity);
         if(!sanitized.ok){json(res,{error:sanitized.error},sanitized.status);return}
@@ -538,6 +606,9 @@ const server=http.createServer(async(req,res)=>{
         if(!claimPolicy.ok){json(res,{error:claimPolicy.error,id:claimPolicy.id,assignedManager:claimPolicy.assignedManager||null},claimPolicy.status||409);return}
         operations=claimPolicy.operations;
       }
+      // Only trusted Telegram identity from requestAccess() can get an ads
+      // snapshot. All client-supplied campaign fields were stripped above.
+      operations=await adsStageB.enrichLeadOperations(operations,access);
       const skipNotifications=notificationsSuppressed(req.headers,{apiKey:hasApiKey(req)});
       const notifyChannels=notificationsEnabled(telegram,vk)&&!skipNotifications;
       const entityStores=await getEntityStores();
@@ -546,6 +617,17 @@ const server=http.createServer(async(req,res)=>{
         operations,
         prepareNotifications:notifyChannels?collectNotificationStateChanges:null
       });
+      if(result.status>=200&&result.status<300&&adsStageB.enabled){
+        // The CRM commit is authoritative: receipt writes run AFTER the HTTP
+        // response, so a slow secondary ADS database cannot strand the
+        // client's successful submission. Durable CRM snapshots are replayed
+        // by the separately gated reconciliation job after process failure.
+        const committedOps=operations;
+        setImmediate(()=>{
+          void adsStageB.recordCommittedLeads(committedOps,access,{committed:true})
+            .catch(()=>console.warn('AWG ADS deferred lead receipt failed'));
+        });
+      }
       if(result.status>=200&&result.status<300&&notifyChannels){
         const notificationItems=takeCommittedNotificationItems(result.data);
         result.data.notifications={...(result.data.notifications||{}),deliveries:[]};
@@ -566,6 +648,13 @@ const server=http.createServer(async(req,res)=>{
         if(!visibleEntity(accessState,access,resource,id)){json(res,{error:access.role==='public'?'not_found':'forbidden'},access.role==='public'?404:403);return}
         const entityStores=await getEntityStores();
         const result=await readAutoSaleEntity({...entityStores,resource,id});
+        // Individual entity reads must enforce the same advertising privacy
+        // boundary as the filtered /state endpoint.
+        if(resource==='lead'&&access.role==='client'&&result.data?.entity){
+          const {adsAttribution,adsAttributionStatus,...visible}=result.data.entity;
+          json(res,{...result.data,entity:visible},result.status);
+          return;
+        }
         json(res,result.data,result.status);return;
       }
       if(access.role!=='admin'){json(res,{error:access.role==='public'?'telegram_auth_required':'admin_required'},access.role==='public'?401:403);return}
@@ -670,11 +759,52 @@ const server=http.createServer(async(req,res)=>{
       json(res,{error:'entity_method_not_allowed'},405);return;
     }
 
+    if(url.pathname==='/api/auto-sale/ads/director-report'&&req.method==='GET'){
+      if(!adsStageB.enabled){json(res,{error:'not_found'},404);return;}
+      const {access}=await requestAccess(req);
+      if(!isAdsDirector(access,process.env.AWG_ADS_DIRECTOR_TELEGRAM_IDS)){
+        json(res,{error:'ads_director_required'},403);return;
+      }
+      try{
+        const rows=await adsStageB.report();
+        json(res,{source:'verified_server_receipts',rows,
+          paidClickDataAvailable:false,verifiedSpendAvailable:false},200);
+      }catch{
+        json(res,{error:'ads_report_unavailable'},503);
+      }
+      return;
+    }
+
+    if(url.pathname==='/api/auto-sale/ads/event'&&req.method==='POST'){
+      if(!adsStageB.enabled){json(res,{error:'not_found'},404);return;}
+      const {state,access}=await requestAccess(req);
+      if(!verifiedAdsTelegramIdentity(access)){
+        json(res,{error:'telegram_client_auth_required'},403);return;
+      }
+      const payload=await parseJson(req,4096);
+      if(!payload||typeof payload!=='object'||Array.isArray(payload)
+        ||Object.keys(payload).some(key=>!['eventType','carId'].includes(key))
+        ||!['miniapp_open','vehicle_detail_click'].includes(payload.eventType)
+        ||(payload.carId!==undefined&&typeof payload.carId!=='string')){
+        json(res,{error:'invalid_ads_event'},400);return;
+      }
+      try{
+        const result=await adsStageB.recordMiniAppEvent({
+          access,eventType:payload.eventType,carId:payload.carId||'',
+          catalog:state.catalog||[]
+        });
+        json(res,{status:result.status,reason:result.reason||undefined},200);
+      }catch{
+        json(res,{error:'ads_event_storage_unavailable'},503);
+      }
+      return;
+    }
+
     if(url.pathname==='/api/auto-sale/state'&&req.method==='GET'){
       const read=await getApiState();
       const {access}=await requestAccess(req,read.state);
       const visible=stateForAccess(read.state,access);
-      json(res,{...visible,_rowVersions:rowVersionsForAccess(read.rowVersions||{},read.state,access),_access:accessSummary(access)});
+      json(res,{...visible,_rowVersions:rowVersionsForAccess(read.rowVersions||{},read.state,access),_access:accessSummary(access),_adsTrackingEnabled:Boolean(adsStageB.enabled&&verifiedAdsTelegramIdentity(access)),_adsDirectorEnabled:Boolean(adsStageB.enabled&&isAdsDirector(access,process.env.AWG_ADS_DIRECTOR_TELEGRAM_IDS))});
       return;
     }
     if(url.pathname==='/api/auto-sale/state'&&req.method==='PUT'){

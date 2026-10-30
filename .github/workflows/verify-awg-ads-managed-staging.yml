@@ -1,0 +1,92 @@
+name: AWG Ads managed dual-YDB acceptance (staging only)
+on:
+  push:
+    branches: [feature/awg-ads-stage-b-integration]
+    paths:
+      - .github/workflows/verify-awg-ads-managed-staging.yml
+      - scripts/test-awg-ads-managed-staging.mjs
+      - scripts/awg-ads-schema-inspection.mjs
+      - scripts/prepare-awg-ads-stage-b-staging.mjs
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: awg-ads-staging-maintenance
+  cancel-in-progress: false
+jobs:
+  managed-acceptance:
+    runs-on: ubuntu-24.04
+    environment: awg-ads-staging
+    timeout-minutes: 20
+    env:
+      AWG_ADS_MANAGED_ACCEPTANCE_APPROVED: reviewed-two-staging-databases
+      AWG_ADS_STAGE_B_YDB_CONNECTION_STRING: grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1ggsmuiq7tb2d27f89q/etnseoqfsf7ojn52813t
+      AWG_ADS_STAGE_B_EXPECTED_YDB_DATABASE_ID: etnseoqfsf7ojn52813t
+      YDB_CONNECTION_STRING: grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1ggsmuiq7tb2d27f89q/etnvd9hmimkt74vpuqa6
+      YC_STAGING_SA_ID: ${{ vars.AWG_ADS_STAGING_SA_ID }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Guard exact approved repository, branch and staging identity
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = mirozdanie6v/autoworld
+          test "$GITHUB_REF_NAME" = feature/awg-ads-stage-b-integration
+          test "$YC_STAGING_SA_ID" = aje3j5aat66lel86cd5r
+      - name: Obtain and exchange short-lived staging OIDC without logging credentials
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const jwt=await core.getIDToken('https://github.com/mirozdanie6v');
+            core.setSecret(jwt);
+            const c=JSON.parse(Buffer.from(jwt.split('.')[1],'base64url').toString('utf8'));
+            if(c.iss!=='https://token.actions.githubusercontent.com'
+              ||c.aud!=='https://github.com/mirozdanie6v'
+              ||c.sub!=='repo:mirozdanie6v@49186663/autoworld@1398349654:environment:awg-ads-staging')
+              throw new Error('unexpected staging OIDC claims');
+            const response=await fetch('https://auth.yandex.cloud/oauth/token',{
+              method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
+              body:new URLSearchParams({
+                grant_type:'urn:ietf:params:oauth:grant-type:token-exchange',
+                requested_token_type:'urn:ietf:params:oauth:token-type:access_token',
+                audience:process.env.YC_STAGING_SA_ID,subject_token:jwt,
+                subject_token_type:'urn:ietf:params:oauth:token-type:id_token'
+              }),signal:AbortSignal.timeout(30000)
+            });
+            core.info('Dedicated staging IAM exchange HTTP '+response.status);
+            if(response.status!==200)throw new Error('staging token exchange failed');
+            const data=await response.json();
+            if(typeof data.access_token!=='string'||!data.access_token)throw new Error('missing IAM token');
+            core.setSecret(data.access_token);
+            core.exportVariable('YDB_ACCESS_TOKEN_CREDENTIALS',data.access_token);
+            const inventory=await fetch('https://ydb.api.cloud.yandex.net/ydb/v1/databases?folderId=b1g8u8vqkgehvtbj8n13&pageSize=100',{
+              headers:{Authorization:'Bearer '+data.access_token},signal:AbortSignal.timeout(30000)
+            });
+            if(inventory.status!==200)throw new Error('staging inventory HTTP '+inventory.status);
+            const listing=await inventory.json();
+            if(listing.nextPageToken)throw new Error('incomplete inventory');
+            for(const [id,name] of [['etnseoqfsf7ojn52813t','awg-ads-stage-b-staging'],['etnvd9hmimkt74vpuqa6','awg-ads-crm-stage-b-staging']]){
+              const db=(listing.databases||[]).find(d=>d.id===id);
+              if(!db||db.name!==name||db.folderId!=='b1g8u8vqkgehvtbj8n13'||db.status!=='RUNNING')
+                throw new Error('approved staging database inventory mismatch');
+              core.info('Verified managed staging '+name+' '+id);
+            }
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Syntax check acceptance script
+        run: node --check scripts/test-awg-ads-managed-staging.mjs
+      - name: Independent read-only schema inspection
+        env:
+          AWG_ADS_STAGE_B_SCHEMA_ACTION: inspect
+        run: node scripts/prepare-awg-ads-stage-b-staging.mjs
+      - name: Managed CRM transactions, production deny probe, job leases and controlled maintenance
+        run: node scripts/test-awg-ads-managed-staging.mjs
+      - name: Record acceptance boundary
+        run: |
+          echo "Verified code commit: $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+          echo 'Integrated AutoWorld main baseline: 6ece88ced344b6789921f3a3a120a3c641ae36d2' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Managed staging data-plane acceptance passed. No physical Telegram/VK messages or deployment rollback were exercised.' >> "$GITHUB_STEP_SUMMARY"
