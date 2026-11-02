@@ -1,2 +1,4 @@
-mode=pilot
-run=2026-11-02-after-telegram-cdn-same-index-retries
+mode=batch
+start=0
+limit=20
+run=2026-11-02-bulk-batch-01
