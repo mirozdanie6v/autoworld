@@ -271,7 +271,7 @@ function visitorSignedAccess(req){
   }
   if(hasTelegram){
     const auth=telegramAuth(req);
-    if(!auth.ok||!/^\\d+$/.test(String(auth.user?.id||'')))return null;
+    if(!auth.ok||!/^\d+$/.test(String(auth.user?.id||'')))return null;
     if(adminTelegramUsernames.includes(normalizeTelegramUsername(auth.user.username)))return null;
     return{authType:'telegram',identity:{provider:'telegram',key:'telegram:'+String(auth.user.id)}};
   }
