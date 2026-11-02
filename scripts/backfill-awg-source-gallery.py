@@ -116,13 +116,32 @@ def media_identity(car):
             bool(car.get("active", True)), car.get("image"), tuple(car.get("otherPhotos") or []),
             tuple(car.get("interiorPhotos") or []))
 
-def upload_missing(post, index, source_url, token):
-    r = requests.get(source_url, headers={"User-Agent": UA}, timeout=40)
-    r.raise_for_status()
-    content = r.content
-    mime = r.headers.get("content-type", "").split(";")[0].lower()
-    if mime not in ("image/jpeg", "image/png", "image/webp") or not 100 <= len(content) <= 2_000_000:
-        raise ValueError("source_image_invalid_type_or_size")
+def download_source_photo(post, index, source_url, vin):
+    """Retry transient Telegram CDN faults; only refresh the SAME post/photo index."""
+    current_url = source_url
+    for attempt in range(1, 7):
+        if attempt in (3, 5):
+            refreshed = lookup_source({"sourcePostId": post, "vin": vin})
+            if not 1 <= index <= len(refreshed):
+                raise ValueError("source_index_changed_during_retry")
+            current_url = refreshed[index - 1]
+        try:
+            r = requests.get(current_url, headers={"User-Agent": UA}, timeout=40)
+            r.raise_for_status()
+            mime = r.headers.get("content-type", "").split(";")[0].lower()
+            content = r.content
+            if mime not in ("image/jpeg", "image/png", "image/webp") or not 100 <= len(content) <= 2_000_000:
+                raise ValueError("source_image_invalid_type_or_size")
+            return content, mime
+        except requests.exceptions.RequestException as exc:
+            status = getattr(getattr(exc, "response", None), "status_code", None)
+            if attempt == 6 or (status is not None and status not in (403, 404, 429, 500, 502, 503, 504)):
+                raise
+            time.sleep(min(2 ** (attempt - 1), 8))
+    raise RuntimeError("source_media_unavailable_after_retries")
+
+def upload_missing(post, index, source_url, token, vin=""):
+    content, mime = download_source_photo(post, index, source_url, vin)
     ext = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}[mime]
     category = "main" if index == 1 else "other"
     body = {"carId": "autoworld-" + post, "category": category,
@@ -203,7 +222,8 @@ def run(args):
         try:
             for index in plan["missing"]:
                 merged[index] = upload_missing(plan["post"], index,
-                                               plan["sourcePhotos"][index - 1], token)
+                                               plan["sourcePhotos"][index - 1], token,
+                                               str(old_car.get("vin") or ""))
             expected = [merged[i] for i in range(1, len(plan["sourcePhotos"]) + 1)]
             if expected[0] != old_car["image"] or len(set(expected)) != len(expected):
                 raise ValueError("gallery_main_or_duplicate_error")
