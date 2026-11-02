@@ -138,6 +138,34 @@ class GallerySafetyTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "source_index_changed"):
                 gallery.download_source_photo("4394", 8, "https://old/8", "WP1AA2A50RLB18308")
 
+    def test_deterministic_bounded_batch_preview(self):
+        from argparse import Namespace
+        import tempfile
+        cars = {("AWG-" + str(i)): car(str(i)) for i in [4394, 4370, 4381, 4350]}
+        with tempfile.TemporaryDirectory() as directory:
+            args = Namespace(apply=False, scope="batch", start=1, limit=2,
+                             report=str(Path(directory) / "report.json"),
+                             backup=str(Path(directory) / "backup.json"))
+            with patch.object(gallery, "fetch_state", return_value=cars), \
+                 patch.object(gallery, "lookup_source", return_value=["x"] * 10), \
+                 patch.object(gallery, "upload_missing", side_effect=AssertionError("preview must not upload")):
+                result = gallery.run(args)
+            self.assertEqual(result["inspected"], 2)
+            self.assertEqual(result["missingPhotos"], 6)
+            self.assertEqual(result["start"], 1)
+            self.assertEqual(result["limit"], 2)
+            self.assertEqual(result["patched"], [])
+
+    def test_batch_rejects_unbounded_parameters(self):
+        from argparse import Namespace
+        with tempfile.TemporaryDirectory() as directory:
+            args = Namespace(apply=False, scope="batch", start=0, limit=31,
+                             report=str(Path(directory) / "report.json"),
+                             backup=str(Path(directory) / "backup.json"))
+            with patch.object(gallery, "fetch_state", return_value={"AWG-4394": car()}):
+                with self.assertRaisesRegex(ValueError, "unsafe_gallery_batch_parameters"):
+                    gallery.run(args)
+
     def test_apply_requires_oidc(self):
         from argparse import Namespace
         p = Namespace(apply=True, scope="pilot", report="/tmp/not-written.json",
