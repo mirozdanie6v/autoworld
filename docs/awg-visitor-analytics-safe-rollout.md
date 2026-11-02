@@ -73,3 +73,36 @@ Unit tests for event validation, privacy redaction, disabled tracking, signed
 client capture, and rendering have passed on the development branch. The
 last branch commit must still pass all current PR checks; checks are not a
 substitute for physical Telegram/VK staging E2E.
+
+## One-time least-privilege OIDC repair (operator-approved cloud session)
+
+This is **not** run by the GitHub preflight: when Yandex returns HTTP 401 the GitHub
+job has no IAM permissions to repair its own federation. A Yandex Cloud
+identity with the relevant federation-editor roles is required.
+
+A verified, fail-closed script is included:
+
+```sh
+# Requires the yc CLI already authenticated as the authorized staging IAM operator.
+# Read-only inspection; lists matching OIDC federations and existing bindings:
+node scripts/awg-visitor-staging-iam.mjs
+
+# If the inspected federation ID is unique and explicitly accepted:
+node scripts/awg-visitor-staging-iam.mjs \
+  --federation-id <VERIFIED_STAGING_FEDERATION_ID> \
+  --apply
+```
+
+The `--apply` mode creates **only** the federated-credential association between
+service account `aje0hvomk86tu5lbs5rk`, the verified OIDC federation and
+the exact feature-branch subject. The script refuses ambiguous federations and
+conflicting subjects; it does not create IAM roles, credentials, databases,
+containers or production links. No permanent token should be added to GitHub.
+
+After an authorized execution, re-run the dedicated GitHub preflight from its
+feature branch and require HTTP 200 plus verified staging YDB metadata before
+planning a telemetry database. The existing staging business YDB
+`etnhujtu1t6f89tdtohs` **must never** be used as the new telemetry store.
+
+See Yandex Cloud's official CLI docs for federated-credential creation and
+listing. The authenticated cloud identity requires narrowly scoped IAM rights.
