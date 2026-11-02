@@ -94,10 +94,22 @@ def build_plan(car, source_photos):
             "missing": missing, "existing": by_position, "sourcePhotos": source_photos}
 
 def fetch_state():
-    r = requests.get(STATE_URL, timeout=40)
-    r.raise_for_status()
-    data = r.json()
-    return {str(c["id"]): c for c in data.get("catalog", []) if c.get("source") == SOURCE}
+    """Read authoritative catalog; fail closed on persistent transient API errors."""
+    for attempt in range(1, 6):
+        try:
+            r = requests.get(STATE_URL, timeout=40)
+            r.raise_for_status()
+            data = r.json()
+            if not isinstance(data.get("catalog"), list):
+                raise ValueError("catalog_state_missing")
+            return {str(c["id"]): c for c in data["catalog"] if c.get("source") == SOURCE}
+        except requests.exceptions.RequestException as exc:
+            status = getattr(getattr(exc, "response", None), "status_code", None)
+            # Never retry auth errors or malformed responses.
+            if attempt == 5 or (status is not None and status not in (429, 500, 502, 503, 504)):
+                raise
+            time.sleep(min(2 ** (attempt - 1), 8))
+    raise RuntimeError("catalog_state_unavailable")
 
 def media_identity(car):
     return (str(car.get("id")), str(car.get("sourcePostId")), str(car.get("vin") or ""),
