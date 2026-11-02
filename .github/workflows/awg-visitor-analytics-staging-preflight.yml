@@ -50,7 +50,7 @@ jobs:
           set -euo pipefail
           node - <<'NODE'
           const payload=JSON.parse(Buffer.from(process.env.GITHUB_OIDC_TOKEN.split('.')[1],'base64url'))
-          const expected='repo:mirozdanie6v/autoworld:ref:refs/heads/feature/awg-visitor-analytics-safe-20261102'
+          const expected='repo:mirozdanie6v@49186663/autoworld@1398349654:ref:refs/heads/feature/awg-visitor-analytics-safe-20261102'
           console.log('Non-secret OIDC claims:',JSON.stringify({iss:payload.iss,aud:payload.aud,sub:payload.sub,ref:payload.ref,repository:payload.repository}))
           if(payload.iss!=='https://token.actions.githubusercontent.com' ||
             payload.aud!=='https://github.com/mirozdanie6v' || payload.sub!==expected) {
