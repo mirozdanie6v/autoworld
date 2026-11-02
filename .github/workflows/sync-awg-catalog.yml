@@ -28,7 +28,7 @@ env:
 jobs:
   sync:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 75
     steps:
       - name: Checkout canonical AutoWorld
         uses: actions/checkout@v5
@@ -106,13 +106,29 @@ jobs:
               test -n "$AUTO_SALE_CATALOG_IMPORT_BEARER"
               python scripts/backfill-awg-source-gallery.py --apply --scope "$mode"
               ;;
-            batch)
+            batch|remaining)
               test -n "$AUTO_SALE_CATALOG_IMPORT_BEARER"
               START=$(sed -n 's/^start=//p' .sync-awg-gallery-backfill | tail -n 1)
               LIMIT=$(sed -n 's/^limit=//p' .sync-awg-gallery-backfill | tail -n 1)
               [[ "$START" =~ ^[0-9]{1,3}$ ]] && [[ "$LIMIT" =~ ^[0-9]{1,2}$ ]]
               test "$START" -le 299 && test "$LIMIT" -ge 1 && test "$LIMIT" -le 30
-              python scripts/backfill-awg-source-gallery.py --apply --scope batch --start "$START" --limit "$LIMIT"
+              if [ "$mode" = "batch" ]; then
+                python scripts/backfill-awg-source-gallery.py --apply --scope batch --start "$START" --limit "$LIMIT"
+              else
+                TOTAL=$(curl --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 10 --max-time 40 -fsS \
+                  "https://awgcars.ru/api/auto-sale/state" | jq '[.catalog[]? | select(.source == "AutoWorld_Georgia")] | length')
+                test "$TOTAL" -ge 100 && test "$TOTAL" -le 300
+                test "$START" -lt "$TOTAL"
+                echo "AWG_GALLERY_REMAINING_PLAN start=$START limit=$LIMIT total=$TOTAL"
+                for ((offset=START; offset<TOTAL; offset+=LIMIT)); do
+                  echo "AWG_GALLERY_BATCH_START offset=$offset limit=$LIMIT"
+                  python scripts/backfill-awg-source-gallery.py --apply --scope batch \
+                    --start "$offset" --limit "$LIMIT" \
+                    --report "/tmp/awg-gallery/batch-${offset}-report.json" \
+                    --backup "/tmp/awg-gallery/batch-${offset}-backup.json"
+                  echo "AWG_GALLERY_BATCH_OK offset=$offset"
+                done
+              fi
               ;;
             *)
               echo "Invalid gallery repair mode: $mode"
@@ -317,7 +333,6 @@ jobs:
         with:
           name: awg-gallery-repair-report
           path: |
-            /tmp/awg-gallery/report.json
-            /tmp/awg-gallery/media-backup.json
+            /tmp/awg-gallery/*.json
           if-no-files-found: warn
           retention-days: 90
