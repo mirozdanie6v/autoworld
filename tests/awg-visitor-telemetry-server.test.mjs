@@ -49,7 +49,7 @@ test('staging runtime is disabled by default and never reaches YDB',async()=>{
  });
 });
 test('signed Telegram event writes only whitelisted fields; admin is read-only',async()=>{
- const {server,rows}=makeServer({telegramValidator:raw=>({ok:raw==='VALID',user:{id:raw==='ADMIN'?'999':'111'}})});
+ const {server,rows}=makeServer({telegramValidator:raw=>({ok:['VALID','ADMIN'].includes(raw),user:{id:raw==='ADMIN'?'999':'111'}})});
  await withServer(server,async base=>{
    const root=base+'/api/auto-sale/visitor-analytics/';
    const noAuth=await req(root+'events',{method:'POST',body:events});
