@@ -8,8 +8,8 @@ const labels={
  request_success:'Заявка отправлена',request_failure:'Ошибка отправки'
 };
 let enabled=false,configChecked=false,configPending=false,queue=[],timer=0,reportCache=null,reportAt=0;
-const access=()=>window.__AUTO_SALE_ACCESS__||{};
-const headers=()=>window.__AUTO_SALE_AUTH_HEADERS__?.({'content-type':'application/json'})||{'content-type':'application/json'};
+const access=()=>typeof window==='undefined'?{}:(window.__AUTO_SALE_ACCESS__||{});
+const headers=()=>typeof window==='undefined'?{'content-type':'application/json'}:(window.__AUTO_SALE_AUTH_HEADERS__?.({'content-type':'application/json'})||{'content-type':'application/json'});
 const clientAllowed=()=>access().role==='client'&&access().authenticated===true;
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 async function flush(){
@@ -29,7 +29,7 @@ export function trackVisitorEvent(type,carId=''){
  clearTimeout(timer);timer=setTimeout(()=>{void flush()},1100);
 }
 export async function ensureVisitorTracking(){
- if(configChecked||configPending||!clientAllowed())return;
+ if(configChecked||configPending||!clientAllowed()||access().testHarnessFallback)return;
  configPending=true;
  try{
   const response=await fetch(API+'/config',{cache:'no-store',signal:AbortSignal.timeout(5000)});
@@ -95,7 +95,7 @@ function renderReport(report){
   '<div><h3>Последние сессии</h3><div class="auto-data-table mini">'+sessions+'</div></div></div>';
 }
 export async function hydrateVisitorAnalytics(root,{force=false}={}){
- if(access().role!=='admin')return;
+ if(access().role!=='admin'||access().testHarnessFallback)return;
  const target=root.querySelector('[data-awg-analytics-report]');
  if(!target)return;
  if(!force&&reportCache&&Date.now()-reportAt<30000){target.innerHTML=renderReport(reportCache);return}
