@@ -259,6 +259,25 @@ async function requestAccess(req,state=null){
   }
   return{state:current,access:{role:'client',authenticated:true,authType:'telegram',apiKey:false,user,identity,admin:null}};
 }
+// Event ingestion validates signed launch identity without reading orders, leads,
+// admin pins or the business YDB. Failed analytics must never affect client writes.
+function visitorSignedAccess(req){
+  const hasTelegram=Boolean(String(req.headers['x-telegram-init-data']||'').trim());
+  const hasVk=Boolean(String(req.headers['x-vk-launch-params']||'').trim());
+  if(hasTelegram&&hasVk)return null;
+  if(hasVk){
+    const auth=vkAuth(req);
+    return auth.ok?{authType:'vk',identity:auth.identity}:null;
+  }
+  if(hasTelegram){
+    const auth=telegramAuth(req);
+    if(!auth.ok||!/^\\d+$/.test(String(auth.user?.id||'')))return null;
+    if(adminTelegramUsernames.includes(normalizeTelegramUsername(auth.user.username)))return null;
+    return{authType:'telegram',identity:{provider:'telegram',key:'telegram:'+String(auth.user.id)}};
+  }
+  const web=vkWeb.auth(req);
+  return web&&vkWeb.isTrustedWrite(req)?{authType:'vk-web',identity:web.identity}:null;
+}
 const accessSummary=access=>({
   role:access.role,
   authenticated:Boolean(access.authenticated),
@@ -324,9 +343,8 @@ const server=http.createServer(async(req,res)=>{
     }
     if(url.pathname==='/api/auto-sale/visitor-analytics/events'&&req.method==='POST'){
       if(!visitorAnalyticsConfigured){json(res,{error:'visitor_analytics_disabled'},503);return}
-      const {access}=await requestAccess(req);
-      if(access.role!=='client'){json(res,{error:'client_auth_required'},403);return}
-      if(access.authType==='vk-web'&&!vkWeb.isTrustedWrite(req)){json(res,{error:'origin_forbidden'},403);return}
+      const access=visitorSignedAccess(req);
+      if(!access){json(res,{error:'signed_client_auth_required'},403);return}
       const body=await parseJson(req,48_000);
       const validated=validateVisitorEvents(body,{provider:access.authType==='vk-web'?'vk-web':access.identity?.provider||access.authType});
       if(!validated.ok){json(res,{error:validated.error},400);return}
