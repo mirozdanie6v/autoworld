@@ -28,6 +28,8 @@ jobs:
     steps:
       - name: Checkout canonical repo
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 2
 
       - name: Select fail-closed repair mode
         id: config
