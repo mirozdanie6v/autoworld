@@ -16,7 +16,7 @@ import {addAutoSaleNote,addAutoSalePayment,deleteAutoSaleLeadCascade,mutateAutoS
 import {MAX_ADMIN_ACCOUNTS,stateForAccess,rowVersionsForAccess,sanitizeClientOperations,sanitizeAdminOperations,applyManagerLeadClaims} from './auto-sale-access.mjs';
 import {managerTelegramUsername} from '../shared/auto-sale-manager-directory.mjs';
 import {verifyGitHubCatalogOidcToken} from './github-oidc-auth.mjs';
-import {validateVisitorEvents,visitorAnalyticsReport} from '../shared/awg-visitor-analytics.mjs';
+import {validateVisitorEvents,visitorAnalyticsReport,isolatedVisitorYdbTarget} from '../shared/awg-visitor-analytics.mjs';
 import {createVisitorAnalyticsStore} from './awg-visitor-analytics-store.mjs';
 
 const rootDir=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
@@ -29,7 +29,7 @@ const postgresEnabled=persistenceProvider==='postgres';
 // Disabled by default. Analytics MUST use a different YDB connection from orders and leads.
 const visitorAnalyticsConnection=String(process.env.AUTO_SALE_VISITOR_ANALYTICS_YDB_CONNECTION_STRING||'').trim();
 const visitorAnalyticsConfigured=/^(1|true|yes)$/i.test(String(process.env.AUTO_SALE_VISITOR_ANALYTICS_ENABLED||''))&&
-  !postgresEnabled&&Boolean(visitorAnalyticsConnection)&&visitorAnalyticsConnection!==connectionString;
+  !postgresEnabled&&isolatedVisitorYdbTarget(connectionString,visitorAnalyticsConnection);
 let visitorAnalyticsStorePromise=null;
 const visitorAnalyticsWindow=new Map();
 async function visitorStore(){
