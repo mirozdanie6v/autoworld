@@ -82,6 +82,32 @@ class GallerySafetyTests(unittest.TestCase):
                 self.assertFalse(result["failures"])
                 self.assertTrue(Path(p.backup).exists())
 
+    def test_transient_catalog_http_500_is_retried_without_writes(self):
+        import requests
+        from unittest.mock import Mock
+        failure = requests.exceptions.HTTPError("HTTP 500")
+        failure.response = Mock(status_code=500)
+        success = Mock()
+        success.json.return_value = {"catalog": [car()]}
+        success.raise_for_status.return_value = None
+        with patch.object(gallery.requests, "get", side_effect=[failure, success]) as get, \
+             patch.object(gallery.time, "sleep") as delay:
+            result = gallery.fetch_state()
+            self.assertIn("AWG-4394", result)
+            self.assertEqual(get.call_count, 2)
+            delay.assert_called_once_with(1)
+
+    def test_persistent_catalog_http_500_fails_closed(self):
+        import requests
+        from unittest.mock import Mock
+        failure = requests.exceptions.HTTPError("HTTP 500")
+        failure.response = Mock(status_code=500)
+        with patch.object(gallery.requests, "get", side_effect=failure) as get, \
+             patch.object(gallery.time, "sleep"):
+            with self.assertRaises(requests.exceptions.HTTPError):
+                gallery.fetch_state()
+            self.assertEqual(get.call_count, 5)
+
     def test_apply_requires_oidc(self):
         from argparse import Namespace
         p = Namespace(apply=True, scope="pilot", report="/tmp/not-written.json",
