@@ -283,7 +283,7 @@ export function normalizeCar(source){
     tag:trim||'AutoWorld',
     image:photos[0],
     interiorPhotos:[],
-    otherPhotos:photos.slice(1,7),
+    otherPhotos:photos.slice(1,10),
     active:true,
     source:'AutoWorld_Georgia',
     sourcePostId:String(source.sourcePostId||''),

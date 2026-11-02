@@ -79,3 +79,10 @@ test('catalog automation is canonical and RU-only',async()=>{
     assert.ok(!text.includes('auto-sale-demo.viiversion.com'));
   }
 });
+
+
+test('all ten source gallery photographs survive normalizing, without cutting to seven',async()=>{
+  const normalizer=await root('scripts/import-autoworld-catalog.mjs');
+  assert.match(normalizer,/otherPhotos:photos\.slice\(1,10\)/);
+  assert.doesNotMatch(normalizer,/otherPhotos:photos\.slice\(1,7\)/);
+});

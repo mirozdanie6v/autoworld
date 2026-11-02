@@ -1,0 +1,101 @@
+name: AWG source gallery repair (guarded)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .sync-awg-gallery-backfill
+  pull_request:
+    paths:
+      - scripts/backfill-awg-source-gallery.py
+      - tests/test_awg_gallery_backfill.py
+      - scripts/import-autoworld-catalog.mjs
+      - .github/workflows/backfill-awg-source-gallery.yml
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: awg-catalog-sync
+  cancel-in-progress: false
+
+jobs:
+  media-repair:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout canonical repo
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 2
+
+      - name: Select fail-closed repair mode
+        id: config
+        shell: bash
+        run: |
+          set -euo pipefail
+          mode=preview
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            changed=$(git diff-tree --no-commit-id --name-only -r "$GITHUB_SHA")
+            test "$changed" = ".sync-awg-gallery-backfill"
+            mode=$(sed -n 's/^mode=//p' .sync-awg-gallery-backfill | tail -n 1)
+          fi
+          case "$mode" in
+            preview) echo "apply=false" >> "$GITHUB_OUTPUT"; echo "scope=pilot" >> "$GITHUB_OUTPUT";;
+            pilot) echo "apply=true" >> "$GITHUB_OUTPUT"; echo "scope=pilot" >> "$GITHUB_OUTPUT";;
+            all) echo "apply=true" >> "$GITHUB_OUTPUT"; echo "scope=all" >> "$GITHUB_OUTPUT";;
+            *) echo "Invalid media backfill mode: $mode"; exit 1;;
+          esac
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "apply=false" >> "$GITHUB_OUTPUT"
+            echo "scope=pilot" >> "$GITHUB_OUTPUT"
+          fi
+          echo "AWG_GALLERY_MODE=$mode"
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install parser dependencies
+        run: python -m pip install --disable-pip-version-check requests beautifulsoup4
+
+      - name: Regression tests (must pass before any write)
+        run: python -m unittest discover -s tests -p test_awg_gallery_backfill.py -v
+
+      - name: Request restricted catalog-import OIDC
+        if: steps.config.outputs.apply == 'true'
+        uses: actions/github-script@v7
+        id: oidc
+        with:
+          script: |
+            const token = await core.getIDToken('autoworld-catalog-import')
+            core.setSecret(token)
+            core.setOutput('token', token)
+
+      - name: Run gallery-only repair and verify
+        env:
+          AUTO_SALE_CATALOG_IMPORT_BEARER: ${{ steps.oidc.outputs.token }}
+          APPLY: ${{ steps.config.outputs.apply }}
+          SCOPE: ${{ steps.config.outputs.scope }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/awg-gallery
+          if [ "$APPLY" = "true" ]; then
+            test -n "$AUTO_SALE_CATALOG_IMPORT_BEARER"
+            python scripts/backfill-awg-source-gallery.py --apply --scope "$SCOPE"
+          else
+            python scripts/backfill-awg-source-gallery.py --scope "$SCOPE"
+          fi
+
+      - name: Save immutable original gallery references and audited results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: awg-gallery-repair-report
+          path: |
+            /tmp/awg-gallery/report.json
+            /tmp/awg-gallery/media-backup.json
+          if-no-files-found: warn
+          retention-days: 90
