@@ -47,3 +47,29 @@ If the feature flag is off or the analytics connection is absent/equal to the op
 - [ ] Rollback test: unset `AUTO_SALE_VISITOR_ANALYTICS_ENABLED` and verify events stop immediately; restore the preceding container image if necessary.
 
 **Known limitation:** This initial read-only panel has platform-level sources only. Advertising attribution and cross-session profiles are out of scope and must not be reported as reliable until verified independently.
+
+## 2026-11-02 staging access diagnostic
+
+A read-only GitHub Actions probe was executed from
+`feature/awg-visitor-analytics-safe-20261102`. It verified GitHub's signed,
+non-secret OIDC issuer/audience/subject claims before calling Yandex.
+
+- OIDC `iss`: `https://token.actions.githubusercontent.com`
+- OIDC `aud`: `https://github.com/mirozdanie6v`
+- OIDC `sub`: `repo:mirozdanie6v@49186663/autoworld@1398349654:ref:refs/heads/feature/awg-visitor-analytics-safe-20261102`
+- Staging verify service account: `aje0hvomk86tu5lbs5rk` (read-only probe)
+- Yandex token exchange: **HTTP 401**. Metadata GET was **not attempted**.
+- No YDB changes, deployment, production reads or real visitor ingestion occurred.
+
+**Blocker:** staging federation does not authorize this exact branch identity.
+Review existing IAM federation and its issuer/audience/subject binding in
+Yandex Cloud. Prefer a dedicated least-privilege analytics staging principal.
+Do not expand trust to production branches/accounts or grant folder-wide roles
+by default. Confirm a separate empty analytics database before enabling.
+
+## CI result
+
+Unit tests for event validation, privacy redaction, disabled tracking, signed
+client capture, and rendering have passed on the development branch. The
+last branch commit must still pass all current PR checks; checks are not a
+substitute for physical Telegram/VK staging E2E.
