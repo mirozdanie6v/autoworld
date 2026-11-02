@@ -330,7 +330,9 @@ const server=http.createServer(async(req,res)=>{
       const body=await parseJson(req,48_000);
       const validated=validateVisitorEvents(body,{provider:access.authType==='vk-web'?'vk-web':access.identity?.provider||access.authType});
       if(!validated.ok){json(res,{error:validated.error},400);return}
-      if(!limitVisitorEvents(validated.events[0].sessionId,validated.events.length)){json(res,{error:'rate_limited'},429);return}
+      const visitorRateKey=String(access.identity?.key||'');
+      if(!visitorRateKey){json(res,{error:'signed_identity_required'},403);return}
+      if(!limitVisitorEvents(visitorRateKey,validated.events.length)){json(res,{error:'rate_limited'},429);return}
       const written=await(await visitorStore()).writeEvents(validated.events);
       json(res,{ok:true,...written},202);return;
     }
