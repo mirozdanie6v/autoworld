@@ -56,3 +56,8 @@ jobs:
           docker run --rm --entrypoint node autoworld-timeweb:check -e "import('./server/auto-sale-rules.mjs').then(m=>{if(typeof m.validateQuote!=='function')process.exit(1)})"
           docker run --rm --entrypoint node autoworld-yandex:check -e "import('./server/auto-sale-access.mjs').then(m=>{if(typeof m.sanitizeClientOperations!=='function')process.exit(1)})"
           docker run --rm --entrypoint node autoworld-timeweb:check -e "import('./server/auto-sale-access.mjs').then(m=>{if(typeof m.sanitizeClientOperations!=='function')process.exit(1)})"
+      - name: Build separate visitor analytics runtime (no production resources)
+        run: |
+          node --check server/awg-visitor-telemetry-server.mjs
+          docker build -f Dockerfile.visitor-analytics -t autoworld-visitor-analytics:check .
+          docker run --rm --entrypoint node autoworld-visitor-analytics:check -e "import('./server/awg-visitor-telemetry-server.mjs').then(m=>{if(typeof m.createVisitorTelemetryServer!=='function')process.exit(1)})"

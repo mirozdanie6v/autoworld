@@ -16,6 +16,8 @@ import {addAutoSaleNote,addAutoSalePayment,deleteAutoSaleLeadCascade,mutateAutoS
 import {MAX_ADMIN_ACCOUNTS,stateForAccess,rowVersionsForAccess,sanitizeClientOperations,sanitizeAdminOperations,applyManagerLeadClaims} from './auto-sale-access.mjs';
 import {managerTelegramUsername} from '../shared/auto-sale-manager-directory.mjs';
 import {verifyGitHubCatalogOidcToken} from './github-oidc-auth.mjs';
+import {validateVisitorEvents,visitorAnalyticsReport,isolatedVisitorYdbTarget} from '../shared/awg-visitor-analytics.mjs';
+import {createVisitorAnalyticsStore} from './awg-visitor-analytics-store.mjs';
 
 const rootDir=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const distDir=path.join(rootDir,'dist');
@@ -24,6 +26,26 @@ const connectionString=String(process.env.YDB_CONNECTION_STRING||'').trim();
 const persistenceProvider=String(process.env.AUTO_SALE_PERSISTENCE||'ydb').trim();
 if(!['ydb','postgres'].includes(persistenceProvider))throw new Error('unsupported_persistence_provider');
 const postgresEnabled=persistenceProvider==='postgres';
+// Disabled by default. Analytics MUST use a different YDB connection from orders and leads.
+const visitorAnalyticsConnection=String(process.env.AUTO_SALE_VISITOR_ANALYTICS_YDB_CONNECTION_STRING||'').trim();
+const visitorAnalyticsConfigured=/^(1|true|yes)$/i.test(String(process.env.AUTO_SALE_VISITOR_ANALYTICS_ENABLED||''))&&
+  !postgresEnabled&&isolatedVisitorYdbTarget(connectionString,visitorAnalyticsConnection);
+let visitorAnalyticsStorePromise=null;
+const visitorAnalyticsWindow=new Map();
+async function visitorStore(){
+  if(!visitorAnalyticsConfigured)throw Object.assign(new Error('visitor_analytics_disabled'),{statusCode:503});
+  if(!visitorAnalyticsStorePromise)visitorAnalyticsStorePromise=createVisitorAnalyticsStore({connectionString:visitorAnalyticsConnection})
+    .catch(error=>{visitorAnalyticsStorePromise=null;throw error});
+  return visitorAnalyticsStorePromise;
+}
+function limitVisitorEvents(sessionId,count){
+  const now=Date.now(),current=visitorAnalyticsWindow.get(sessionId);
+  if(visitorAnalyticsWindow.size>5000)for(const [key,v] of visitorAnalyticsWindow)if(now-v.start>60000)visitorAnalyticsWindow.delete(key);
+  const entry=!current||now-current.start>=60000?{start:now,count:0}:current;
+  if(entry.count+count>120)return false;
+  entry.count+=count;visitorAnalyticsWindow.set(sessionId,entry);
+  return true;
+}
 const databaseUrl=String(process.env.DATABASE_URL||'').trim();
 const apiKey=String(process.env.AUTO_SALE_API_KEY||'').trim();
 const catalogImportKey=String(process.env.AUTO_SALE_CATALOG_IMPORT_KEY||'').trim();
@@ -237,6 +259,25 @@ async function requestAccess(req,state=null){
   }
   return{state:current,access:{role:'client',authenticated:true,authType:'telegram',apiKey:false,user,identity,admin:null}};
 }
+// Event ingestion validates signed launch identity without reading orders, leads,
+// admin pins or the business YDB. Failed analytics must never affect client writes.
+function visitorSignedAccess(req){
+  const hasTelegram=Boolean(String(req.headers['x-telegram-init-data']||'').trim());
+  const hasVk=Boolean(String(req.headers['x-vk-launch-params']||'').trim());
+  if(hasTelegram&&hasVk)return null;
+  if(hasVk){
+    const auth=vkAuth(req);
+    return auth.ok?{authType:'vk',identity:auth.identity}:null;
+  }
+  if(hasTelegram){
+    const auth=telegramAuth(req);
+    if(!auth.ok||!/^\d+$/.test(String(auth.user?.id||'')))return null;
+    if(adminTelegramUsernames.includes(normalizeTelegramUsername(auth.user.username)))return null;
+    return{authType:'telegram',identity:{provider:'telegram',key:'telegram:'+String(auth.user.id)}};
+  }
+  const web=vkWeb.auth(req);
+  return web&&vkWeb.isTrustedWrite(req)?{authType:'vk-web',identity:web.identity}:null;
+}
 const accessSummary=access=>({
   role:access.role,
   authenticated:Boolean(access.authenticated),
@@ -295,6 +336,32 @@ const server=http.createServer(async(req,res)=>{
     const url=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);
     if(req.method==='OPTIONS'&&url.pathname.startsWith('/api/')){
       res.writeHead(204,apiHeaders);res.end();return;
+    }
+    if(url.pathname==='/api/auto-sale/visitor-analytics/config'&&req.method==='GET'){
+      json(res,{enabled:visitorAnalyticsConfigured,retentionDays:30,identification:'session-only',status:visitorAnalyticsConfigured?'staging-ready':'disabled'});
+      return;
+    }
+    if(url.pathname==='/api/auto-sale/visitor-analytics/events'&&req.method==='POST'){
+      if(!visitorAnalyticsConfigured){json(res,{error:'visitor_analytics_disabled'},503);return}
+      const access=visitorSignedAccess(req);
+      if(!access){json(res,{error:'signed_client_auth_required'},403);return}
+      const body=await parseJson(req,48_000);
+      const validated=validateVisitorEvents(body,{provider:access.authType==='vk-web'?'vk-web':access.identity?.provider||access.authType});
+      if(!validated.ok){json(res,{error:validated.error},400);return}
+      const visitorRateKey=String(access.identity?.key||'');
+      if(!visitorRateKey){json(res,{error:'signed_identity_required'},403);return}
+      if(!limitVisitorEvents(visitorRateKey,validated.events.length)){json(res,{error:'rate_limited'},429);return}
+      const written=await(await visitorStore()).writeEvents(validated.events);
+      json(res,{ok:true,...written},202);return;
+    }
+    if(url.pathname==='/api/auto-sale/visitor-analytics/report'&&req.method==='GET'){
+      if(!visitorAnalyticsConfigured){json(res,{error:'visitor_analytics_disabled'},503);return}
+      const {access}=await requestAccess(req);
+      if(access.role!=='admin'){json(res,{error:'admin_required'},403);return}
+      const days=Number(url.searchParams.get('days')||7);
+      if(![7,30].includes(days)){json(res,{error:'invalid_period'},400);return}
+      const rows=await(await visitorStore()).listEvents(days);
+      json(res,{ok:true,...visitorAnalyticsReport(rows,{days})});return;
     }
     if(url.pathname==='/api/auto-sale/vk/web/config'&&req.method==='GET'){
       json(res,{enabled:vkWeb.enabled,authenticated:Boolean(vkWeb.auth(req))});return;
