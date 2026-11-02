@@ -1,5 +1,5 @@
 AWG production release
-requested_at=2026-10-28
-source_sha=7f3b1d1ffffeb9715cf1a424de13833cf097683e
-reason=manager-quote-manufacture-date-year-month-day-PR-103
+requested_at=2026-11-02
+source_sha=fb18b1b51c228e3b30fbb0d48ae15e710fb70622
+reason=expand-catalog-source-gallery-to-ten-photos-PR-116
 run_real_client_e2e=false
