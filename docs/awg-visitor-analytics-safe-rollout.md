@@ -106,3 +106,24 @@ planning a telemetry database. The existing staging business YDB
 
 See Yandex Cloud's official CLI docs for federated-credential creation and
 listing. The authenticated cloud identity requires narrowly scoped IAM rights.
+
+## 2026-11-02 disposable YDB integration results
+
+A separate branch-only GitHub Actions workflow,
+`.github/workflows/awg-visitor-analytics-local-ydb.yml`, starts the official
+YDB Docker image with a **127.0.0.1-only gRPC listener**, runs a synthetic
+YDB persistence check, and stops the disposable container even on failure.
+
+The first physical database smoke [Actions run 41434834674](https://github.com/mirozdanie6v/autoworld/actions/runs/41434834674)
+finished **success**. It verified real YQL table creation with TTL syntax,
+event INSERT/SELECT behavior, read-only dashboard aggregation and the exclusion
+of sample PII from stored event records. A follow-up includes an idempotency
+replay (same event IDs must not create duplicate rows).
+
+This test is **not** a Yandex Cloud staging deployment. An actual 30-day
+background TTL deletion cannot be demonstrated in a short test; that requires
+an isolated deployment and retention monitoring.
+
+The `tests/awg-visitor-staging-iam.test.mjs` unit suite is now included in
+`npm test`, so subsequent default GitHub regression runs enforce federation
+selection and exact subject safeguards.
