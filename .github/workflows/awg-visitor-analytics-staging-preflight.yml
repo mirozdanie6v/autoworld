@@ -1,0 +1,88 @@
+name: AWG visitor analytics staging access preflight (read-only)
+on:
+  push:
+    branches:
+      - feature/awg-visitor-analytics-safe-20261102
+    paths:
+      - .github/workflows/awg-visitor-analytics-staging-preflight.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: awg-visitor-analytics-staging-access-preflight
+  cancel-in-progress: false
+
+jobs:
+  staging-access:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    env:
+      # Dedicated staging verification principal, never production deploy principal.
+      YC_STAGING_VERIFY_SA_ID: aje0hvomk86tu5lbs5rk
+      STAGING_YDB_ID: etnhujtu1t6f89tdtohs
+      STAGING_FOLDER_ID: b1ggsmuiq7tb2d27f89q
+    steps:
+      - name: Assert isolated read-only target
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$YC_STAGING_VERIFY_SA_ID" = aje0hvomk86tu5lbs5rk
+          test "$STAGING_YDB_ID" = etnhujtu1t6f89tdtohs
+          test "$STAGING_FOLDER_ID" = b1ggsmuiq7tb2d27f89q
+          test "$GITHUB_REF" = refs/heads/feature/awg-visitor-analytics-safe-20261102
+          echo "Scope: staging metadata READ only, no database mutations and no deployment." >> "$GITHUB_STEP_SUMMARY"
+      - name: Issue ephemeral GitHub OIDC token
+        id: oidc
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const token=await core.getIDToken('https://github.com/mirozdanie6v')
+            core.setSecret(token)
+            core.setOutput('token',token)
+      - name: Verify staging federation and inspect metadata (GET only)
+        shell: bash
+        env:
+          GITHUB_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const payload=JSON.parse(Buffer.from(process.env.GITHUB_OIDC_TOKEN.split('.')[1],'base64url'))
+          const expected='repo:mirozdanie6v/autoworld:ref:refs/heads/feature/awg-visitor-analytics-safe-20261102'
+          if(payload.iss!=='https://token.actions.githubusercontent.com' ||
+            payload.aud!=='https://github.com/mirozdanie6v' || payload.sub!==expected) {
+            console.error('Unexpected OIDC issuer/audience/subject; aborting before cloud call')
+            process.exit(1)
+          }
+          console.log('Verified OIDC claims for isolated feature branch')
+          NODE
+          RESPONSE="$(curl -fsS --connect-timeout 10 --max-time 30 -w '\n%{http_code}' \
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            --data-urlencode 'grant_type=urn:ietf:params:oauth:grant-type:token-exchange' \
+            --data-urlencode 'requested_token_type=urn:ietf:params:oauth:token-type:access_token' \
+            --data-urlencode "audience=$YC_STAGING_VERIFY_SA_ID" \
+            --data-urlencode "subject_token=$GITHUB_OIDC_TOKEN" \
+            --data-urlencode 'subject_token_type=urn:ietf:params:oauth:token-type:id_token' \
+            https://auth.yandex.cloud/oauth/token || true)"
+          CODE="$(printf '%s' "$RESPONSE" | tail -n1)"
+          if [[ "$CODE" != 200 ]]; then
+            echo "::error::Staging-only federation not available (HTTP $CODE)"
+            echo "Yandex staging OIDC exchange: HTTP $CODE; no cloud changes." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          TOKEN="$(printf '%s' "$RESPONSE" | sed '$d' | jq -r '.access_token // empty')"
+          test -n "$TOKEN"
+          echo "::add-mask::$TOKEN"
+          CODE="$(curl -sS --connect-timeout 10 --max-time 25 -o "$RUNNER_TEMP/staging.json" -w '%{http_code}' \
+            -H "Authorization: Bearer $TOKEN" \
+            "https://ydb.api.cloud.yandex.net/ydb/v1/databases/$STAGING_YDB_ID" || true)"
+          echo "Staging YDB metadata GET: HTTP $CODE" >> "$GITHUB_STEP_SUMMARY"
+          if [[ "$CODE" != 200 ]]; then
+            echo "::warning::Staging YDB metadata read unavailable; no mutations attempted."
+            exit 1
+          fi
+          jq -e --arg id "$STAGING_YDB_ID" '.id == $id' "$RUNNER_TEMP/staging.json" >/dev/null
+          echo "Confirmed staging YDB metadata access. This database is for EXISTING TEST BUSINESS DATA, not visitor analytics." >> "$GITHUB_STEP_SUMMARY"
+          echo "Separate empty telemetry YDB still required before enabling the feature." >> "$GITHUB_STEP_SUMMARY"
