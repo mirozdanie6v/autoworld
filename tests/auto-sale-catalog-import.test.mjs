@@ -86,3 +86,14 @@ test('all ten source gallery photographs survive normalizing, without cutting to
   assert.match(normalizer,/otherPhotos:photos\.slice\(1,10\)/);
   assert.doesNotMatch(normalizer,/otherPhotos:photos\.slice\(1,7\)/);
 });
+
+test('bulk media recovery remains marker gated, bounded and backed up',async()=>{
+  const workflow=await root('.github/workflows/sync-awg-catalog.yml');
+  assert.match(workflow,/gallery_repair_requires_marker_only_commit/);
+  assert.match(workflow,/batch\|remaining\)/);
+  assert.match(workflow,/AWG_GALLERY_REMAINING_PLAN/);
+  assert.match(workflow,/AWG_GALLERY_BATCH_OK/);
+  assert.match(workflow,/test "\$LIMIT" -le 30/);
+  assert.match(workflow,/\/tmp\/awg-gallery\/\*\.json/);
+  assert.match(workflow,/if: steps\.mode\.outputs\.gallery != 'true'/);
+});
