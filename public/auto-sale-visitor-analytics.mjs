@@ -55,7 +55,7 @@ document.addEventListener('click',event=>{
 },true);
 document.addEventListener('change',event=>{
  if(!enabled||!clientAllowed())return;
- if(['brandFilter','originFilter','budgetFilter'].includes(event.target?.id))trackVisitorEvent('filter_change');
+ if(['brandFilter','originFilter','budgetFilter','autoSearch'].includes(event.target?.id))trackVisitorEvent('filter_change');
 },true);
 document.addEventListener('submit',event=>{
  if(event.target?.id!=='requestForm')return;
@@ -66,7 +66,7 @@ export function visitorAnalyticsPanelShell(){
  return '<section class="auto-section" data-awg-analytics-panel><div class="auto-section-head"><div><span class="auto-eyebrow">ПОВЕДЕНИЕ ПОСЕТИТЕЛЕЙ</span><h2>Активность в Mini App</h2></div><button class="auto-btn ghost" type="button" data-awg-analytics-refresh>Обновить</button></div><article class="auto-panel"><div data-awg-analytics-report aria-live="polite">Получаем статистику…</div></article></section>';
 }
 function metric(title,value,note){
- return '<div class="auto-kpi"><small>'+esc(title)+'</small><strong>'+esc(value)+'</strong><span>'+esc(note||'')+'</span></div>';
+ return '<div class="auto-kpi"><span>'+esc(title)+'</span><b>'+esc(value)+'</b><small>'+esc(note||'')+'</small></div>';
 }
 function row(title,value){
  return '<div class="auto-data-row static"><span><b>'+esc(title)+'</b></span><span>'+esc(value)+'</span></div>';
