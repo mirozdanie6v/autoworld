@@ -166,7 +166,7 @@ def save(path, data):
     target.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 def run(args):
-    if args.apply and (args.scope not in ("pilot", "all") or not os.environ.get("AUTO_SALE_CATALOG_IMPORT_BEARER")):
+    if args.apply and (args.scope not in ("pilot", "all", "batch") or not os.environ.get("AUTO_SALE_CATALOG_IMPORT_BEARER")):
         raise ValueError("apply_requires_explicit_scope_and_oidc")
     originals = fetch_state()
     selected = sorted(originals.values(), key=lambda x: int(x.get("sourcePostId") or 0))
@@ -175,10 +175,16 @@ def run(args):
         selected = [c for c in selected if str(c.get("sourcePostId")) in pilot]
         if len(selected) != 3:
             raise ValueError("pilot_cars_missing")
+    if args.scope == "batch":
+        if not 0 <= args.start < 300 or not 1 <= args.limit <= 30:
+            raise ValueError("unsafe_gallery_batch_parameters")
+        selected = selected[args.start:args.start + args.limit]
     if len(selected) < 1 or len(selected) > 300:
         raise ValueError("unsafe_catalog_scope")
     report = {"timestamp": datetime.now(timezone.utc).isoformat(), "scope": args.scope,
               "apply": args.apply, "catalogCars": len(originals), "inspected": len(selected),
+              "start": args.start if args.scope == "batch" else None,
+              "limit": args.limit if args.scope == "batch" else None,
               "needsRepair": 0, "missingPhotos": 0, "patched": [], "skipped": [],
               "failures": []}
     backups = []
@@ -204,8 +210,8 @@ def run(args):
     save(args.report, report)
     if not args.apply:
         return report
-    if report["failures"] and args.scope == "pilot":
-        raise RuntimeError("pilot_preflight_failed")
+    if report["failures"] and args.scope in ("pilot", "batch"):
+        raise RuntimeError("gallery_preflight_failed")
     if report["missingPhotos"] > 1000 or report["needsRepair"] > 200:
         raise ValueError("repair_scope_exceeds_guard")
     token = os.environ["AUTO_SALE_CATALOG_IMPORT_BEARER"]
@@ -267,7 +273,9 @@ def run(args):
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--apply", action="store_true", help="Upload and patch only with OIDC authorization")
-    p.add_argument("--scope", choices=("pilot", "all"), default="pilot")
+    p.add_argument("--scope", choices=("pilot", "all", "batch"), default="pilot")
+    p.add_argument("--start", type=int, default=0, help="0-based offset in sorted, original source catalog")
+    p.add_argument("--limit", type=int, default=20, help="1 to 30 car records per guarded batch")
     p.add_argument("--report", default="/tmp/awg-gallery/report.json")
     p.add_argument("--backup", default="/tmp/awg-gallery/media-backup.json")
     args = p.parse_args()
