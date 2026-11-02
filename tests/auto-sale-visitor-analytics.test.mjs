@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {validateVisitorEvents,visitorAnalyticsReport,VISITOR_EVENT_TYPES} from '../shared/awg-visitor-analytics.mjs';
+import {validateVisitorEvents,visitorAnalyticsReport,VISITOR_EVENT_TYPES,isolatedVisitorYdbTarget} from '../shared/awg-visitor-analytics.mjs';
 
 const event=(type='car_open',more={})=>({type,eventId:'evt_123456789',carId:'car_1',...more});
 const payload=(events=[event()])=>({sessionId:'session_123456789',events});
@@ -48,4 +48,15 @@ test('aggregates visits, funnel, car views and anonymous timeline without identi
  assert.equal(report.sources.length,2);
  assert.equal(report.recentSessions[0].sessionId.length,8);
  assert.equal(report.recentSessions[0].events.some(e=>e.type==='request_success'),true);
+});
+
+test('analytics connection must be a different staging YDB database, not an alias to business YDB',()=>{
+ const main='grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/folder/business';
+ const same='grpcs://ydb.serverless.yandexcloud.net:2135/?database=%2Fru-central1%2Ffolder%2Fbusiness';
+ const separate='grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/folder/visitor';
+ assert.equal(isolatedVisitorYdbTarget(main,main),false);
+ assert.equal(isolatedVisitorYdbTarget(main,same),false);
+ assert.equal(isolatedVisitorYdbTarget(main,separate),true);
+ assert.equal(isolatedVisitorYdbTarget(main,'grpcs://other.example:2135/?database=/ru-central1/folder/visitor'),false);
+ assert.equal(isolatedVisitorYdbTarget(main,''),false);
 });
