@@ -25,6 +25,7 @@ import {
 } from './auto-sale-business-rules.mjs';
 import {AUTO_SALE_MANAGERS,managerTelegramIdentity} from './auto-sale-manager-directory.mjs';
 import {channelSourceStats as sourceStats,channelResponseStats,responseTimeLabel} from './auto-sale-channel-analytics.mjs';
+import {trackVisitorEvent,ensureVisitorTracking,visitorAnalyticsPanelShell,hydrateVisitorAnalytics} from './auto-sale-visitor-analytics.mjs';
 
 const root=document.querySelector('#app');
 if(!root)throw new Error('AUTO SALE root not found');
@@ -666,7 +667,7 @@ function modalDeleteLead(lead,error=''){
 }
 
 function modal(){const m=state.modal;if(!m)return'';if(m.type==='request')return modalRequest(m.prefill||'',!!m.managerMode,m.origin||'');if(m.type==='detail')return modalDetail(cars.find(x=>x.id===m.id));if(m.type==='catalogCar')return modalCatalogCar(cars.find(x=>x.id===m.id));if(m.type==='lead')return modalLead(leads.find(x=>x.id===m.id));if(m.type==='deleteLead')return modalDeleteLead(leads.find(x=>x.id===m.id),m.error||'');if(m.type==='quote'){const q=quotes.find(x=>x.id===m.id),lead=leads.find(x=>x.id===(q?.leadId||m.leadId));return modalQuote(q,lead,m.origin||'')}if(m.type==='order')return modalOrder(orders.find(x=>x.id===m.id));return''}
-function page(){if(state.role==='client')return state.route==='catalog'?catalog():state.route==='orders'?clientOrders():state.route==='about'?about():home();if(state.role==='manager')return state.route==='leads'?managerLeads():state.route==='quotes'?managerQuotes():state.route==='catalogAdmin'?managerCatalog():state.route==='shipping'?managerShipping():managerWork();return state.route==='pipeline'?ownerPipeline():state.route==='finance'?ownerFinance():state.route==='ordersAdmin'?ownerOrders():ownerOverview()}
+function page(){if(state.role==='client')return state.route==='catalog'?catalog():state.route==='orders'?clientOrders():state.route==='about'?about():home();if(state.role==='manager')return state.route==='leads'?managerLeads():state.route==='quotes'?managerQuotes():state.route==='catalogAdmin'?managerCatalog():state.route==='shipping'?managerShipping():managerWork()+visitorAnalyticsPanelShell();return state.route==='pipeline'?ownerPipeline():state.route==='finance'?ownerFinance():state.route==='ordersAdmin'?ownerOrders():ownerOverview()+visitorAnalyticsPanelShell()}
 async function hydrateCatalogLeadBudget(){
   const form=root.querySelector('#leadEditForm'),hint=form?.querySelector('#catalogLeadBudgetHint');
   const lead=state.modal?.type==='lead'?leads.find(x=>x.id===state.modal.id):null;
@@ -731,7 +732,7 @@ async function hydrateQuoteRate(form){
     if(form.isConnected&&hint)hint.textContent='Курс ЦБ РФ недоступен. Введите проверенный курс и дату вручную.';
   }finally{quoteRateInflight.delete(form)}
 }
-function render(){root.innerHTML=shell(page());if(state.role==='client')window.__AUTO_SALE_RENDER_VK_MESSAGES_HINT__?.();void hydrateCatalogLeadBudget();void hydrateCatalogRequestRate();void hydrateQuoteRate(root.querySelector('#quoteForm'))}
+function render(){root.innerHTML=shell(page());void hydrateVisitorAnalytics(root);void ensureVisitorTracking();if(state.role==='client')window.__AUTO_SALE_RENDER_VK_MESSAGES_HINT__?.();void hydrateCatalogLeadBudget();void hydrateCatalogRequestRate();void hydrateQuoteRate(root.querySelector('#quoteForm'))}
 function focusAfterRender(id){render();queueMicrotask(()=>{const el=document.getElementById(id);if(el){el.focus();if('selectionStart'in el){const n=el.value.length;el.setSelectionRange(n,n)}}})}
 function syncQuoteCurrency(form,changed){
  if(!form)return;
@@ -1014,6 +1015,7 @@ async function submitRequest(form){
     }
     const saved=window.__AUTO_SALE_ENTITY_BATCH__?await commitEntities([{resource:'lead',operation:'create',id:lead.id,input:lead},{resource:'note',operation:'create',leadId:lead.id,input:note}],form):{ok:true,localOnly:true};
     if(!saved){
+      if(!managerMode)trackVisitorEvent('request_failure',data.carId||'');
       const problem=form.querySelector('.auto-form-error');
       if(problem){
         problem.setAttribute('role','alert');
@@ -1021,7 +1023,7 @@ async function submitRequest(form){
       }
       return;
     }
-    leads.push(lead);notes[lead.id]=[note];saveAll();
+    leads.push(lead);notes[lead.id]=[note];saveAll();if(!managerMode)trackVisitorEvent('request_success',data.carId||'');
     state.modal=null;state.role=managerMode?'manager':'client';state.route=managerMode?'leads':'orders';sessionStorage.setItem(KEYS.role,state.role);render();
   }finally{
     if(submitButton?.isConnected){submitButton.disabled=false;submitButton.textContent=originalText;submitButton.removeAttribute('aria-busy')}
