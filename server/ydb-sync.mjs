@@ -61,7 +61,7 @@ export async function syncYdbState(store,input,{includePrevious=false,prepareNot
     if(!validPhoto(car.image))return bad('invalid_catalog_car',{id,details:['Укажите корректное главное фото автомобиля.']});
     const interior=photoList(car.interiorPhotos),other=photoList(car.otherPhotos);
     if(interior.length>4)return bad('invalid_catalog_photos',{id,details:['Допускается не более 4 фото салона.']});
-    if(other.length>6)return bad('invalid_catalog_photos',{id,details:['Допускается не более 6 дополнительных фото.']});
+    if(other.length>9)return bad('invalid_catalog_photos',{id,details:['Допускается не более 9 дополнительных фото.']});
     if([...interior,...other].some(src=>!validPhoto(src)))return bad('invalid_catalog_photos',{id,details:['Одно из фото имеет неподдерживаемый формат или слишком большой размер.']});
   }
 
