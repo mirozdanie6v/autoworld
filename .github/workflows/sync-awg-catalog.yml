@@ -8,6 +8,7 @@ on:
     branches: [main]
     paths:
       - .sync-awg-catalog
+      - .sync-awg-gallery-backfill
       - .sync-awg-catalog-price-reconcile
       - scripts/prepare-awg-price-safe-import.mjs
 
@@ -60,9 +61,14 @@ jobs:
           print('AWG_CATALOG_CHANGED_FILES', sorted(changed))
           price=(os.environ.get('GITHUB_EVENT_NAME')=='push'
                  and '.sync-awg-catalog-price-reconcile' in changed)
+          gallery=(os.environ.get('GITHUB_EVENT_NAME')=='push'
+                   and '.sync-awg-gallery-backfill' in changed)
+          if gallery and changed!={'.sync-awg-gallery-backfill'}:
+              raise RuntimeError('gallery_repair_requires_marker_only_commit')
           with open(os.environ['GITHUB_OUTPUT'],'a',encoding='utf8') as fp:
               fp.write('price='+('true' if price else 'false')+'\n')
-          print('AWG_CATALOG_WORKFLOW_MODE', 'price-reconcile' if price else 'scheduled-import')
+              fp.write('gallery='+('true' if gallery else 'false')+'\n')
+          print('AWG_CATALOG_WORKFLOW_MODE', 'gallery-backfill' if gallery else ('price-reconcile' if price else 'scheduled-import'))
           PY
 
       - name: Install scraper dependencies
@@ -86,7 +92,28 @@ jobs:
           echo "::add-mask::$CATALOG_OIDC_TOKEN"
           echo "AUTO_SALE_CATALOG_IMPORT_BEARER=$CATALOG_OIDC_TOKEN" >> "$GITHUB_ENV"
 
+      - name: Repair Telegram galleries through already-trusted catalog-import workflow
+        if: steps.mode.outputs.gallery == 'true'
+        run: |
+          set -euo pipefail
+          mode=$(sed -n 's/^mode=//p' .sync-awg-gallery-backfill | tail -n 1)
+          mkdir -p /tmp/awg-gallery
+          case "$mode" in
+            preview)
+              python scripts/backfill-awg-source-gallery.py --scope pilot
+              ;;
+            pilot|all)
+              test -n "$AUTO_SALE_CATALOG_IMPORT_BEARER"
+              python scripts/backfill-awg-source-gallery.py --apply --scope "$mode"
+              ;;
+            *)
+              echo "Invalid gallery repair mode: $mode"
+              exit 1
+              ;;
+          esac
+
       - name: Seed current production media index
+        if: steps.mode.outputs.gallery != 'true'
         run: |
           set -euo pipefail
           mkdir -p /tmp/awg-import
@@ -98,7 +125,7 @@ jobs:
           cp /tmp/awg-import/cars.json /tmp/awg-import/live-catalog.json
 
       - name: Scrape recent AutoWorld Georgia posts
-        if: steps.mode.outputs.price != 'true'
+        if: steps.mode.outputs.price != 'true' && steps.mode.outputs.gallery != 'true'
         env:
           OUT_DIR: /tmp/awg-import
           MAX_PAGES: '20'
@@ -109,7 +136,7 @@ jobs:
         run: python scripts/scrape-autoworld-georgia.py
 
       - name: Normalize recent posts
-        if: steps.mode.outputs.price != 'true'
+        if: steps.mode.outputs.price != 'true' && steps.mode.outputs.gallery != 'true'
         env:
           SOURCE_PATH: /tmp/awg-import/cars.json
           OUTPUT_PATH: /tmp/awg-catalog-normalized.json
@@ -118,7 +145,7 @@ jobs:
         run: node scripts/import-autoworld-catalog.mjs
 
       - name: Reconcile all fresh source prices without replacing existing VINs or media
-        if: steps.mode.outputs.price != 'true'
+        if: steps.mode.outputs.price != 'true' && steps.mode.outputs.gallery != 'true'
         env:
           SOURCE_PATH: /tmp/awg-import/cars.json
           LIVE_PATH: /tmp/awg-import/live-catalog.json
@@ -128,7 +155,7 @@ jobs:
         run: node scripts/prepare-awg-price-safe-import.mjs
 
       - name: Upsert recent catalog entities
-        if: steps.mode.outputs.price != 'true'
+        if: steps.mode.outputs.price != 'true' && steps.mode.outputs.gallery != 'true'
         env:
           AUTO_SALE_CATALOG_IMPORT_URL: https://awgcars.ru/api/auto-sale/admin/catalog-import
           SOURCE_PATH: /tmp/awg-catalog-import.json
@@ -140,7 +167,7 @@ jobs:
           node scripts/sync-autoworld-catalog.mjs
 
       - name: Verify public RU catalog
-        if: steps.mode.outputs.price != 'true'
+        if: steps.mode.outputs.price != 'true' && steps.mode.outputs.gallery != 'true'
         run: |
           set -euo pipefail
           curl --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 10 --max-time 30 -fsS \
@@ -171,7 +198,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Verify corrected pricing, immutable catalog IDs and preserved source photos
-        if: steps.mode.outputs.price != 'true'
+        if: steps.mode.outputs.price != 'true' && steps.mode.outputs.gallery != 'true'
         run: |
           set -euo pipefail
           node --input-type=module <<'JS'
@@ -265,7 +292,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Upload import audit
-        if: always() && steps.mode.outputs.price != 'true'
+        if: always() && steps.mode.outputs.price != 'true' && steps.mode.outputs.gallery != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: awg-catalog-import-audit
@@ -275,3 +302,14 @@ jobs:
             /tmp/awg-import/price-sync-report.json
             /tmp/awg-import/live-catalog.json
           if-no-files-found: ignore
+
+      - name: Preserve original gallery references and repair audit
+        if: always() && steps.mode.outputs.gallery == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: awg-gallery-repair-report
+          path: |
+            /tmp/awg-gallery/report.json
+            /tmp/awg-gallery/media-backup.json
+          if-no-files-found: warn
+          retention-days: 90
