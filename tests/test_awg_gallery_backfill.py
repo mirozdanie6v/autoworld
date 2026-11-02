@@ -108,6 +108,36 @@ class GallerySafetyTests(unittest.TestCase):
                 gallery.fetch_state()
             self.assertEqual(get.call_count, 5)
 
+    def test_telegram_500_refreshes_same_post_same_index(self):
+        import requests
+        from unittest.mock import Mock
+        error = requests.exceptions.HTTPError("CDN 500")
+        error.response = Mock(status_code=500)
+        good = Mock()
+        good.headers = {"content-type": "image/jpeg"}
+        good.content = b"x" * 500
+        good.raise_for_status.return_value = None
+        with patch.object(gallery.requests, "get", side_effect=[error, error, good]) as get, \
+             patch.object(gallery, "lookup_source", return_value=["https://new/1"]*7+["https://new/8"]+["https://new/9","https://new/10"]) as lookup, \
+             patch.object(gallery.time, "sleep") as delay:
+            content, mime = gallery.download_source_photo("4394", 8, "https://old/8", "WP1AA2A50RLB18308")
+            self.assertEqual(len(content), 500)
+            self.assertEqual(mime, "image/jpeg")
+            self.assertEqual(get.call_args.args[0], "https://new/8")
+            lookup.assert_called_once_with({"sourcePostId": "4394", "vin": "WP1AA2A50RLB18308"})
+            self.assertEqual(delay.call_count, 2)
+
+    def test_telegram_bad_index_refuses_replacement(self):
+        import requests
+        from unittest.mock import Mock
+        error = requests.exceptions.HTTPError("CDN 500")
+        error.response = Mock(status_code=500)
+        with patch.object(gallery.requests, "get", side_effect=error), \
+             patch.object(gallery, "lookup_source", return_value=["url"] * 6), \
+             patch.object(gallery.time, "sleep"):
+            with self.assertRaisesRegex(ValueError, "source_index_changed"):
+                gallery.download_source_photo("4394", 8, "https://old/8", "WP1AA2A50RLB18308")
+
     def test_apply_requires_oidc(self):
         from argparse import Namespace
         p = Namespace(apply=True, scope="pilot", report="/tmp/not-written.json",
