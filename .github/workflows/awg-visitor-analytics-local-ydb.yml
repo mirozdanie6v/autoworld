@@ -1,0 +1,67 @@
+name: AWG visitor telemetry synthetic local YDB integration
+
+on:
+  push:
+    branches:
+      - feature/awg-visitor-analytics-safe-20261102
+    paths:
+      - .github/workflows/awg-visitor-analytics-local-ydb.yml
+      - scripts/test-awg-visitor-analytics-local-ydb.mjs
+      - server/awg-visitor-analytics-store.mjs
+      - shared/awg-visitor-analytics.mjs
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: awg-visitor-analytics-local-ydb
+  cancel-in-progress: true
+
+jobs:
+  synthetic-local-integration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      AWG_ANALYTICS_LOCAL_YDB: grpc://127.0.0.1:2136/local
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - name: Validate local-only safety constraints
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$AWG_ANALYTICS_LOCAL_YDB" = "grpc://127.0.0.1:2136/local"
+          test "${{ github.ref }}" = "refs/heads/feature/awg-visitor-analytics-safe-20261102"
+          npm ci
+          node --check scripts/test-awg-visitor-analytics-local-ydb.mjs
+      - name: Start isolated ephemeral YDB in Docker
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run -d --rm \
+            --name awg-visitor-ydb-local \
+            --hostname localhost \
+            -p 127.0.0.1:2136:2136 \
+            -e GRPC_PORT=2136 \
+            -e MON_PORT=8765 \
+            -e YDB_GRPC_ENABLE_TLS=false \
+            -e YDB_USE_IN_MEMORY_PDISKS=true \
+            ydbplatform/local-ydb:latest
+          docker ps --filter name=awg-visitor-ydb-local --format '{{.Names}}'
+      - name: Verify real SQL schema, write, read, and aggregate synthetic data
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 420s node scripts/test-awg-visitor-analytics-local-ydb.mjs
+          echo "PASS: isolated disposable local YDB, no Yandex account access, no cloud IAM, no business state writes." >> "$GITHUB_STEP_SUMMARY"
+      - name: Stop and discard ephemeral YDB
+        if: always()
+        shell: bash
+        run: |
+          docker logs --tail 20 awg-visitor-ydb-local 2>/dev/null || true
+          docker stop awg-visitor-ydb-local 2>/dev/null || true
+          echo "Cleanup: local container stopped. Real production/staging YDB and customer data untouched." >> "$GITHUB_STEP_SUMMARY"
