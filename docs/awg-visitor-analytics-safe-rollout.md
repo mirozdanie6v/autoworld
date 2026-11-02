@@ -127,3 +127,53 @@ an isolated deployment and retention monitoring.
 The `tests/awg-visitor-staging-iam.test.mjs` unit suite is now included in
 `npm test`, so subsequent default GitHub regression runs enforce federation
 selection and exact subject safeguards.
+
+## Separate Yandex Serverless Container — isolation gate (02 Nov 2026)
+
+Cloud resources created by the user (verified in Yandex Cloud screenshots):
+
+* **New telemetry database**: `awg-visitor-analytics-staging`, ID `etnbvdb8fdv4qea3c5ap`, path `/ru-central1/b1ggsmuiq7tb2d27f89q/etnbvdb8fdv4qea3c5ap`; Serverless, 10 RU/s, 1 GB, 0 reserved RU/s.
+* **Dedicated runtime identity**: `awg-visitor-analytics-staging-sa`; direct `ydb.editor` access **on the telemetry database only** (shown with inherited roles hidden).
+* **Dedicated empty container**: `awg-visitor-analytics-staging`. Its Yandex UI is currently at the **Create revision editor**. **Do not create a revision with an unrelated AWG runtime image.**
+
+An independent staging runtime is provided by
+`server/awg-visitor-telemetry-server.mjs` and
+`Dockerfile.visitor-analytics`. It imports neither the business state store
+nor business entity mutations. It enforces the **exact** telemetry YDB target,
+signed launch credentials and an explicit numeric admin ID allowlist; on a
+cold start the feature is off. The Docker image is **not yet pushed** to Yandex
+Container Registry. The current frontend/API integration in
+`server/yandex-server.mjs` is a separate previous prototype and **must
+remain off**. A future authenticated private-container proxy is required
+before the full staging UI can send events.
+
+Proposed new-container revision settings **only after a verified image exists**:
+
+| Setting | Value |
+|---|---|
+| Mode | HTTP server |
+| Runtime identity | `awg-visitor-analytics-staging-sa` |
+| vCPU | 1 |
+| Memory | 512 MB for YDB client + Node; tune after measurement |
+| Timeout | 30 seconds |
+| Prepared instances | 0 |
+| Image | Only the vetted digest of `Dockerfile.visitor-analytics` built on the feature branch in Yandex Container Registry |
+| Enabled | `AWG_VISITOR_ANALYTICS_ENABLED=0` (first smoke revision); do not collect real visits |
+| Database | `AWG_VISITOR_YDB_CONNECTION_STRING=grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1ggsmuiq7tb2d27f89q/etnbvdb8fdv4qea3c5ap` |
+| Admin access | `AWG_VISITOR_ADMIN_TELEGRAM_IDS` / `AWG_VISITOR_ADMIN_VK_IDS` verified numeric test admin IDs only, optional until admin acceptance |
+| Browser origins | `AWG_VISITOR_ALLOWED_ORIGINS` explicit approved HTTPS staging origins only; empty means reject cross-origin |
+| Bot and VK credentials | Staging credentials via Yandex Lockbox only, never write tokens in GitHub or console screenshots |
+| Public invocation | **Disabled**; grant `serverless-containers.containerInvoker` only to a vetted staging proxy principal at the new container |
+
+For a **private** Container Registry image, the revision's runtime
+service account additionally needs `container-registry.images.puller` at
+the **specific registry or repository**, not at the whole cloud by default.
+The user creating a revision also needs permission to use that service
+account. Grant this only after identifying the correct registry and image.
+
+All subsequent steps require: (1) CI tests and isolated Docker build passing,
+(2) publication of an immutable image digest to a dedicated registry,
+(3) first feature-off revision and private health smoke, (4) a verified
+staging-only invocation/proxy path, (5) staging signed TG/VK E2E and
+rollback. **No production revision changes or user-data collection before
+explicit approval.**
