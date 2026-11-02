@@ -42,3 +42,21 @@ export function visitorAnalyticsReport(rows=[],{days=7}={}){
     .sort((a,b)=>String(b.events.at(-1)?.at||'').localeCompare(String(a.events.at(-1)?.at||''))).slice(0,20);
   return {days,sessions:sessions.size,counts,topCars:[...carViews.entries()].sort((a,b)=>b[1]-a[1]).slice(0,10).map(([carId,views])=>({carId,views})),sources:[...sources.entries()].map(([source,opens])=>({source,opens})),recentSessions:pathsOutput,limited:rows.length>=10000};
 }
+
+export function isolatedVisitorYdbTarget(primary,candidate){
+  try{
+    const main=new URL(String(primary||'').trim()),visitor=new URL(String(candidate||'').trim());
+    if(main.protocol!=='grpcs:'||visitor.protocol!=='grpcs:')return false;
+    if(main.hostname!=='ydb.serverless.yandexcloud.net'||visitor.hostname!=='ydb.serverless.yandexcloud.net')return false;
+    function database(uri){
+      let value=decodeURIComponent(uri.searchParams.get('database')||'');
+      while(value.endsWith('/'))value=value.slice(0,-1);
+      return value;
+    }
+    const first=database(main),second=database(visitor);
+    if(!first.startsWith('/ru-central1/')||!second.startsWith('/ru-central1/'))return false;
+    if(first===second)return false;
+    if(visitor.username||visitor.password)return false;
+    return true;
+  }catch{return false}
+}
