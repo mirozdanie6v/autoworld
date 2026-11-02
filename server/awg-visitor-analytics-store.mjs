@@ -3,7 +3,6 @@ import {query} from '@ydbjs/query';
 import {MetadataCredentialsProvider} from '@ydbjs/auth/metadata';
 import {Uint64} from '@ydbjs/value/primitive';
 
-const TABLE='auto_sale_visitor_events_v1';
 // Own YDB database only. Never write into the application's business-domain database.
 export async function createVisitorAnalyticsStore({connectionString,credentialsProvider=new MetadataCredentialsProvider()}){
   if(!connectionString)throw new Error('visitor_analytics_ydb_required');
@@ -22,7 +21,7 @@ export async function createVisitorAnalyticsStore({connectionString,credentialsP
       source_channel Utf8 NOT NULL,
       PRIMARY KEY (event_day, event_id)
     ) WITH (TTL = Interval("P30D") ON event_epoch AS SECONDS)`;
-  }catch(error){await driver.destroy?.();throw error;}
+  }catch(error){driver.close();throw error;}
   return{
     async writeEvents(events){
       for(const event of events){
@@ -44,6 +43,6 @@ export async function createVisitorAnalyticsStore({connectionString,credentialsP
         type:String(r.event_type||''),carId:String(r.car_id||''),source:String(r.source_channel||'')
       }));
     },
-    async close(){await driver.destroy?.();}
+    async close(){driver.close();}
   };
 }
