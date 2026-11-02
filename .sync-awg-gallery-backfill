@@ -1,4 +1,4 @@
 mode=batch
-start=0
+start=20
 limit=20
-run=2026-11-02-bulk-batch-01
+run=2026-11-02-bulk-batch-02
