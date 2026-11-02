@@ -1,4 +1,4 @@
-mode=batch
-start=20
+mode=remaining
+start=40
 limit=20
-run=2026-11-02-bulk-batch-02
+run=2026-11-02-resumable-source-gallery-bulk-after-batch02
