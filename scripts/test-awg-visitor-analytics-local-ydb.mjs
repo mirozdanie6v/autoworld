@@ -33,6 +33,8 @@ for(let attempt=1;attempt<=12;attempt++){
 }
 try{
   assert.deepEqual(await store.writeEvents(checked.events),{written:4});
+  // Retry the same batch: at-least-once delivery must not duplicate events.
+  assert.deepEqual(await store.writeEvents(checked.events),{written:4});
   const loaded=await store.listEvents(30);
   assert.equal(loaded.length,4);
   assert.equal(loaded.every(e=>e.sessionId===payload.sessionId),true);
