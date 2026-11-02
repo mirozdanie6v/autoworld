@@ -5,7 +5,7 @@ import {validateVisitorEvents,visitorAnalyticsReport} from '../shared/awg-visito
 
 const endpoint=String(process.env.AWG_ANALYTICS_LOCAL_YDB||'');
 if(endpoint!=='grpc://127.0.0.1:2136/local')throw new Error('local_ydb_only_required');
-const createdAt=new Date('2026-11-02T12:00:00.000Z');
+const createdAt=new Date();
 const payload={
   sessionId:'synthetic_local_session_001',
   events:[
