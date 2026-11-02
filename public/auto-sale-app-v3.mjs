@@ -89,7 +89,7 @@ const sortedByAuction=list=>[...list].sort(auctionSort);
 const dateTimeRu=v=>{const d=new Date(v);return Number.isNaN(d.getTime())?'—':d.toLocaleString('ru-RU',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})};
 const showErrors=(form,errors)=>{let box=form.querySelector('.auto-form-error');if(!box){box=document.createElement('div');box.className='auto-form-error full';form.prepend(box)}box.innerHTML=errors.map(x=>`<span>${esc(x)}</span>`).join('')};
 const MAX_INTERIOR_PHOTOS=4;
-const MAX_OTHER_PHOTOS=6;
+const MAX_OTHER_PHOTOS=9;
 const parsePhotoList=value=>{try{const x=JSON.parse(String(value||'[]'));return Array.isArray(x)?x.filter(Boolean):[]}catch{return[]}};
 const photoThumb=(src,kind,index,label)=>`<div class="catalog-photo-thumb"><img src="${esc(src)}" alt="${esc(label)}"><button type="button" data-catalog-photo-remove="${kind}" data-photo-index="${index}" aria-label="Удалить фото">×</button></div>`;
 function catalogPhotoEditor(car){
